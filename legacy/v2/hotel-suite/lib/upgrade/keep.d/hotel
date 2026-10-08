@@ -1,0 +1,10 @@
+/etc/hotel/
+/etc/hotel-portal.code
+/etc/init.d/hotel
+/etc/rc.d/S99hotel
+/etc/rc.d/K10hotel
+/etc/sysctl.d/99-hotel.conf
+/usr/sbin/hotel
+/usr/sbin/hotelctl
+/usr/share/hotel/
+/lib/upgrade/keep.d/hotel

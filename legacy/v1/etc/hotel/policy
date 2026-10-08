@@ -1,0 +1,57 @@
+# Two modules. Change numbers here, not nft logic.
+#   DATAPATH          hotel harvest plugin (ecmp10 | plain)
+#   DNS / SPLIT / PROXY are the generic stack and stay on.
+# Hotel (2026-09-20): ~5-9 Mbps per identity to a decent CN CDN;
+# six in parallel ~33 Mbps. Not ~10 Mbps x room 60. Do not use
+# speedtest.cn 石家庄 as the pipe.
+
+# --- datapath (optional) ---
+DATAPATH=ecmp10
+POLICY_VER=ecmp10
+NSLOTS=42
+AUTH_BATCH=4
+FAIL_KEEP=2
+PARK_FAILS=8
+PARK_SEC=1800
+MSS=1440
+UPLINK_MBYTES=0
+MARK_PREF=90
+FROM_PREF=200
+ETH_VWANS=20
+PROBE_URL=http://www.baidu.com
+PROBE_TIMEOUT=3
+PROBE_OK_SEC=180
+SCORE_EWMA=0.3
+# WAN SQM is system, not datapath. auto: HTB+fq_codel on 10/100 PHY.
+WAN_SQM=auto
+WAN_SQM_PCT=95
+
+# --- DNS ---
+SMARTDNS_PORT=6053
+DNS_IPV4_ONLY=1
+DNS_SPEED_CHECK=tcp-syn:443,tcp-syn:80
+DNS_RESPONSE_MODE=fastest-ip
+DNS_CACHE_SIZE=32768
+DNS_RR_TTL_MIN=300
+DNS_PREFETCH=1
+DNS_SERVE_EXPIRED=1
+DNS_FORWARD_MAX=400
+DNSMASQ_CACHE=0
+
+# --- split ---
+# 绕过大陆: cn domain + cnip direct. Everything else DNS and packets → proxy.
+SPLIT_REMAINDER=proxy
+ADS_ENABLE=1
+
+# --- proxy ---
+# TPROXY_PREF must stay below MARK_PREF so tproxy wins over identity marks.
+TPROXY_MARK=16384
+TPROXY_TBL=100
+TPROXY_PREF=50
+TPROXY_LISTEN=198.51.100.1
+TPROXY_PORT=61235
+MIXED_PORT=7890
+CANARY_FAILS=3
+CANARY_GRACE=90
+CANARY_TIMEOUT=5000
+CANARY_URL=https://cp.cloudflare.com/generate_204

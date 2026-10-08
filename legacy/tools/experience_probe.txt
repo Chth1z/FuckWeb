@@ -1,0 +1,118 @@
+=== STATUS ===
+{"ts":1789928040,"iso":"2026-09-21T02:14:00+08:00","policy":"ecmp10","datapath":"ecmp10","mode":"eth","event":"1789927921 MAPUPD MODE=eth MARKS=1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21","params":{"nslots":42,"auth_batch":4,"fail_keep":2,"mss":1440,"uplink_mbytes":0},"health":{"eth":21,"sta":0,"up":21,"http200":21,"hash":21,"ct":71,"ct_max":131072,"load1":0,"mem_avail_kb":205948,"rx_sum":334898868,"tx_sum":144366921},"harvest":{"marks":"1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21","slots":"5 10 13 21 9 14 7 8 3 15 12 2 6 18 20 11 19 16 4 17 1 5 10 13 21 9 14 7 8 3 15 12 5 10 13 21 9 14 7 8 3 15","weights":{"10":3,"11":1,"20":1,"12":2,"21":3,"13":3,"14":3,"15":3,"16":1,"17":1,"18":1,"19":1,"1":1,"2":1,"3":3,"4":1,"5":3,"6":1,"7":3,"8":3,"9":3},"scores":{"1":2658552,"2":7509,"3":6574,"4":27765,"5":337,"6":7619,"7":5073,"8":5666,"9":3067,"10":810,"11":12559,"12":7499,"13":972,"14":3895,"15":6701,"16":15862,"17":29564,"18":9339,"19":15766,"20":10210,"21":2684},"gini":0.9162},"dns":{"smartdns":1,"port":6053,"bind":"127.0.0.1:6053","response_mode":"fastest-ip","speed_check":"none","aaaa_filter":1,"gua":0,"dnsmasq_server":"127.0.0.1#6053 ","race":[]},"proxy":{"active":1,"nft":1,"px_skip":1,"canary_ok":1,"canary_down":0,"canary_code":341},"legs":[{"dev":"wan","mark":1,"ip":"192.168.148.33","rx":169486142,"tx":81346759,"http":200,"ttfb":0.074491,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan1","mark":2,"ip":"192.168.149.85","rx":7649661,"tx":99079,"http":200,"ttfb":0.021702,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan2","mark":3,"ip":"192.168.136.60","rx":7417868,"tx":2790749,"http":200,"ttfb":0.020541,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan3","mark":4,"ip":"192.168.137.28","rx":18029001,"tx":223376,"http":200,"ttfb":0.021677,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan4","mark":5,"ip":"192.168.129.25","rx":4299283,"tx":37941,"http":200,"ttfb":0.01946,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan5","mark":6,"ip":"192.168.158.114","rx":8693661,"tx":105655,"http":200,"ttfb":0.017461,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan6","mark":7,"ip":"192.168.144.87","rx":6814877,"tx":101398,"http":200,"ttfb":0.025615,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan7","mark":8,"ip":"192.168.131.110","rx":7737046,"tx":86447,"http":200,"ttfb":0.027954,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan8","mark":9,"ip":"192.168.141.90","rx":4750120,"tx":9842172,"http":200,"ttfb":0.0253,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan9","mark":10,"ip":"192.168.128.133","rx":4527563,"tx":9535488,"http":200,"ttfb":0.028143,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan10","mark":11,"ip":"192.168.136.48","rx":7356988,"tx":9365458,"http":200,"ttfb":0.020595,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan11","mark":12,"ip":"192.168.147.1","rx":7789671,"tx":4695907,"http":200,"ttfb":0.01867,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan12","mark":13,"ip":"192.168.146.254","rx":4514499,"tx":9162609,"http":200,"ttfb":0.030598,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan13","mark":14,"ip":"192.168.144.129","rx":4674311,"tx":9044327,"http":200,"ttfb":0.020957,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan14","mark":15,"ip":"192.168.155.115","rx":7537045,"tx":85203,"http":200,"ttfb":0.021628,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan15","mark":16,"ip":"192.168.155.216","rx":12180127,"tx":184936,"http":200,"ttfb":0.020997,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan16","mark":17,"ip":"192.168.138.140","rx":18919232,"tx":366533,"http":200,"ttfb":0.021652,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan17","mark":18,"ip":"192.168.139.31","rx":5134720,"tx":281904,"http":200,"ttfb":0.022037,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan18","mark":19,"ip":"192.168.150.206","rx":8219660,"tx":90012,"http":200,"ttfb":0.016959,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan19","mark":20,"ip":"192.168.150.196","rx":9175363,"tx":5725385,"http":200,"ttfb":0.024727,"fs":0,"fail":0,"in_hash":1,"role":"eth"},{"dev":"vwan20","mark":21,"ip":"192.168.152.76","rx":9992030,"tx":1195583,"http":200,"ttfb":0.018582,"fs":0,"fail":0,"in_hash":1,"role":"eth"}]}
+=== DOCTOR ===
+{"ok":1,"fail":[],"warn":["wed"],"proxy_active":1,"tproxy_nft":1,"tproxy_all_public":1,"tproxy_live":1,"tproxy_pkttype":1,"tproxy_linklocal":1,"cn_not_tproxy":1,"px_skip":1,"mixed_local":1,"canary_ok":1,"canary_down":0,"has_nodes":1,"smartdns":1,"dnsmasq":1,"hostapd":1,"dns_not_all_5553":1,"smartdns_loopback":1,"api_not_public":1,"cnip_loaded":1,"egress_ecmp":1,"direct4":6395,"datapath":"ecmp10","dns_hijack":1,"dns_hijack_dhcp":0,"wan_sqm":1,"dhcp_bypass":1,"dhcp_listen":1,"dhcp_lan":1,"ap24":1,"ap5":1,"ssid24":1,"ssid5":1,"wan_up":1,"wan_speed":100,"ip_forward":1,"overlay":1,"overlay_avail_kb":51260,"wifi_apsta":0,"sta_with_wan":0,"sta_tx_slow":0,"m2u_all":0,"ap_isolate":0,"wed":1,"secret_perms":1,"ssh_public":0,"http_public":0,"n_hash":21,"led":"green","default_dup":0,"hw_watchdog":1}
+=== POLICY ===
+# Two modules. Change numbers here, not nft logic.
+#   DATAPATH          hotel harvest plugin (ecmp10 | plain)
+#   DNS / SPLIT / PROXY are the generic stack and stay on.
+# Hotel (2026-09-20): ~5-9 Mbps per identity to a decent CN CDN;
+# six in parallel ~33 Mbps. Not ~10 Mbps x room 60. Do not use
+# speedtest.cn 石家庄 as the pipe.
+
+# --- datapath (optional) ---
+DATAPATH=ecmp10
+POLICY_VER=ecmp10
+NSLOTS=42
+AUTH_BATCH=4
+FAIL_KEEP=2
+PARK_FAILS=8
+PARK_SEC=1800
+MSS=1440
+UPLINK_MBYTES=0
+MARK_PREF=90
+FROM_PREF=200
+ETH_VWANS=20
+PROBE_URL=http://www.baidu.com
+PROBE_TIMEOUT=3
+PROBE_OK_SEC=180
+SCORE_EWMA=0.3
+# WAN SQM is system, not datapath. auto: HTB+fq_codel on 10/100 PHY.
+WAN_SQM=auto
+WAN_SQM_PCT=95
+
+# --- DNS ---
+SMARTDNS_PORT=6053
+DNS_IPV4_ONLY=1
+DNS_SPEED_CHECK=tcp-syn:443,tcp-syn:80
+DNS_RESPONSE_MODE=fastest-ip
+DNS_CACHE_SIZE=32768
+DNS_RR_TTL_MIN=300
+DNS_PREFETCH=1
+DNS_SERVE_EXPIRED=1
+DNS_FORWARD_MAX=400
+DNSMASQ_CACHE=0
+
+# --- split ---
+# 绕过大陆: cn domain + cnip direct. Everything else DNS and packets → proxy.
+SPLIT_REMAINDER=proxy
+ADS_ENABLE=1
+
+# --- proxy ---
+# TPROXY_PREF must stay below MARK_PREF so tproxy wins over identity marks.
+TPROXY_MARK=16384
+TPROXY_TBL=100
+TPROXY_PREF=50
+TPROXY_LISTEN=198.51.100.1
+TPROXY_PORT=61235
+MIXED_PORT=7890
+CANARY_FAILS=3
+CANARY_GRACE=90
+CANARY_TIMEOUT=5000
+CANARY_URL=https://cp.cloudflare.com/generate_204
+=== SYSCTL PERF ===
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_congestion_control = cubic
+net.netfilter.nf_conntrack_count = 65
+net.netfilter.nf_conntrack_max = 131072
+=== SQM ===
+qdisc htb 1: root refcnt 2 r2q 10 default 0x10 direct_packets_stat 0 direct_qlen 1000
+ Sent 81943158 bytes 115674 pkt (dropped 916, overlimits 17397 requeues 0) 
+ backlog 0b 0p requeues 0
+qdisc fq_codel 10: parent 1:10 limit 1000p flows 1024 quantum 1514 target 5ms interval 100ms memory_limit 250000b drop_batch 64 
+ Sent 81943158 bytes 115674 pkt (dropped 916, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0
+  maxpacket 18168 drop_overlimit 911 new_flow_count 17478 ecn_mark 0 drop_overmemory 911
+  new_flows_len 0 old_flows_len 1
+=== WIFI PHY0 ===
+Not connected.
+=== WIFI PHY1 ===
+Not connected.
+Station ae:75:0e:db:17:03 (on phy1-ap0)
+	authorized:	yes
+	authenticated:	yes
+	associated:	yes
+	preamble:	short
+	WMM/WME:	yes
+	MFP:		no
+	TDLS peer:	no
+	inactive time:	6110 ms
+	rx bytes:	737361
+	rx packets:	4933
+	tx bytes:	8535135
+	tx packets:	7611
+	tx retries:	559
+	tx failed:	558
+	rx drop misc:	0
+	signal:  	-37 [-43, -45, -38, -51] dBm
+	signal avg:	-43 [-49, -51, -44, -53] dBm
+	tx bitrate:	1200.9 MBit/s 80MHz HE-MCS 11 HE-NSS 2 HE-GI 0 HE-DCM 0
+	tx duration:	910560 us
+	rx bitrate:	1080.6 MBit/s 80MHz HE-MCS 10 HE-NSS 2 HE-GI 0 HE-DCM 0
+	rx duration:	613538 us
+	last ack signal:-56 dBm
+	avg ack signal:	-44 dBm
+	airtime weight: 256
+	expected throughput:	978.710Mbps
+	DTIM period:	2
+	beacon interval:100
+	short preamble:	yes
+	short slot time:yes
+	connected time:	1594 seconds
+	associated at [boottime]:	698.810s
+	associated at:	1789926482953 ms
+	current time:	1789928076393 ms
+
+=== WIFI UCI ===

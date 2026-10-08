@@ -1,0 +1,7 @@
+# Boot stack is S99hotel-multidial (perf/dns/harvest) then S99hotel-proxy.
+# Safety net only — do not duplicate a healthy S99 boot.
+mkdir -p /tmp/hotel
+pidof smartdns >/dev/null 2>&1 || /usr/sbin/hotel-dns.sh apply >/tmp/hotel/dns.log 2>&1
+[ -f /tmp/hotel-online ] || /usr/sbin/hotel-multidial.sh >/tmp/hotel-multidial.log 2>&1
+pidof mihomo >/dev/null 2>&1 || /etc/init.d/hotel-proxy start >/dev/null 2>&1
+exit 0

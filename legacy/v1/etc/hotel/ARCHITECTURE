@@ -1,0 +1,87 @@
+Two modules. Do not mix them.
+
+  datapath/          hotel-only, optional
+    DATAPATH=ecmp10  21-MAC harvest, sticky ct, idle-biased slots
+                     score = EWMA of nft iif→LAN bytes (hotel download)
+                     healthy legs probed every PROBE_OK_SEC (default 180s)
+    DATAPATH=plain   single default route, no identity marks
+    seam: hotel_datapath_apply | hotel_datapath_egress
+    unplug: set DATAPATH=plain
+
+  stack              always on
+    hotel-dns.sh     SmartDNS: cn list → Ali DoH; default → mihomo
+    hotel-split.sh   nft @direct4 (cnip) + leak hijack; remainder tproxy
+    hotel-proxy.sh   mihomo Claude/CF rules supplement PROXY, then MATCH,PROXY — no extra groups
+
+Packet path (LAN → WAN)
+
+  1. nat/prerouting dns_hijack
+       UDP/TCP 53,853 → local dnsmasq → 127.0.0.1:6053
+  2. filter/prerouting -100  hotel_split.tproxy_pre
+       skip pkttype broadcast/multicast, fib local/broadcast/multicast,
+       UDP 67/68, 169.254/16, RFC1918, 255.255.255.255, @direct4, @node4
+       Anthropic 160.79.104.0/21, @claude4 (SmartDNS nftset), and UDP/123
+       tproxy first so Cloudflare-CN / CN NTP cannot bypass the proxy.
+       UDP/443 is rejected (not dropped) so Chrome HTTP/3 falls back to TCP
+       immediately. 1.1.1.1/1.0.0.1 TCP/443 is always tproxied (CF trace).
+       leftover public unicast → tproxy (SPLIT_REMAINDER=proxy)
+       DHCP DISCOVER is broadcast; omitting it from skip steals Wi-Fi IP.
+  3. filter/prerouting -95   datapath (ecmp10 only)
+       meta mark 16384 return (already tproxied)
+       else sticky ct → identity mark 1..21
+  4. mihomo: Claude/Anthropic/Cloudflare rules are extra PROXY matches,
+     then MATCH,PROXY. One AUTO url-test over all nodes (家宽 included).
+     UDP/443 (HTTP/3) is dropped so browsers fall back to TCP.
+
+System (experience, not datapath)
+
+  SmartDNS is the packaged ubus name "smartdns" so Luci shows 运行中.
+  Bind stays 127.0.0.1:6053. dnsmasq listens on lan only (not hotel WAN IPs).
+  Router resolver is 127.0.0.1. FullCone on, flow offload off (keeps fwmark).
+  Extra 5G hotel STAs disabled so Redmi-5G can leave hotel ch161.
+  2.4G AP on. 2.4G hotel STA is copper-cut backup only: disabled while
+  wan carrier is up (shared mt76 firmware hangs when AP+STA run together).
+  Hotplug wan add/remove calls hotel-guard.sh sta. No BBR kmod.
+  Hotel last measured 2026-09-20 from the router, CN direct (Tsinghua):
+    one identity ~5–9 Mbps; six identities in parallel ~33 Mbps.
+    Copper is 100 Full; the hotel path is far below that. Retired
+    figures: ~10 Mbps/MAC and ~60 Mbps/room. speedtest.cn 石家庄
+    (~2 Mbps, ~1–2 s loaded RTT) is not this pipe — do not tune
+    harvest or SQM against that node.
+  WAN SQM: 10/100 PHY → HTB+fq_codel on wan egress (LAN upload) at WAN_SQM_PCT.
+  No nft download police (it collapses TCP). No ifb/act_police on this image.
+  Gigabit → fq_codel only. SQM is stamped; wan hotplug re-applies if boot
+  raced the PHY; observe also reapplies HTB if 10/100 wan has noqueue.
+  hotelctl doctor is fail-closed: ok=0 unless DHCP listen, AP forwarding,
+  tproxy pkttype skip, WAN SQM, harvest-independent Wi-Fi, m2u off,
+  secret 600, and SSH/HTTP not on 0.0.0.0. Observe every minute runs
+  hotel-guard (AP recover after 180s boot grace + 2 strikes; proxy/DNS/SQM
+  heal; STA role) then writes /tmp/hotel/doctor.json. rgb:status is harvest;
+  rgb:network is AP+stack (red means Wi-Fi dead even if harvest is green).
+  MAPUPD is an atomic slot-map swap; it must not delete tproxy_pre or
+  dns_hijack. Boot stack is S99hotel-multidial then S99hotel-proxy.
+  rc.local is a pidof safety net only; it must not rebuild SQM or DNS
+  when those processes are already up. hotel.pre skip list has no FakeIP
+  range (redir-host). Canary probes AUTO first; other tags only if AUTO
+  is down, so a live backup node does not fail-open.
+  ICMP to the hotel gw is rate-limited — do not tune against ping loss.
+  Watch/IoT belongs on Redmi-2.4G.
+  score_legs: one nft dump + one awk; acct./ewma./raw. files unchanged.
+
+DNS
+
+  CN: DustinWin cn.list → Ali DoH (223.5.5.5 and 223.6.6.6). .cn TLD also
+      uses that group. No UDP/53 backup: hotel may intercept outbound 53.
+      Default DNS is 127.0.0.1:5553 (Cloudflare via PROXY) so 漏网之鱼
+      resolve the same way they are forwarded.
+      Claude domain-set is applied after cn-list so Anthropic/Claude/CDN
+      never take Ali DoH even if a name appears on the CN list.
+  Proxy DNS fail-open: if mihomo is down, both Ali DoH become the default.
+  Ads: usr/share/hotel/ad-domains.gz  (秋风 AWAvenue 1.7.6, domain-set SOA)
+  CN CIDR: etc/hotel/direct4.nft from DustinWin cnip.list; never tproxy
+
+Why this split is fast
+
+  nft set lookup O(1) on cnip. mihomo never sees CN packets. Non-CN DNS
+  goes through 5553; leftover public IPs tproxy. First packet of a CN
+  domain: Ali DoH + tcp-syn. TYPE65 SOA so the client uses A immediately.

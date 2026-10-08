@@ -1,0 +1,20 @@
+#!/bin/sh /etc/rc.common
+# Compat stub. Real instance is /etc/init.d/smartdns so Luci status is honest.
+START=99
+STOP=10
+
+start() {
+	/etc/init.d/smartdns start
+}
+
+stop() {
+	/etc/init.d/smartdns stop
+}
+
+reload() {
+	/etc/init.d/smartdns reload
+}
+
+restart() {
+	/etc/init.d/smartdns restart
+}

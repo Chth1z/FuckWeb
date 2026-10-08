@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+START=99
+USE_PROCD=0
+start() {
+	/usr/sbin/hotel-perf.sh apply-uci >/dev/null 2>&1
+	/usr/sbin/hotel-dns.sh apply >/tmp/hotel/dns.log 2>&1 || true
+	/usr/sbin/hotel-multidial.sh >/tmp/hotel-multidial.log 2>&1
+	# Do not observe here: S99hotel-proxy is not up yet, and wifi_guard
+	# used to reload radios during the AP settle window.
+	( sleep "${HOTEL_BOOT_GRACE:-180}"; /usr/sbin/hotel-observe.sh --led >/dev/null 2>&1 ) &
+}
+stop() {
+	return 0
+}

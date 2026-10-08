@@ -1,0 +1,9 @@
+# The router runs these files as they are: always LF, on every platform.
+* text=auto eol=lf
+*.gz binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.woff2 binary

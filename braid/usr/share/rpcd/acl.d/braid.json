@@ -1,0 +1,23 @@
+{
+	"unauthenticated": {
+		"description": "Braid dashboard: read-only status for anyone on the LAN",
+		"read": {
+			"ubus": {
+				"braid": [ "status", "series", "events", "doctor", "tunnel", "devices", "rules" ]
+			}
+		}
+	},
+	"braid-admin": {
+		"description": "Braid management",
+		"read": {
+			"ubus": {
+				"braid": [ "status", "series", "events", "doctor", "tunnel", "devices", "rules", "config" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"braid": [ "reconcile", "configure", "relogin", "select", "device", "remember", "forget" ]
+			}
+		}
+	}
+}

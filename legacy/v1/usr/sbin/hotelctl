@@ -1,0 +1,27 @@
+#!/bin/sh
+# CLI for agent tuning, not a user UI.
+. /usr/lib/hotel/common.sh
+cmd="${1:-status}"
+case "$cmd" in
+	status) [ -f /tmp/hotel/status.json ] || /usr/sbin/hotel-observe.sh; cat /tmp/hotel/status.json; echo ;;
+	algo) tail -n "${2:-8}" /tmp/hotel/algo.jsonl 2>/dev/null ;;
+	runs) tail -n "${2:-3}" /tmp/hotel/run.jsonl 2>/dev/null ;;
+	dns) /usr/sbin/hotel-dns.sh "${2:-status}" ;;
+	proxy) /usr/sbin/hotel-proxy.sh "${2:-status}" ;;
+	ui) /usr/sbin/hotel-proxy.sh ui ;;
+	observe) /usr/sbin/hotel-observe.sh --led ;;
+	led) /usr/sbin/hotel-led.sh ;;
+	multidial) /usr/sbin/hotel-multidial.sh ;;
+	params) cat /etc/hotel/policy ;;
+	guard)
+		/usr/sbin/hotel-guard.sh "${2:-all}"
+		;;
+	doctor)
+		fmt="${2:-json}"
+		/usr/lib/hotel/doctor.sh "$fmt"
+		;;
+	*)
+		echo "hotelctl status|algo|runs|dns|proxy|ui|observe|led|multidial|params|guard|doctor [json|text]"
+		exit 1
+		;;
+esac

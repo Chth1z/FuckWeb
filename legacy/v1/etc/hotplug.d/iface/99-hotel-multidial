@@ -1,0 +1,32 @@
+#!/bin/sh
+# WAN/STA identity changes: debounce, then one multidial. Logs for tuning.
+
+[ "$ACTION" = "ifup" -o "$ACTION" = "ifupdate" -o "$ACTION" = "ifdown" ] || exit 0
+case "$INTERFACE" in
+	wan|wan6|wwan|wwan*|vwan*) ;;
+	*)
+		case "$DEVICE" in
+			phy*-sta*|wlan*|apcli*) ;;
+			*) exit 0 ;;
+		esac
+		;;
+esac
+
+mkdir -p /tmp/hotel
+echo "{\"ts\":$(date +%s),\"action\":\"$ACTION\",\"iface\":\"$INTERFACE\",\"dev\":\"$DEVICE\"}" >> /tmp/hotel/hotplug.jsonl
+touch /tmp/hotel-burst
+
+flag=/var/run/hotel-hp.pending
+if [ -f "$flag" ]; then
+	echo "$ACTION $INTERFACE $DEVICE" >> "$flag"
+	exit 0
+fi
+echo "$ACTION $INTERFACE $DEVICE" > "$flag"
+(
+	sleep 4
+	rm -f "$flag"
+	[ -x /usr/sbin/hotel-led.sh ] && /usr/sbin/hotel-led.sh >/dev/null 2>&1
+	[ -x /usr/sbin/hotel-multidial.sh ] && /usr/sbin/hotel-multidial.sh >/tmp/hotel-multidial.log 2>&1
+	[ -x /usr/sbin/hotel-dns.sh ] && /usr/sbin/hotel-dns.sh apply >/tmp/hotel/dns.log 2>&1
+) &
+exit 0

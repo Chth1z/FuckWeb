@@ -1,0 +1,54 @@
+#!/bin/sh /etc/rc.common
+# One service, three instances. The supervisor reconciles kernel state; the
+# two daemons are restarted by procd when their rendered config changes.
+
+START=99
+STOP=10
+USE_PROCD=1
+
+RUN=/tmp/hotel
+HOTEL=/usr/sbin/hotel
+
+start_service() {
+	[ "$(uci -q get hotel.main.enabled)" = 0 ] && return 0
+	mkdir -p "$RUN"
+	"$HOTEL" prepare || logger -t hotel "prepare failed"
+
+	procd_open_instance supervisor
+	procd_set_param command /usr/bin/ucode -S /usr/share/hotel/supervisor.uc
+	procd_set_param respawn 300 5 0
+	procd_set_param stderr 1
+	procd_close_instance
+
+	if [ -s "$RUN/smartdns.conf" ]; then
+		procd_open_instance smartdns
+		procd_set_param command /usr/sbin/smartdns -f -c "$RUN/smartdns.conf" -p -
+		procd_set_param file "$RUN/smartdns.conf"
+		procd_set_param respawn 300 5 0
+		procd_close_instance
+	fi
+
+	if [ -x "$RUN/mihomo" ] && [ -s "$RUN/mihomo.yaml" ]; then
+		procd_open_instance mihomo
+		procd_set_param env SAFE_PATHS=/etc/hotel
+		procd_set_param command "$RUN/mihomo" -d "$RUN" -f "$RUN/mihomo.yaml"
+		procd_set_param respawn 300 5 0
+		procd_set_param limits nofile="65535 65535"
+		procd_set_param stderr 1
+		procd_close_instance
+	fi
+}
+
+stop_service() {
+	"$HOTEL" teardown
+}
+
+reload_service() {
+	start
+	"$HOTEL" kick
+}
+
+service_triggers() {
+	procd_add_reload_trigger hotel
+	procd_add_raw_trigger "interface.*" 3000 "$HOTEL" kick
+}

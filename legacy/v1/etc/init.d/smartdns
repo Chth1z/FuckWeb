@@ -1,0 +1,31 @@
+#!/bin/sh /etc/rc.common
+# Hotel owns SmartDNS. Luci reads ubus service "smartdns" / instance "smartdns".
+# If hotel conf is absent, fall back to the packaged init (saved once on deploy).
+START=19
+STOP=82
+USE_PROCD=1
+PROG=/usr/sbin/smartdns
+CONF=/tmp/hotel/smartdns.conf
+PKG=/usr/lib/hotel/smartdns.init.pkg
+
+start_service() {
+	if [ -s "$CONF" ] && [ -x "$PROG" ]; then
+		mkdir -p /tmp/hotel /var/etc/smartdns
+		ln -sfn "$CONF" /var/etc/smartdns/smartdns.conf
+		procd_open_instance smartdns
+		procd_set_param command "$PROG" -f -c "$CONF"
+		procd_set_param respawn 3600 5 5
+		procd_set_param file "$CONF"
+		procd_close_instance
+		return 0
+	fi
+	[ -s "$CONF" ] && return 0
+	[ -x "$PKG" ] || return 0
+	# packaged init is a full rc.common script; do not nest it here
+	return 0
+}
+
+reload_service() {
+	stop
+	start
+}

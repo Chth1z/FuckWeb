@@ -1,0 +1,238 @@
+# Braid
+
+*many strands, one line.*
+
+上游网络给每个身份（MAC + 地址）单独限速时，Braid 把路由器伪装出的多条**线路
+（strand）编织成一条线**：新连接被摊到所有健康线路上，国内流量直连，其余进隧道，
+DNS 全程防劫持。运行在 ImmortalWrt（fw4 / nftables / procd / ucode）上。
+
+## 词汇表
+
+| 词 | 含义 |
+|---|---|
+| **site 站点** | 一个被记住的上游网络，凭网关的 MAC 地址识别。聚合与否、用哪个 portal 都跟着站点走 |
+| **strand 线路** | 上游网络里一个有独立地址的三层设备（`wan`、macvlan `vwan*`）。它的编号（1..250）同时是 fwmark 低 8 位、conntrack mark 和路由表 `1000+id` |
+| **weave 编织** | 新连接落到哪条线路。内核按**槽位**取号，查 `@pattern` 得到线路编号 |
+| **pattern 图样** | 槽位 → 线路，按余量加权，几秒一变。回答"下一个连接去哪" |
+| **anchor 锚** | 槽位 → 线路，均匀且稳定。回答"这一对地址总是去哪" |
+| **device 设备** | LAN 上的一个 MAC。可以命名，可以单独决定去向 |
+| **classify 分类** | 一个包走隧道还是直连 |
+| **tunnel 隧道** | mihomo。**relay 中继**是它的出口节点 |
+| **pass 一轮调谐** | `braid reconcile` 跑一次 |
+
+## 两个进程，一条分界线
+
+```
+            慢、会失败、可重试                     快、常驻、只读内核计数
+   ┌──────────────────────────────┐      ┌──────────────────────────────┐
+   │ braid reconcile  (一次性进程) │      │ braidd  (守护进程)            │
+   │  发现线路 → 探测 → portal 登录 │◀─启动─│  每 5s 读线路计数 → 负载       │
+   │  路由/规则 → nft 原子事务      │      │  → 重排图样（只动 @pattern）   │
+   │  隧道/DNS 配置 → 体检         │─快照─▶│  定时/按需拉起 reconcile       │
+   └──────────────────────────────┘      │  发布 ubus 对象 braid（API）   │
+                                         └──────────────────────────────┘
+```
+
+- **reconcile 保证正确，braidd 负责更优。** 图样只有在"长度不对或含不健康线路"时
+  才由 reconcile 重写；平时由 braidd 按负载优化。braidd 挂了，内核照旧按最后的图样
+  转发，procd 会把它拉起来。
+- reconcile 每次都是新进程：读配置、看现状、只改有差异的部分，跑两遍第二遍无变化。
+  没有标志文件，没有跨进程的隐含状态。
+- 触发只有一种：ubus 方法 `braid.reconcile`。procd 的接口事件（`interface.*`，
+  3s 去抖）、`uci commit braid`、页面按钮、`braid kick` 都走它，突发合并成一轮。
+
+`/etc/init.d/braid` 是一个 procd 服务、三个实例：`braidd`、`smartdns`、`mihomo`。
+后两个的配置由 reconcile 渲染；SmartDNS 配置变了由 procd 重启它，mihomo 走 API 热重载。
+
+## 调谐流水线（`braid.uc: reconcile`）
+
+顺序即依赖，新增功能 = 新增一个模块 + 流水线里一行。
+
+0. `strands.site` + `strands.steer`  凭网关 MAC 认出站点 → 决定是否聚合 → 把额外身份的接口拉起或放下
+1. `strands.discover`  找出当前存在的线路，网关/网段取自各自的 DHCP 租约
+2. `kernel.plumb`      每条线路的路由表与策略规则（必须先于探测：绑定线路的探测要靠它出得去）
+3. `strands.check`     到期的线路做 HTTP 探测 → 失败的走 portal 登录 → 得出健康集合
+4. `tunnel.observe`    渲染并校验 mihomo 配置 → 存活 / 金丝雀 → 是否承载流量
+5. `weave.plan`        图样与锚对当前健康集合是否仍有效，无效则重排；只剩一条线路时不编织
+6. `kernel.apply`      默认路由覆盖 + nft（一个原子事务，只含变化的单元）
+7. `dns.apply` `host.apply` `wifi.apply`
+8. `doctor.run` → LED → 写快照
+
+## 内核：`table inet braid`
+
+```
+LAN 包
+ │ dns_hijack (nat)         53/853 → 本机解析器
+ ▼
+ prerouting (mangle)
+ ├─ jump classify           每条规则带计数器和标签，页面"分流"页读的就是它
+ │    @dev_block  drop      设备：禁网
+ │    @dev_direct return    设备：直连
+ │    @relay4 return        中继地址不套娃
+ │    @dev_tunnel → divert  设备：全部进隧道
+ │    @tunnel4 / @tunnel4_dns → divert   强制进隧道（Cloudflare/Anthropic、SmartDNS 钉住的答案）
+ │    udp/123 → divert      NTP 进隧道
+ │    @domestic4 return     国内 IP 直连，隧道根本看不到
+ │    其余 → divert         （divert = tproxy 交给隧道，到此结束）
+ └─ jump weave              直连流量：选槽位 → 查 @anchor 或 @pattern → 线路编号写入 ct mark
+                            同一连接此后始终走同一条线路
+
+隧道自己发出的包 (routing-mark 0x8000)
+   output (route) → jump weave   隧道流量同样编织到所有线路
+```
+
+- 标记位：`0xff` 线路编号，`0x4000` 已交给隧道，`0x8000` 隧道自身出站。
+- 策略路由：`fwmark id/0xff → 表 1000+id`，`from 线路地址 → 表 1000+id`，
+  `fwmark 0x4000 → 表 100 (local lo)`。
+- **按单元更新**：骨架 `base`、集合 `domestic4/tunnel4/relay4`、链 `classify/weave`
+  各带摘要，一轮只把变化的单元放进同一个 `nft -f`。切换隧道开关只换 `classify` 链，
+  不重载 6000 条国内段，也没有泄漏窗口。
+- 下行计量：`set strands { type ifname; counter; }`，每条线路一个元素计数器，O(1)，
+  转发流量和隧道流量都算。braidd 读的就是它。
+
+## 站点与聚合开关（`mod/strands.uc`）
+
+路由器不该需要人来告诉它"现在在哪"。上联口拿到租约后，查网关的 MAC：
+
+- 命中 `config site` → 用它的设置（是否聚合、portal 插件）。
+- 没命中 → 陌生网络：不聚合、不登录 portal，就是一台普通路由器（分类、隧道、
+  DNS 照常）。页面上一键"记住这个网络并聚合"。
+- `strands.aggregate` 可强制 `on` / `off`，默认 `auto` 跟随站点。
+- 网关 MAC 一时解析不出来（ARP 慢）不做任何决定，沿用上一次的结论，避免误拆。
+
+不聚合时，`identity` 匹配的接口（`vwan*`）被 `ifdown` 并写 `auto=0`，重启后也
+不会起来：上游只看到一台设备、只发一个租约。实测：关 → 5 秒内收敛为单线路，
+体检全绿；开 → 10 秒内 21 条线路全部回来。
+
+## 编织（`mod/weave.uc`）
+
+上游对每个身份限速大致相同，所以一条线路的**余量 = 上限 − 当前速率**。
+
+**@pattern：下一个连接去哪**
+
+- `headroom`（默认）：按余量分配槽位。上限取配置值，或从观测峰值自学习（不低于
+  1 Mbit/s，避免把噪声当负载）。空闲时全体均分；跑满的线路几秒内不再吸引新连接。
+- `even`：永远均分。
+- 槽位用平滑加权轮转（SWRR）交错排列，连续到来的连接落在不同线路上。
+- 抖动抑制：图样变化不超过 2 格不下发。
+
+**@anchor：这一对地址总是去哪**
+
+256 格，用会合哈希（rendezvous hashing）：每格归 `md5(格号:线路)` 最大的那条线路。
+少一条线路只移动它自己占的格子，多一条线路从所有人那里各匀一点。除非不得已，
+没有哪一对地址会换线路。
+
+**亲和性：两张表怎么选**
+
+| 模式 | 规则 | 适合 |
+|---|---|---|
+| `auto`（默认） | 先查 @anchor；同一对 (客户端, 服务器) 短时间内新建连接超过 `spill`（6）个后，超出的部分改查 @pattern | 日常：登录态不掉线，下载和测速自动叠加 |
+| `flow` | 永远 @pattern | 只在乎吞吐 |
+| `dest` | 永远 @anchor | 只在乎会话稳定 |
+
+`auto` 的"突发"用 nft 动态集合 `@bursty` 上的每元素令牌桶实现（这台固件没有
+connlimit 模块，令牌桶是够用的近似）。
+
+实测（2026-10-09，路由器上用网络命名空间模拟 LAN 客户端）：
+
+- 连续 4 个连接到同一服务器 → 全在同一条线路；16 个同时发起 → 前几个留在原线路，
+  其余摊到 13 条不同线路。
+- 16 连接下载清华镜像：合计 90 Mbit/s，每连接约 5.6 Mbit/s；跑满的线路 2–6 格，
+  空闲线路 11–12 格。
+
+## 设备（`mod/devices.uc`）
+
+设备就是 MAC。地址、主机名、接入方式每次现查（DHCP 租约 + 邻居表 + hostapd），
+所以换了地址，名字和策略都还在。
+
+- 计量：`@dev_up`（prerouting，按源地址）和 `@dev_down`（postrouting，按目的地址）
+  两个带计数器的动态集合，首包自动建元素。放在 postrouting 才能同时看到转发流量
+  和隧道回给客户端的流量。
+- 去向（在 `classify` 最前面按 MAC 判断）：`auto` 跟大家一样；`direct` 永不进隧道；
+  `tunnel` 全部进隧道（含国内）；`block` 不能上网但仍能访问路由器。
+- 实测：block 丢包且路由器页面仍可达；direct 访问 1.1.1.1 命中 `device-direct`
+  而不是 `tunnel-range`；tunnel 访问国内地址命中 `device-tunnel`。
+
+## DNS
+
+```
+客户端 → dnsmasq(:53, DHCP 主机名) → SmartDNS(127.0.0.1:6053)
+   隧道在线:  cn 域名表 → 国内 DoH（证书校验）   其余 → 隧道 DNS(5553)
+              tunnel-domains.list → 走默认组，答案写入 nft @tunnel4_dns
+   隧道离线:  全部 → 国内 DoH
+```
+
+永不使用明文 UDP/53 上游（这里会被劫持）。portal 未认证时 DoH 证书校验会失败，
+属预期，认证后恢复。AAAA 与 HTTPS(65) 记录强制 SOA；LAN 的 IPv6 转发直接 reject。
+
+## API 与页面
+
+braidd 发布 ubus 对象 `braid`，uhttpd 经 `/ubus` 暴露，ACL 在
+`/usr/share/rpcd/acl.d/braid.json`：
+
+| 方法 | 权限 | 内容 |
+|---|---|---|
+| `status` `series` `events` `doctor` `tunnel` `devices` `rules` | 局域网内免登录 | 站点/线路/负载/图样、历史曲线、事件、体检、中继、设备与速率、分类规则及实时命中 |
+| `config` | 登录 | 可调参数及取值范围 |
+| `reconcile` `configure` `relogin` `select` `device` `remember` `forget` | 登录 | 触发一轮、改参数、重登 portal、切换中继、设备改名/改去向、记住/忘记当前网络 |
+
+任何处理函数抛异常只损失这一次应答，不会带垮 braidd。
+
+页面在 `http://<路由器>/braid/`，单文件、无依赖，登录用路由器（LuCI）账号。
+可调参数白名单及范围在 `lib/config.uc: TUNABLE`，页面和 API 共用同一份校验。
+
+## 文件
+
+```
+/etc/config/braid                全部可调参数（完整清单与默认值见 lib/config.uc）
+/etc/braid/lists/*.list          domestic4 / tunnel4 / tunnel-domains，纯数据
+/etc/braid/provision.json        本机应有的 UCI 值、IRQ 亲和等
+/etc/braid/relays.json           中继（600）  controller.secret  portal.secret
+/usr/share/braid/braid.uc        CLI + 流水线
+/usr/share/braid/braidd.uc       守护进程
+/usr/share/braid/lib/            core(文件/shell/日志) config facts series
+/usr/share/braid/mod/            strands weave kernel tunnel dns devices host wifi led doctor api
+/usr/share/braid/portal/         portal 插件（导出 login_cmd(dev, secret)）
+/usr/share/braid/tpl/braid.nft.ut   nft 骨架模板
+/www/braid/index.html            管理与监控页面
+/tmp/braid/                      运行态：state.json status.json doctor.json pattern.json
+                                 events.log 以及渲染产物 smartdns.conf mihomo.yaml ruleset.nft
+```
+
+## 命令
+
+```
+braid plan [--full]   演练：打印将要做的改动，校验 nft，不动系统
+braid apply           立即调谐并整表重建
+braid strands         每条线路的健康、速率、峰值、槽位
+braid doctor [json]   体检（非 0 退出码 = 有 fail）
+braid status | events | kick
+braid tunnel reload | ui
+braid provision [--dry]
+/etc/init.d/braid reload | stop    stop 会撤掉全部内核状态，退回普通路由器
+```
+
+## 不变量（改代码前先读）
+
+- 分类时 `tunnel4` 必须先于 `domestic4` 判断，否则 Cloudflare 中国段会绕过隧道。
+- `prerouting` 必须先放行广播/组播和非单播目的，否则 Wi-Fi 客户端拿不到 DHCP。
+- 策略路由先于探测、先于 nft：流量不能被标记到一张还空着的路由表。
+- 隧道的监听地址（lo 上的 198.51.100.1）必须先于 mihomo 存在，否则 tproxy 监听器
+  会被悄悄跳过（`braid prepare` 负责；reconcile 发现后会重启 mihomo）。
+- `weave` 链里的 `mod N` 必须等于 `@pattern` 的长度；N 只由 reconcile 决定，
+  braidd 只在既定长度内重排。`@anchor` 只由 reconcile 写。
+- `/etc/config/braid` 归路由器所有（页面会往里写站点、设备和设置），`deploy.sh`
+  默认不覆盖它，要覆盖须加 `--config`。
+- ucode 的正则是 POSIX ERE：没有十六进制转义，没有懒惰量词。
+- ucode 以 `-S` 严格模式运行：函数不能引用文件里更靠后才声明的名字。
+- 不要对着 ping 丢包调参：这里的网关对 ICMP 限速。
+
+## 考虑过但没采用的
+
+- **flowtable / 硬件分流**：已建立的流会绕过 mangle 链，线路计数随之失效；这条
+  上行合计不到 100 Mbit/s，CPU 远不是瓶颈。
+- **单进程事件循环里做一切**：探测和 portal 登录会阻塞几十秒，放进常驻进程就得
+  全部异步化；拆成"常驻只做快且不会失败的事 + 一次性进程做慢且会失败的事"更简单。
+- **用 mwan3**：它不认识 portal、不做按负载的槽位分配，且仍基于 iptables。
+- **按 IP 段单表 verdict map 分类**：`tunnel4` 与 `domestic4` 有交叠且需要优先级，
+  顺序判断的三行规则比带冲突消解的区间映射更清楚。

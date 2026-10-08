@@ -1,0 +1,73 @@
+# hotel-suite. Every tunable lives here. "hotel plan" shows what a change
+# would do; "/etc/init.d/hotel reload" applies it.
+# Defaults and the full option list: /usr/share/hotel/lib/config.uc
+
+config main 'main'
+	option enabled '1'
+	# Devices LAN clients arrive on (bridge, its ports, the APs).
+	list lan_dev 'br-lan'
+	list lan_dev 'lan1'
+	list lan_dev 'lan2'
+	list lan_dev 'lan3'
+	list lan_dev 'lan4'
+	list lan_dev 'phy0-ap0'
+	list lan_dev 'phy1-ap0'
+	option mss '1440'
+	option ipv6 '0'
+
+config uplink 'uplink'
+	# multi: spread connections over every healthy leg. plain: one default route.
+	option mode 'multi'
+	# Legs in identity order. Gateway and subnet come from each leg's DHCP lease.
+	list device 'wan'
+	list device 'vwan*'
+	# Carry traffic only when no primary leg is healthy.
+	list backup 'phy*-sta*'
+	option slots '42'
+	option scheduler 'idle'
+	option ewma '0.3'
+	option reweigh '120'
+	# A leg is healthy when this URL answers probe_expect through it. The
+	# hotel gateway rate-limits ICMP, so do not probe with ping.
+	option probe_url 'http://www.baidu.com'
+	option probe_expect '200'
+	option probe_interval '180'
+	option portal 'linkbroad'
+	option portal_secret '/etc/hotel-portal.code'
+
+config split 'split'
+	# What is neither in direct4 nor forced through the proxy: proxy | direct
+	option remainder 'proxy'
+	# NTP through the proxy so the clock source matches the exit.
+	list proxy_udp_port '123'
+	option quic 'proxy'
+
+config proxy 'proxy'
+	option enabled '1'
+	option nodes 'proxy-nodes.json'
+
+config dns 'dns'
+	option ipv4_only '1'
+	option ads '1'
+	# "<DoH url> <TLS name to verify>". Never plain UDP/53: the hotel intercepts it.
+	list cn_upstream 'https://223.5.5.5/dns-query dns.alidns.com'
+	list cn_upstream 'https://223.6.6.6/dns-query dns.alidns.com'
+	list cn_upstream 'https://1.12.12.12/dns-query doh.pub'
+
+config sqm 'sqm'
+	option mode 'auto'
+	option device 'wan'
+	option pct '95'
+
+config wifi 'wifi'
+	option guard '1'
+	list ap 'phy0-ap0'
+	list ap 'phy1-ap0'
+	# Client radio that takes over when the copper is unplugged.
+	option backup_sta 'sta'
+
+config led 'led'
+	option status 'rgb:status'
+	option network 'rgb:network'
+	option green '18'
+	option yellow '8'

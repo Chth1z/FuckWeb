@@ -1,0 +1,5 @@
+#!/bin/sh
+# ssh to the router with the dedicated key. Usage: tools/rsh [remote command]
+exec ssh -i ~/.ssh/id_ed25519_ax6000 -o IdentitiesOnly=yes -o BatchMode=yes \
+	-o ConnectTimeout=10 -o ServerAliveInterval=15 -o BindAddress=192.168.16.50 \
+	root@192.168.16.1 "$@"

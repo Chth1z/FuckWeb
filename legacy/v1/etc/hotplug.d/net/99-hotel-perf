@@ -1,0 +1,13 @@
+#!/bin/sh
+[ "$ACTION" = "add" -o "$ACTION" = "register" -o "$ACTION" = "remove" -o "$ACTION" = "unregister" ] || exit 0
+dev="${DEVICE:-$INTERFACE}"
+if [ "$dev" = wan ]; then
+	if [ "$ACTION" = "add" -o "$ACTION" = "register" ]; then
+		[ -x /usr/sbin/hotel-perf.sh ] && /usr/sbin/hotel-perf.sh >/dev/null 2>&1 &
+	fi
+	[ -x /usr/sbin/hotel-guard.sh ] && /usr/sbin/hotel-guard.sh sta >/dev/null 2>&1 &
+elif [ -n "$dev" ] && [ "$ACTION" = "add" -o "$ACTION" = "register" ] && [ -x /usr/sbin/hotel-perf.sh ]; then
+	/usr/sbin/hotel-perf.sh iface "$dev" >/dev/null 2>&1 &
+fi
+[ -x /usr/sbin/hotel-led.sh ] && /usr/sbin/hotel-led.sh >/dev/null 2>&1 &
+exit 0

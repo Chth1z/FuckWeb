@@ -1,0 +1,103 @@
+# Braid — many strands, one line.
+# Every tunable lives here. "braid plan" shows what a change would do;
+# "/etc/init.d/braid reload" applies it. The dashboard edits the same file.
+# Defaults and the full option list: /usr/share/braid/lib/config.uc
+
+config braid 'main'
+	option enabled '1'
+	# Devices LAN clients arrive on (bridge, its ports, the APs).
+	list lan_dev 'br-lan'
+	list lan_dev 'lan1'
+	list lan_dev 'lan2'
+	list lan_dev 'lan3'
+	list lan_dev 'lan4'
+	list lan_dev 'phy0-ap0'
+	list lan_dev 'phy1-ap0'
+	option mss '1440'
+	option ipv6 '0'
+
+config strands 'strands'
+	# auto: aggregate only on a network remembered as a site that wants it.
+	# on / off: always / never, wherever we are.
+	option aggregate 'auto'
+	# The uplink port: always a strand.
+	list uplink 'wan'
+	# Extra identities. Braid brings these interfaces up only while aggregating,
+	# so an ordinary network sees one device and hands out one lease.
+	list identity 'vwan*'
+	# Carry traffic only when no primary strand is healthy.
+	list backup 'phy*-sta*'
+	# A strand is healthy when this URL answers probe_expect through it.
+	option probe_url 'http://www.baidu.com'
+	option probe_expect '200'
+	option probe_interval '180'
+
+# A network we recognise, by the MAC address of its gateway. Anywhere else
+# Braid is an ordinary router (still classifying, tunnelling and resolving).
+config site 'ihg'
+	option name 'IHG 酒店'
+	list gateway 'b4:4b:d6:57:18:0b'
+	option aggregate '1'
+	option portal 'linkbroad'
+	option portal_secret 'portal.secret'
+
+config weave 'weave'
+	# headroom: new flows favour strands with spare capacity, re-laid every
+	#           few seconds from measured load. even: equal shares, always.
+	option policy 'headroom'
+	# auto: a client and a server share one strand (sites that pin a session
+	#       to an address keep working) until the pair opens connections in a
+	#       burst, which then spreads and adds up. flow: always spread.
+	#       dest: never spread.
+	option affinity 'auto'
+	option spill '6'
+	# Pattern length. 0 = six slots per healthy strand.
+	option slots '0'
+	option interval '5'
+	# Per-strand ceiling in kbit/s. 0 = learn it from observed peaks.
+	option strand_kbit '0'
+
+config classify 'classify'
+	# What is neither domestic nor forced into the tunnel: tunnel | direct
+	option remainder 'tunnel'
+	# NTP through the tunnel so the clock source matches the exit.
+	list tunnel_udp_port '123'
+	option quic 'tunnel'
+
+config tunnel 'tunnel'
+	option enabled '1'
+	option relays 'relays.json'
+	# 1: a dead tunnel steps aside and traffic goes direct. 0: it fails closed.
+	option fail_open '1'
+
+config dns 'dns'
+	option ipv4_only '1'
+	option ads '1'
+	# "<DoH url> <TLS name to verify>". Never plain UDP/53: it is intercepted here.
+	list cn_upstream 'https://223.5.5.5/dns-query dns.alidns.com'
+	list cn_upstream 'https://223.6.6.6/dns-query dns.alidns.com'
+	list cn_upstream 'https://1.12.12.12/dns-query doh.pub'
+
+config shaper 'shaper'
+	option mode 'auto'
+	option device 'wan'
+	option pct '95'
+
+config wifi 'wifi'
+	option guard '1'
+	list ap 'phy0-ap0'
+	list ap 'phy1-ap0'
+	# Client radio that takes over when the copper is unplugged.
+	option backup_sta 'sta'
+
+config led 'led'
+	option status 'rgb:status'
+	option network 'rgb:network'
+	option green '18'
+	option yellow '8'
+
+# Devices are added from the dashboard: a name and where their traffic goes.
+#   config device
+#   	option mac 'aa:bb:cc:dd:ee:ff'
+#   	option name 'TV'
+#   	option policy 'direct'      # auto | direct | tunnel | block

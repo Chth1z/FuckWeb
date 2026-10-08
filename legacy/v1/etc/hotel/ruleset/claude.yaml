@@ -1,0 +1,44 @@
+payload:
+  # Core Claude / Anthropic
+  - DOMAIN-SUFFIX,anthropic.com
+  - DOMAIN-SUFFIX,claude.ai
+  - DOMAIN-SUFFIX,claude.com
+  - DOMAIN-SUFFIX,clau.de
+  - DOMAIN-SUFFIX,claudemcpclient.com
+  - DOMAIN-SUFFIX,claudemcpcontent.com
+  - DOMAIN-SUFFIX,claudeusercontent.com
+  # CDN / static
+  - DOMAIN,servd-anthropic-website.b-cdn.net
+  - DOMAIN,anthropic.com.cdn.cloudflare.net
+  # Auth / content
+  - DOMAIN,anthropic.auth0.com
+  - DOMAIN,anthropic-com.ghost.io
+  # Telemetry
+  - DOMAIN-SUFFIX,sentry.io
+  - DOMAIN-SUFFIX,statsigapi.net
+  - DOMAIN-SUFFIX,statsig.com
+  - DOMAIN-SUFFIX,featuregates.org
+  - DOMAIN-SUFFIX,prodregistryv2.org
+  - DOMAIN,browser-intake-us5-datadoghq.com
+  - DOMAIN-KEYWORD,datadog
+  - DOMAIN-KEYWORD,sentry
+  - DOMAIN-KEYWORD,sift
+  # Widgets
+  - DOMAIN-SUFFIX,intercom.io
+  - DOMAIN-SUFFIX,intercomcdn.com
+  - DOMAIN,cdn.usefathom.com
+  - DOMAIN-SUFFIX,cloudflare.com
+  - DOMAIN-SUFFIX,cloudflareinsights.com
+  - DOMAIN,one.one.one.one
+  # NTP timezone
+  - DOMAIN-SUFFIX,ntp.org
+  - DOMAIN,time.google.com
+  - DOMAIN,time.cloudflare.com
+  - DOMAIN,time.apple.com
+  - DOMAIN,time.windows.com
+  - DOMAIN,time.nist.gov
+  - DOMAIN,ntp.ubuntu.com
+  - DST-PORT,123
+  # IP / ASN fallback (ASN needs mmdb; CIDR is enough on this stack)
+  - IP-CIDR,160.79.104.0/21,no-resolve
+  - IP-CIDR6,2607:6bc0::/32,no-resolve

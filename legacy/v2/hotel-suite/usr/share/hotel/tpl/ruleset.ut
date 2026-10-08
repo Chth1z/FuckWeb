@@ -1,0 +1,109 @@
+{#
+  Skeleton of table inet hotel. Chains proxy and balance start empty; the
+  datapath fills them (and every set) as separate units of the same
+  transaction, so switching the proxy on or off never reloads this file.
+
+  Packet path, LAN -> upstream:
+    dns_hijack   nat      53/853 from LAN lands on the local resolver
+    prerouting   mangle   proxy  : tproxy to mihomo, or return = direct
+                          balance: pin the flow to an uplink identity
+    output       mangle   mihomo's own sockets (routing-mark) -> balance
+    forward      mangle   MSS clamp, IPv6 reject
+-#}
+table inet hotel {
+	set lan {
+		type ifname
+		elements = { {{ join(", ", map(lan, (d) => `"${d}"`)) }} }
+	}
+
+	# Uplink devices. The per-element counter is the download accounting
+	# the scheduler reads.
+	set legs {
+		type ifname
+		counter
+{% if (length(legs)): %}
+		elements = { {{ join(", ", map(legs, (d) => `"${d}"`)) }} }
+{% endif %}
+	}
+
+	set local4 {
+		type ipv4_addr
+		flags interval
+		elements = { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16,
+			     172.16.0.0/12, 192.168.0.0/16, 198.51.100.0/24, 224.0.0.0/3 }
+	}
+
+	set direct4 {
+		type ipv4_addr
+		flags interval
+		auto-merge
+	}
+
+	set proxy4 {
+		type ipv4_addr
+		flags interval
+		auto-merge
+	}
+
+	# Filled by SmartDNS with the answers for proxy-domains.list.
+	set proxy4_dyn {
+		type ipv4_addr
+		flags timeout
+		timeout 1h
+	}
+
+	set node4 {
+		type ipv4_addr
+	}
+
+	map slot {
+		type mark : mark
+	}
+
+	chain dns_hijack {
+		type nat hook prerouting priority dstnat; policy accept;
+		iifname @lan meta l4proto { tcp, udp } th dport { 53, 853 } redirect to :53
+	}
+
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		meta pkttype host iifname @legs return
+		iifname != @lan return
+		meta pkttype != host return
+		meta nfproto != ipv4 return
+		fib daddr type != unicast return
+		ip daddr @local4 return
+		meta l4proto != { tcp, udp } return
+		th dport { 53, 853 } return
+		jump proxy
+		jump balance
+	}
+
+	chain output {
+		type route hook output priority mangle; policy accept;
+		meta mark & {{ mark_out }} != {{ mark_out }} return
+		meta nfproto != ipv4 return
+		ip daddr @local4 return
+		jump balance
+	}
+
+	chain forward {
+		type filter hook forward priority mangle; policy accept;
+{% if (!ipv6): %}
+		iifname @lan meta nfproto ipv6 reject with icmpv6 admin-prohibited
+{% endif %}
+{% if (mss > 0): %}
+		iifname @lan tcp flags syn tcp option maxseg size > {{ mss }} tcp option maxseg size set {{ mss }}
+{% endif %}
+	}
+
+	chain divert {
+		meta l4proto { tcp, udp } tproxy ip to {{ tproxy_addr }}:{{ tproxy_port }} meta mark set {{ mark_tproxy }} accept
+	}
+
+	chain proxy {
+	}
+
+	chain balance {
+	}
+}
