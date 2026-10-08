@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as ulog from "log";
 import { md5 } from "digest";
 
-export const VERSION = "4.0.0";
+export const VERSION = "4.1.0";
 export const SHARE = fs.dirname(sourcepath(0, true));
 export const RUN = getenv("BRAID_RUN") ?? "/tmp/braid";
 export const ETC = getenv("BRAID_ETC") ?? "/etc/braid";

@@ -103,41 +103,55 @@ function aql(limits) {
 	}
 }
 
-// --- uplink shaper ---------------------------------------------------------
+// --- shaper ----------------------------------------------------------------
 
-// The DSA port has no queue of its own. On a 10/100 PHY the copper is the
-// bottleneck, so shape just below it and let fq_codel keep latency flat.
-// Egress only: this image has no ifb, and policing download collapses TCP.
-function shaper(cfg) {
+// HTB at `rate` Mbit with fq_codel underneath, or nothing when rate is 0.
+// Returns true when it changed something.
+function shape(dev, rate) {
+	let have = core.sh("tc qdisc show dev " + dev).out, ours = index(have, "htb") >= 0;
+	if (rate <= 0) {
+		if (ours)
+			core.act(sprintf("tc qdisc del dev %s root", dev));
+		return ours;
+	}
+	if (ours && index(core.sh("tc class show dev " + dev).out, sprintf("rate %dMbit", rate)) >= 0)
+		return false;
+	let leaf = sprintf("tc qdisc add dev %s parent 1:10 handle 10: fq_codel", dev);
+	core.act(join("\n", [
+		sprintf("tc qdisc del dev %s root 2>/dev/null", dev),
+		sprintf("tc qdisc add dev %s root handle 1: htb default 10", dev),
+		sprintf("tc class add dev %s parent 1: classid 1:10 htb rate %dmbit ceil %dmbit quantum 1514", dev, rate, rate),
+		// 100 Mbit x 20 ms is about 250 kB; the default 4 MB is a lag reservoir.
+		sprintf("%s limit 1000 target 5ms interval 100ms memory_limit 250000 noecn || %s noecn || %s", leaf, leaf, leaf),
+	]));
+	return true;
+}
+
+// On a 10/100 uplink the copper is the bottleneck in both directions, and
+// whoever owns the queue in front of a bottleneck owns the latency.
+//   up    shape the uplink port itself, just below the wire rate.
+//   down  the queue would form in the switch upstream, which we cannot
+//         manage. Shaping what we forward on to the LAN a little below the
+//         wire rate makes senders slow down before that queue fills, and
+//         puts the queue that is left under fq_codel here. There is no ifb
+//         on this image; a single LAN bridge makes its egress the same thing.
+// A faster uplink is not the bottleneck: leave both alone.
+function shaper(cfg, lan) {
 	let dev = cfg.device, sys = "/sys/class/net/" + dev;
 	if (!fs.stat(sys))
 		return;
-	let have = core.sh("tc qdisc show dev " + dev).out;
-	if (cfg.mode == "off") {
-		if (match(have, /htb|fq_codel/))
-			core.act(sprintf("tc qdisc del dev %s root", dev));
-		return;
-	}
 	let speed = int(core.read(sys + "/speed") ?? "0");
-	if (speed == 10 || speed == 100) {
-		let rate = max(1, int(speed * cfg.pct / 100));
-		let classes = core.sh("tc class show dev " + dev).out;
-		if (index(have, "htb") >= 0 && index(classes, sprintf("rate %dMbit", rate)) >= 0)
-			return;
-		let leaf = sprintf("tc qdisc add dev %s parent 1:10 handle 10: fq_codel", dev);
-		core.act(join("\n", [
-			sprintf("tc qdisc del dev %s root 2>/dev/null", dev),
-			sprintf("tc qdisc add dev %s root handle 1: htb default 10", dev),
-			sprintf("tc class add dev %s parent 1: classid 1:10 htb rate %dmbit ceil %dmbit quantum 1514", dev, rate, rate),
-			// 100 Mbit x 20 ms is about 250 kB; the default 4 MB is a lag reservoir.
-			sprintf("%s limit 1000 target 5ms interval 100ms memory_limit 250000 noecn || %s noecn || %s", leaf, leaf, leaf),
-			sprintf("ip link set dev %s txqueuelen 128", dev),
-		]));
-		core.event("SHAPER %s htb %dmbit + fq_codel (phy %d)", dev, rate, speed);
+	let slow = cfg.mode != "off" && (speed == 10 || speed == 100);
+	let up = slow ? max(1, int(speed * cfg.pct / 100)) : 0;
+	let down = slow && cfg.pct_down > 0 ? max(1, int(speed * cfg.pct_down / 100)) : 0;
+	if (shape(dev, up) && up) {
+		core.act(sprintf("ip link set dev %s txqueuelen 128", dev));
+		core.event("SHAPER %s up %d Mbit (phy %d)", dev, up, speed);
 	}
-	else if (speed > 100 && !match(have, /fq_codel|htb/)) {
+	if (shape(lan, down) && down)
+		core.event("SHAPER %s down %d Mbit (phy %d)", lan, down, speed);
+	if (!slow && speed > 100 && !match(core.sh("tc qdisc show dev " + dev).out, /fq_codel/))
 		core.act(sprintf("tc qdisc replace dev %s root fq_codel noecn", dev));
-	}
 }
 
 // --- entry point -----------------------------------------------------------
@@ -155,7 +169,7 @@ export function apply(ctx) {
 	irq_affinity(spec.irq_affinity ?? {});
 	if (ctx.boot)
 		aql(spec.aql_txq_limit ?? {});
-	shaper(cfg.shaper);
+	shaper(cfg.shaper, cfg.main.lan_dev[0]);
 };
 
 export function conntrack() {

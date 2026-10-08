@@ -36,6 +36,49 @@ function events(limit) {
 	return reverse(out);
 }
 
+const MAX_FLOWS = 400;
+
+// LAN flows that left directly, from the kernel's connection table.
+function direct_flows(snap) {
+	let lan = replace(snap.lan_ip ?? "", /[0-9]+$/, ""), strand = {}, out = [];
+	for (let s in snap.strands ?? [])
+		strand[s.id] = s.dev;
+	let f = fs.open("/proc/net/nf_conntrack", "r");
+	if (!f || !length(lan))
+		return out;
+	for (let line = f.read("line"); length(line); line = f.read("line")) {
+		let m = match(line, /^ipv4 +2 +([a-z]+) .*src=([0-9.]+) dst=([0-9.]+) sport=([0-9]+) dport=([0-9]+) packets=[0-9]+ bytes=([0-9]+) .*bytes=([0-9]+) .*mark=([0-9]+)/);
+		if (!m || index(m[2], lan) != 0 || index(m[3], lan) == 0)
+			continue;
+		let mark = int(m[8]);
+		if (mark & 0x4000)
+			continue;
+		push(out, {
+			key: m[1] + m[2] + ":" + m[4] + ">" + m[3] + ":" + m[5],
+			src: m[2], dst: m[3], port: int(m[5]), proto: m[1], route: "direct",
+			via: strand[mark & 0xff] ?? "", up: int(m[6]), down: int(m[7]),
+		});
+	}
+	f.close();
+	out = sort(out, (a, b) => (b.down + b.up) - (a.down + a.up));
+	return slice(out, 0, MAX_FLOWS);
+}
+
+function tunnel_flows(cfg, lan_ip) {
+	let res = controller(cfg, lan_ip, "GET", "/connections"), out = [];
+	for (let c in res?.connections ?? []) {
+		let m = c.metadata ?? {};
+		if (!m.sourceIP || m.sourceIP == "127.0.0.1")
+			continue;
+		push(out, {
+			key: c.id, src: m.sourceIP, dst: m.host || m.sniffHost || m.destinationIP, port: int(m.destinationPort),
+			proto: m.network, route: "tunnel", via: c.chains?.[0] ?? "", up: c.upload ?? 0, down: c.download ?? 0,
+			start: c.start ?? "",
+		});
+	}
+	return slice(out, 0, MAX_FLOWS);
+}
+
 // What each classify rule means, by its nft comment. Order here is not the
 // order of evaluation: that is whatever the kernel returns.
 function rules() {
@@ -80,10 +123,17 @@ export function methods(d) {
 				let weight = {}, total = 0;
 				for (let id in pattern)
 					weight[id] = (weight[id] ?? 0) + 1;
+				let total_up = 0;
 				let strands = map(snap.strands ?? [], (s) => {
-					let l = load[s.dev] ?? {};
-					total += l.now ?? 0;
-					return { ...s, rate: int(l.rate ?? 0), now: int(l.now ?? 0), peak: int(l.peak ?? 0), slots: weight[s.id] ?? 0 };
+					let down = load[s.dev]?.down ?? {}, up = load[s.dev]?.up ?? {};
+					total += down.now ?? 0;
+					total_up += up.now ?? 0;
+					return {
+						...s,
+						rate: int(down.rate ?? 0), now: int(down.now ?? 0), peak: int(down.peak ?? 0),
+						up: int(up.rate ?? 0), up_now: int(up.now ?? 0), up_peak: int(up.peak ?? 0),
+						slots: weight[s.id] ?? 0,
+					};
 				});
 				// The current choice for every tunable, so a viewer who is not
 				// logged in still sees which option is in force.
@@ -99,6 +149,7 @@ export function methods(d) {
 					ts: time(),
 					reconciled: snap.ts ?? 0,
 					rate: int(total),
+					rate_up: int(total_up),
 					strands,
 					weave: { ...(snap.weave ?? {}), pattern, interval: d.interval() },
 				};
@@ -151,6 +202,17 @@ export function methods(d) {
 		devices: {
 			call: function() {
 				return { devices: d.devices() };
+			},
+		},
+
+		// Every flow leaving the LAN right now. Direct flows come from
+		// conntrack (the strand is in the mark); tunnelled ones from mihomo,
+		// which also knows the hostname and the relay. Login only: this is
+		// who is talking to whom.
+		connections: {
+			call: function() {
+				let snap = d.snapshot() ?? {};
+				return { connections: [ ...direct_flows(snap), ...tunnel_flows(d.cfg(), lan_ip()) ] };
 			},
 		},
 

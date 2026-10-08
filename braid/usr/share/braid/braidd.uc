@@ -1,8 +1,8 @@
 // braidd — the long-lived half of Braid. Three small jobs:
 //
-//   weave      every few seconds: read per-strand download counters, turn
-//              them into load, and re-lay the pattern so new flows favour
-//              strands with headroom
+//   weave      every few seconds: read per-strand download and upload
+//              counters, turn them into load, and re-lay the pattern so new
+//              flows favour strands with headroom
 //   schedule   run `braid reconcile` on a timer and when asked (the ubus
 //              method `reconcile`: that is what `braid kick` calls, and
 //              procd calls that on interface and config events); one at a
@@ -34,7 +34,7 @@ let cfg = config.load();
 let snapshot = core.load_json(STATUS, null);
 let pattern = weave.current();
 let history = series.create(HISTORY);
-let load = {};                          // dev -> { rx, now, rate, peak }
+let load = {};                          // dev -> { down, up }, each { bytes, now, rate, peak }
 let lan = { list: [], rate: {}, samples: 0 };   // devices and their per-address traffic
 let sampled = 0;
 let running = false, again = false, first = true;
@@ -98,27 +98,31 @@ function device_view() {
 
 function sample() {
 	sample_timer.set(max(1, cfg.weave.interval) * 1000);
-	let rx = weave.counters("strands"), now = monotonic();
-	if (!rx)
+	let counted = { down: weave.counters("strands"), up: weave.counters("strands_up") }, now = monotonic();
+	if (!counted.down)
 		return;
-	sample_devices(sampled ? now - sampled : 0);
-	let dt = now - sampled, alpha = cfg.weave.smoothing, total = 0, per = {};
-	for (let dev, bytes in rx) {
-		let l = (load[dev] ??= { rx: null, now: 0, rate: 0, peak: 0 });
-		if (l.rx != null && bytes >= l.rx && sampled && dt > 0) {
-			l.now = (bytes - l.rx) / dt;
-			l.rate = alpha * l.now + (1 - alpha) * l.rate;
+	let dt = sampled ? now - sampled : 0, alpha = cfg.weave.smoothing;
+	sample_devices(dt);
+	let total = { down: 0, up: 0 }, per = {};
+	for (let dev in keys(counted.down)) {
+		let l = (load[dev] ??= { down: { bytes: null, now: 0, rate: 0, peak: 0 }, up: { bytes: null, now: 0, rate: 0, peak: 0 } });
+		for (let dir in [ "down", "up" ]) {
+			let d = l[dir], bytes = counted[dir]?.[dev] ?? 0;
+			if (d.bytes != null && bytes >= d.bytes && dt > 0) {
+				d.now = (bytes - d.bytes) / dt;
+				d.rate = alpha * d.now + (1 - alpha) * d.rate;
+			}
+			d.bytes = bytes;
+			d.peak = max(d.rate, d.peak * PEAK_DECAY);
+			total[dir] += d.now;
 		}
-		l.rx = bytes;
-		l.peak = max(l.rate, l.peak * PEAK_DECAY);
-		per[dev] = l.now;
-		total += l.now;
+		per[dev] = l.down.now;
 	}
 	for (let dev in keys(load))
-		if (rx[dev] == null)
+		if (counted.down[dev] == null)
 			delete load[dev];
 	sampled = now;
-	series.add(history, time(), total, per);
+	series.add(history, time(), total.down, total.up, per);
 	relay();
 }
 

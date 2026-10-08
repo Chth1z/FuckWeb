@@ -98,12 +98,15 @@ function build(ctx) {
 	// See weave.uc for what the two maps mean. In auto, a pair's first
 	// connections follow @anchor; once it opens them faster than the burst
 	// allowance, the overflow takes the next @pattern slot instead.
-	let w = ctx.weave, lay = [];
+	// The strand lives in the low byte of the conntrack mark.
+	let w = ctx.weave, lay = [], lay_out = [];
 	if (w.slots > 0) {
+		let known = "ct mark and 0xff != 0 meta mark set ct mark and 0xff return";
+		let apply = "meta mark set ct mark and 0xff";
 		let spread = sprintf("ct mark set numgen inc mod %d map @pattern", w.slots);
 		let pin = sprintf("ct mark set jhash ip saddr . ip daddr mod %d map @anchor", weave.ANCHOR_SLOTS);
 		let spill = max(1, cfg.weave.spill);
-		push(lay, "ct mark != 0 meta mark set ct mark return");
+		push(lay, known);
 		if (cfg.weave.affinity == "flow") {
 			push(lay, "ct state new " + spread);
 		}
@@ -112,9 +115,13 @@ function build(ctx) {
 		}
 		else {
 			push(lay, sprintf("ct state new add @bursty { ip saddr . ip daddr limit rate over %d/minute burst %d packets } %s", spill * 2, spill, spread));
-			push(lay, "ct state new ct mark 0 " + pin);
+			push(lay, "ct state new ct mark and 0xff == 0 " + pin);
 		}
-		push(lay, "meta mark set ct mark");
+		push(lay, apply);
+		// The tunnel's own connections always spread. The far end of those is
+		// a relay, which neither knows nor cares which strand a packet took;
+		// pinning them would squeeze the whole tunnel through one identity.
+		lay_out = [ known, "ct state new " + spread, apply ];
 	}
 
 	let dev = devices.policy_sets(cfg);
@@ -129,6 +136,7 @@ function build(ctx) {
 		unit("anchor", weave.script("anchor", w.anchor)),
 		chain_unit("classify", classify),
 		chain_unit("weave", lay),
+		chain_unit("weave_out", lay_out),
 	];
 }
 

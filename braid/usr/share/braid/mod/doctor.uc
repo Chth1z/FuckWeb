@@ -37,7 +37,7 @@ export function run(ctx) {
 	fail("dns_hijack", nft_has("chain inet braid dns_hijack", "redirect"));
 	fail("strands_healthy", n > 0, sprintf("%d of %d", n, length(ctx.strands)));
 	if (n > 1) {
-		fail("weave", nft_has("chain inet braid weave", "map @pattern"));
+		fail("weave", nft_has("chain inet braid weave", "ct state new"));
 		fail("pattern", nft_has("map inet braid pattern", " : "));
 	}
 	if (ctx.site.aggregate)

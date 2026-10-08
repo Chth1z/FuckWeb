@@ -11,7 +11,7 @@
 		"description": "Braid management",
 		"read": {
 			"ubus": {
-				"braid": [ "status", "series", "events", "doctor", "tunnel", "devices", "rules", "config" ]
+				"braid": [ "status", "series", "events", "doctor", "tunnel", "devices", "rules", "config", "connections" ]
 			}
 		},
 		"write": {

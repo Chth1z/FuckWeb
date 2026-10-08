@@ -85,7 +85,8 @@ const SCHEMA = {
 	shaper: {
 		mode: "auto",                   // auto | off
 		device: "wan",
-		pct: 95,
+		pct: 95,                        // upload: percent of a 10/100 link speed
+		pct_down: 90,                   // download, shaped on the LAN side. 0 = off
 	},
 	wifi: {
 		guard: 1,

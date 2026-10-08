@@ -7,9 +7,11 @@
     dns_hijack   nat      53/853 from LAN lands on the local resolver
     prerouting   mangle   classify: divert to the tunnel, or return = direct
                           weave   : lay the flow onto a strand
-    output       mangle   the tunnel's own sockets (routing-mark) -> weave
+    output       mangle   the tunnel's own sockets (routing-mark) -> weave_out
     forward      mangle   MSS clamp, IPv6 reject
-    postrouting  mangle   per-device download accounting
+    postrouting  mangle   per-device download and per-strand upload accounting
+
+  Conntrack mark: low byte = strand identity, 0x4000 = handed to the tunnel.
 -#}
 table inet braid {
 	set lan {
@@ -17,9 +19,17 @@ table inet braid {
 		elements = { {{ join(", ", map(lan, (d) => `"${d}"`)) }} }
 	}
 
-	# One element per strand. Its counter is the download accounting the
-	# weave reads.
+	# One element per strand. Their counters are the download and upload
+	# accounting the weave reads.
 	set strands {
+		type ifname
+		counter
+{% if (length(strands)): %}
+		elements = { {{ join(", ", map(strands, (d) => `"${d}"`)) }} }
+{% endif %}
+	}
+
+	set strands_up {
 		type ifname
 		counter
 {% if (length(strands)): %}
@@ -130,7 +140,7 @@ table inet braid {
 		meta mark & {{ mark_tunnel_out }} != {{ mark_tunnel_out }} return
 		meta nfproto != ipv4 return
 		ip daddr @local4 return
-		jump weave
+		jump weave_out
 	}
 
 	chain forward {
@@ -146,15 +156,19 @@ table inet braid {
 	chain postrouting {
 		type filter hook postrouting priority mangle; policy accept;
 		oifname @lan ip saddr != @local4 update @dev_down { ip daddr }
+		oifname @strands_up return
 	}
 
 	chain divert {
-		meta l4proto { tcp, udp } tproxy ip to {{ listen_addr }}:{{ tproxy_port }} meta mark set {{ mark_diverted }} accept
+		meta l4proto { tcp, udp } tproxy ip to {{ listen_addr }}:{{ tproxy_port }} meta mark set {{ mark_diverted }} ct mark set {{ mark_diverted }} accept
 	}
 
 	chain classify {
 	}
 
 	chain weave {
+	}
+
+	chain weave_out {
 	}
 }

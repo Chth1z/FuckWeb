@@ -33,8 +33,8 @@ export const ANCHOR_SLOTS = 256;
 
 // --- measurement -----------------------------------------------------------
 
-// Bytes per element of one of the counting sets (@strands, @dev_up,
-// @dev_down). Returns { key: bytes } or null when the table is not there.
+// Bytes per element of one of the counting sets (@strands, @strands_up,
+// @dev_up, @dev_down). Returns { key: bytes } or null when the table is not there.
 export function counters(set) {
 	let r = core.sh("nft -j list set " + NFT + " " + set);
 	if (r.code != 0)
@@ -73,18 +73,27 @@ function apportion(shares, nslots) {
 }
 
 const POLICIES = {
-	// Share new flows by spare capacity. Every strand is throttled to about
-	// the same ceiling upstream, so headroom = ceiling - current rate. An idle
-	// braid weaves evenly; a strand running flat out stops attracting flows
+	// Share new flows by spare capacity. Upstream throttles every identity to
+	// about the same ceiling, separately for each direction, so a strand is as
+	// busy as its busier direction: utilisation = max(down / ceiling_down,
+	// up / ceiling_up) and its share is what is left. An idle braid weaves
+	// evenly; a strand running flat out either way stops attracting flows
 	// within a sample or two instead of after minutes.
 	headroom: function(strands, load, nslots, cfg) {
-		let ceiling = cfg.strand_kbit * 125;
-		if (ceiling <= 0) {
-			ceiling = MIN_CEILING;
+		let top = { down: MIN_CEILING, up: MIN_CEILING };
+		for (let dir in [ "down", "up" ]) {
+			if (cfg.strand_kbit > 0) {
+				top[dir] = cfg.strand_kbit * 125;
+				continue;
+			}
 			for (let s in strands)
-				ceiling = max(ceiling, load[s.dev]?.peak ?? 0);
+				top[dir] = max(top[dir], load[s.dev]?.[dir]?.peak ?? 0);
 		}
-		return apportion(map(strands, (s) => max(ceiling - (load[s.dev]?.rate ?? 0), ceiling * FLOOR)), nslots);
+		return apportion(map(strands, (s) => {
+			let l = load[s.dev] ?? {};
+			let used = max((l.down?.rate ?? 0) / top.down, (l.up?.rate ?? 0) / top.up);
+			return max(1 - used, FLOOR);
+		}), nslots);
 	},
 
 	even: function(strands, load, nslots) {
@@ -114,7 +123,8 @@ export function nslots(cfg, healthy) {
 	return max(length(healthy), min(n, MAX_SLOTS));
 };
 
-// load: { dev: { rate, peak } } in bytes per second, or {} when unknown.
+// load: { dev: { down: { rate, peak }, up: { rate, peak } } } in bytes per
+// second, or {} when unknown.
 export function compose(cfg, healthy, load, n) {
 	if (!length(healthy))
 		return [];

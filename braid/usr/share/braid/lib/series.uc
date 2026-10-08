@@ -2,13 +2,14 @@
 // It exists so a freshly opened dashboard has a past to draw.
 
 export function create(capacity) {
-	return { capacity, ts: [], total: [], strands: {} };
+	return { capacity, ts: [], total: [], up: [], strands: {} };
 };
 
-// per: { dev: bytes_per_second } for this sample
-export function add(s, ts, total, per) {
+// per: { dev: download bytes_per_second } for this sample
+export function add(s, ts, total, up, per) {
 	push(s.ts, ts);
 	push(s.total, int(total));
+	push(s.up, int(up));
 	let n = length(s.ts);
 	for (let dev, rate in per) {
 		let row = (s.strands[dev] ??= map(slice(s.ts, 0, n - 1), () => 0));
@@ -24,6 +25,7 @@ export function add(s, ts, total, per) {
 	if (n > s.capacity) {
 		shift(s.ts);
 		shift(s.total);
+		shift(s.up);
 	}
 };
 
@@ -32,5 +34,5 @@ export function dump(s, limit) {
 	let strands = {};
 	for (let dev, row in s.strands)
 		strands[dev] = slice(row, from);
-	return { ts: slice(s.ts, from), total: slice(s.total, from), strands };
+	return { ts: slice(s.ts, from), total: slice(s.total, from), up: slice(s.up, from), strands };
 };
