@@ -47,6 +47,12 @@ tools/rsh sh -s < tools/router_snapshot.sh > snap.tgz   # 只读快照（密钥�
 | 页面允许改哪些参数 | `lib/config.uc` 的 `TUNABLE` |
 | nft 规则骨架 | `usr/share/braid/tpl/braid.nft.ut` |
 
+## 版本管理
+
+本地 git 仓库，`main` 分支。中继凭据（`relays.json`）和 mihomo 二进制不入库，见
+`.gitignore`；所有文本文件强制 LF（路由器直接执行它们），见 `.gitattributes`。
+路由器上的 `/etc/config/braid` 归路由器所有，仓库里那份是初始模板。
+
 ## 应急
 
 ```sh
