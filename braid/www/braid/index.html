@@ -8,68 +8,80 @@
 <style>
 :root {
 	color-scheme: light;
-	--page: #f1f0ea; --surface: #fcfcfb; --raised: #ffffff; --sunk: #f4f3ee; --hair: #e6e5df; --hair-2: #d6d5cd;
+	--page: #efeee8; --surface: #fcfcfb; --raised: #ffffff; --sunk: #f3f2ed; --hair: #e5e4de; --hair-2: #d5d4cc;
 	--ink: #0b0b0b; --ink-2: #52514e; --ink-3: #8b8a83;
-	--series: #2a78d6; --series-wash: rgba(42,120,214,.10); --series-soft: rgba(42,120,214,.28);
+	--down: #2a78d6; --down-wash: rgba(42,120,214,.10); --down-soft: rgba(42,120,214,.26);
+	--up: #eb6834;
 	--good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
-	--shadow: 0 1px 2px rgba(20,20,18,.04), 0 6px 20px rgba(20,20,18,.04);
-	--r: 16px;
+	--glow: rgba(42,120,214,.07);
+	--shadow: 0 1px 2px rgba(20,20,18,.04), 0 8px 24px rgba(20,20,18,.045);
+	--r: 18px;
 	--sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 	--mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
 	:root:where(:not([data-theme="light"])) {
 		color-scheme: dark;
-		--page: #0d0d0c; --surface: #191918; --raised: #232321; --sunk: #141413; --hair: #2a2a28; --hair-2: #3a3a37;
+		--page: #0c0c0b; --surface: #181817; --raised: #222220; --sunk: #121211; --hair: #272725; --hair-2: #383835;
 		--ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #85847b;
-		--series: #3987e5; --series-wash: rgba(57,135,229,.13); --series-soft: rgba(57,135,229,.32);
-		--shadow: 0 1px 2px rgba(0,0,0,.35), 0 10px 28px rgba(0,0,0,.22);
+		--down: #3987e5; --down-wash: rgba(57,135,229,.13); --down-soft: rgba(57,135,229,.30);
+		--up: #d95926;
+		--glow: rgba(57,135,229,.09);
+		--shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.24);
 	}
 }
 :root[data-theme="dark"] {
 	color-scheme: dark;
-	--page: #0d0d0c; --surface: #191918; --raised: #232321; --sunk: #141413; --hair: #2a2a28; --hair-2: #3a3a37;
+	--page: #0c0c0b; --surface: #181817; --raised: #222220; --sunk: #121211; --hair: #272725; --hair-2: #383835;
 	--ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #85847b;
-	--series: #3987e5; --series-wash: rgba(57,135,229,.13); --series-soft: rgba(57,135,229,.32);
-	--shadow: 0 1px 2px rgba(0,0,0,.35), 0 10px 28px rgba(0,0,0,.22);
+	--down: #3987e5; --down-wash: rgba(57,135,229,.13); --down-soft: rgba(57,135,229,.30);
+	--up: #d95926;
+	--glow: rgba(57,135,229,.09);
+	--shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.24);
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
-body { background: var(--page); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+html, body { margin: 0; min-height: 100%; }
+body { background: radial-gradient(1100px 520px at 78% -8%, var(--glow), transparent 70%) fixed, var(--page); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
 button, input, select { font: inherit; color: inherit; }
 a { color: inherit; }
 
-/* --- shell: sidebar + page */
-.shell { display: grid; grid-template-columns: 212px minmax(0, 1fr); min-height: 100%; }
-nav { position: sticky; top: 0; height: 100vh; padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; }
-.mark { display: flex; align-items: center; gap: 10px; padding: 4px 10px 16px; text-decoration: none; }
-.mark svg { width: 28px; height: 28px; }
-.mark b { font-size: 18px; font-weight: 650; letter-spacing: -.01em; display: block; line-height: 1.1; }
+/* --- shell */
+.shell { display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: 100vh; }
+nav { position: sticky; top: 0; height: 100vh; padding: 20px 12px 16px; display: flex; flex-direction: column; gap: 3px; }
+.mark { display: flex; align-items: center; gap: 11px; padding: 2px 10px 18px; text-decoration: none; }
+.mark svg { width: 30px; height: 30px; }
+.mark b { font-size: 19px; font-weight: 660; letter-spacing: -.015em; display: block; line-height: 1.1; }
 .mark small { color: var(--ink-3); font-size: 11px; letter-spacing: .02em; }
-nav a.item { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 12px; text-decoration: none; color: var(--ink-2); font-weight: 520; }
+nav a.item { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 13px; text-decoration: none; color: var(--ink-2); font-weight: 520; transition: background .15s, color .15s; }
 nav a.item svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-nav a.item:hover { background: var(--surface); color: var(--ink); }
+nav a.item:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); }
 nav a.item.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
-nav a.item .n { margin-left: auto; font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-nav .foot { margin-top: auto; display: grid; gap: 8px; padding: 0 2px; }
-main { padding: 20px 24px 56px 8px; max-width: 1180px; width: 100%; }
-main > h1 { font-size: 20px; font-weight: 650; letter-spacing: -.01em; margin: 6px 2px 16px; display: flex; align-items: baseline; gap: 12px; }
-main > h1 small { font-size: 13px; font-weight: 400; color: var(--ink-3); }
-.page { display: none; } .page.on { display: grid; gap: 16px; }
-@media (max-width: 860px) {
+nav a.item.on svg { stroke: var(--down); }
+nav a.item .n { margin-left: auto; font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; font-style: normal; }
+nav .foot { margin-top: auto; display: grid; gap: 10px; padding: 0 2px; }
+.meter { background: var(--surface); border: 1px solid var(--hair); border-radius: 14px; padding: 10px 12px; display: grid; gap: 4px; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.meter div { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
+.meter div b { margin-left: auto; color: var(--ink); font-weight: 560; }
+.key { width: 12px; height: 3px; border-radius: 2px; background: var(--down); flex: none; display: inline-block; } .key.up { background: var(--up); }
+main { padding: 22px 26px 64px 10px; max-width: 1220px; width: 100%; }
+.head { display: flex; align-items: center; gap: 12px; margin: 2px 2px 16px; min-height: 34px; }
+.head h1 { font-size: 21px; font-weight: 660; letter-spacing: -.015em; margin: 0; }
+.head small { font-size: 13px; color: var(--ink-3); }
+.page { display: none; } .page.on { display: grid; gap: 16px; animation: rise .22s ease; }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (max-width: 880px) {
 	.shell { grid-template-columns: 1fr; }
-	nav { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 12px; }
-	.mark { padding: 0 8px 0 4px; } .mark small { display: none; }
-	nav a.item span, nav a.item .n { display: none; } nav a.item { padding: 9px; }
-	nav .foot { margin: 0 0 0 auto; display: flex; }
-	main { padding: 4px 12px 40px; }
+	nav { position: fixed; inset: auto 0 0 0; height: auto; flex-direction: row; justify-content: space-around; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(14px); border-top: 1px solid var(--hair); z-index: 5; }
+	.mark, nav .foot, nav a.item span, nav a.item .n { display: none; }
+	nav a.item { padding: 10px 12px; }
+	main { padding: 14px 12px 88px; }
 }
 
 /* --- pieces */
-.pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; background: var(--surface); border: 1px solid var(--hair); font-size: 12.5px; color: var(--ink-2); white-space: nowrap; cursor: default; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex: none; }
-.dot.good { background: var(--good); } .dot.warning { background: var(--warning); } .dot.critical { background: var(--critical); }
-.btn { border: 1px solid var(--hair-2); background: var(--surface); border-radius: 10px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; background: var(--surface); border: 1px solid var(--hair); font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex: none; display: inline-block; }
+.dot.good { background: var(--good); } .dot.warning { background: var(--warning); } .dot.serious { background: var(--serious); } .dot.critical { background: var(--critical); }
+.btn { border: 1px solid var(--hair-2); background: var(--surface); border-radius: 11px; padding: 6px 13px; cursor: pointer; font-size: 13px; transition: border-color .15s; }
 .btn:hover { border-color: var(--ink-3); }
 .btn.primary { background: var(--ink); color: var(--page); border-color: var(--ink); }
 .btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
@@ -77,101 +89,116 @@ main > h1 small { font-size: 13px; font-weight: 400; color: var(--ink-3); }
 .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .spacer { flex: 1; }
 .card { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r); box-shadow: var(--shadow); min-width: 0; }
-.card > h2 { margin: 0; padding: 16px 18px 0; font-size: 13px; font-weight: 600; color: var(--ink-2); display: flex; align-items: baseline; gap: 10px; }
+.card > h2 { margin: 0; padding: 16px 20px 0; font-size: 13px; font-weight: 600; color: var(--ink-2); display: flex; align-items: baseline; gap: 10px; }
 .card > h2 small { font-weight: 400; color: var(--ink-3); font-size: 12px; }
-.card .body { padding: 12px 18px 18px; }
+.card .body { padding: 12px 20px 20px; }
 .grid { display: grid; gap: 16px; }
-.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 1040px) { .g3 { grid-template-columns: 1fr; } .g2 { grid-template-columns: 1fr; } }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1080px) { .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g2 { grid-template-columns: 1fr; } }
 .muted { color: var(--ink-3); }
-.seg { display: inline-flex; border: 1px solid var(--hair-2); border-radius: 10px; overflow: hidden; background: var(--sunk); }
-.seg button { border: 0; background: transparent; padding: 5px 12px; cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
-.seg button.on { background: var(--ink); color: var(--page); }
-select { border: 1px solid var(--hair-2); background: var(--sunk); border-radius: 9px; padding: 5px 8px; font-size: 12.5px; }
+.seg { display: inline-flex; border: 1px solid var(--hair-2); border-radius: 11px; overflow: hidden; background: var(--sunk); padding: 2px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 4px 12px; cursor: pointer; font-size: 12.5px; color: var(--ink-2); border-radius: 8px; transition: background .15s; }
+.seg button.on { background: var(--raised); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); font-weight: 560; }
+select, input.search { border: 1px solid var(--hair-2); background: var(--sunk); border-radius: 10px; padding: 6px 10px; font-size: 12.5px; }
+input.search { width: 260px; max-width: 100%; } input.search:focus { outline: 0; border-color: var(--down); }
 .state { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
 .state svg { width: 14px; height: 14px; flex: none; }
-.empty { color: var(--ink-3); font-size: 13px; padding: 22px 0; text-align: center; }
-
-/* --- hero */
-.hero { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: 236px; overflow: hidden; }
-.hero .figure { padding: 22px 0 20px 24px; display: flex; flex-direction: column; justify-content: space-between; z-index: 1; }
-.hero .label { color: var(--ink-2); font-size: 13px; }
-.hero .value { font-size: 56px; font-weight: 620; letter-spacing: -.035em; line-height: 1.05; margin-top: 4px; }
-.hero .value span { font-size: 18px; font-weight: 500; letter-spacing: 0; color: var(--ink-2); margin-left: 6px; }
-.facts { display: grid; grid-template-columns: repeat(2, auto); gap: 8px 22px; justify-content: start; }
-.fact .k { color: var(--ink-3); font-size: 12px; }
-.fact .v { font-size: 16px; font-weight: 560; }
-.fact .v small { font-size: 12px; font-weight: 400; color: var(--ink-3); margin-left: 3px; }
-.hero .stage { position: relative; min-height: 0; }
-.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.hero .cap { position: absolute; right: 16px; bottom: 12px; font-size: 11.5px; color: var(--ink-3); }
-@media (max-width: 760px) { .hero { grid-template-columns: 1fr; grid-template-rows: auto 160px; height: auto; } .hero .figure { padding: 18px 18px 4px; gap: 14px; } .hero .value { font-size: 44px; } }
+.empty { color: var(--ink-3); font-size: 13px; padding: 26px 0; text-align: center; }
+.empty:empty { display: none; }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--hair-2); color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); flex: none; }
+.badge.tunnel i { background: var(--down); } .badge.direct i { background: var(--good); } .badge.drop i { background: var(--critical); }
+.hint { color: var(--ink-3); font-size: 12px; margin-top: 10px; }
 
 /* --- site banner */
-.site { display: flex; align-items: center; gap: 14px; padding: 14px 18px; flex-wrap: wrap; }
+.site { display: flex; align-items: center; gap: 14px; padding: 14px 20px; flex-wrap: wrap; }
 .site .what { flex: 1; min-width: 220px; }
-.site .what b { font-size: 15px; font-weight: 600; display: block; }
+.site .what b { font-size: 15px; font-weight: 620; display: block; }
 .site .what span { color: var(--ink-3); font-size: 12.5px; }
 
+/* --- stat tiles */
+.tile { padding: 16px 20px 14px; display: grid; gap: 2px; position: relative; overflow: hidden; }
+.tile .k { color: var(--ink-2); font-size: 12.5px; display: flex; align-items: center; gap: 8px; }
+.tile .v { font-size: 30px; font-weight: 640; letter-spacing: -.03em; line-height: 1.15; }
+.tile .v span { font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--ink-2); margin-left: 5px; }
+.tile .s { color: var(--ink-3); font-size: 12px; min-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative; z-index: 1; }
+.tile svg.mini { position: absolute; right: 0; bottom: 0; width: 55%; height: 44px; opacity: .9; }
+.tile svg.mini path { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+
+/* --- topology */
+.topo { position: relative; height: 270px; }
+.topo canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.topo .cap { position: absolute; bottom: 12px; font-size: 11.5px; color: var(--ink-3); }
+@media (max-width: 760px) { .topo { height: 220px; } }
+
 /* --- chart */
-.chart { position: relative; height: 180px; }
+.chart { position: relative; height: 190px; }
 .chart svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .chart .grid-line { stroke: var(--hair); stroke-width: 1; }
 .chart .tick { fill: var(--ink-3); font-size: 11px; }
-.chart .line { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.chart .area { fill: var(--series-wash); }
+.chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .area { fill: var(--down-wash); }
 .chart .cross { stroke: var(--hair-2); stroke-width: 1; }
-.chart .mk { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
-.tip { position: absolute; pointer-events: none; background: var(--raised); border: 1px solid var(--hair-2); border-radius: 10px; padding: 7px 10px; box-shadow: var(--shadow); font-size: 12px; white-space: nowrap; transform: translate(-50%, -100%); opacity: 0; transition: opacity .12s; }
-.tip b { display: block; font-size: 14px; font-weight: 620; } .tip span { color: var(--ink-3); }
+.chart .mk { stroke: var(--surface); stroke-width: 2; }
+.legend { display: flex; gap: 16px; margin-left: auto; font-size: 12px; color: var(--ink-2); font-weight: 400; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tip { position: absolute; pointer-events: none; background: var(--raised); border: 1px solid var(--hair-2); border-radius: 11px; padding: 8px 11px; box-shadow: var(--shadow); font-size: 12px; white-space: nowrap; transform: translate(-50%, -100%); opacity: 0; transition: opacity .12s; display: grid; gap: 2px; }
+.tip div { display: flex; align-items: center; gap: 7px; } .tip b { font-size: 13.5px; font-weight: 620; } .tip span { color: var(--ink-3); }
 
 /* --- tables */
-.scroll { overflow-x: auto; margin: 0 -18px; padding: 0 18px; }
+.scroll { overflow-x: auto; margin: 0 -20px; padding: 0 20px; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-th { text-align: left; font-weight: 500; color: var(--ink-3); font-size: 12px; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--hair); white-space: nowrap; }
-td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--hair); white-space: nowrap; vertical-align: middle; }
+th { text-align: left; font-weight: 500; color: var(--ink-3); font-size: 12px; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+td { padding: 8px 14px 8px 0; border-bottom: 1px solid var(--hair); white-space: nowrap; vertical-align: middle; }
 tbody tr:last-child td { border-bottom: 0; }
-tbody tr:hover { background: color-mix(in srgb, var(--series) 5%, transparent); }
+tbody tr:hover { background: color-mix(in srgb, var(--down) 5%, transparent); }
 .num { text-align: right; }
 .t1 { font-weight: 560; } .t2 { color: var(--ink-3); font-family: var(--mono); font-size: 11.5px; }
-.bar { display: inline-block; width: 88px; height: 6px; border-radius: 3px; background: var(--hair); vertical-align: middle; margin-right: 8px; overflow: hidden; }
-.bar i { display: block; height: 100%; border-radius: 0 3px 3px 0; background: var(--series); transition: width .5s ease; }
+.bar { display: inline-block; width: 84px; height: 6px; border-radius: 3px; background: var(--hair); vertical-align: middle; margin-right: 8px; overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 0 3px 3px 0; background: var(--down); transition: width .5s ease; }
+.bar.up i { background: var(--up); }
 .spark { width: 110px; height: 24px; display: block; }
-.spark path { fill: none; stroke: var(--series); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark path { fill: none; stroke: var(--down); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
 tr.off td { color: var(--ink-3); } tr.off .t1 { font-weight: 450; }
-input.name { border: 1px solid transparent; background: transparent; border-radius: 7px; padding: 2px 6px; margin-left: -6px; font-weight: 560; width: 170px; }
-input.name:hover { border-color: var(--hair-2); } input.name:focus { outline: 0; border-color: var(--series); background: var(--sunk); }
+input.name { border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 2px 6px; margin-left: -6px; font-weight: 560; width: 170px; }
+input.name:hover { border-color: var(--hair-2); } input.name:focus { outline: 0; border-color: var(--down); background: var(--sunk); }
+td.dst { max-width: 300px; } td.dst div { overflow: hidden; text-overflow: ellipsis; }
+td .badge { max-width: 280px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; }
+td .badge i { display: inline-block; margin-right: 6px; vertical-align: middle; }
 
 /* --- pattern */
 .pattern { display: flex; gap: 2px; height: 18px; margin: 4px 0 2px; }
-.pattern i { flex: 1; min-width: 1px; border-radius: 2px; background: var(--series-soft); transition: background .12s, transform .12s; }
-.pattern i.on { background: var(--series); transform: scaleY(1.25); }
+.pattern i { flex: 1; min-width: 1px; border-radius: 2px; background: var(--down-soft); transition: background .12s, transform .12s; }
+.pattern i.on { background: var(--down); transform: scaleY(1.25); }
 .pattern.dim i:not(.on) { background: var(--hair); }
-.hint { color: var(--ink-3); font-size: 12px; margin-top: 8px; }
 
-/* --- rules pipeline */
-.flow { display: grid; gap: 0; }
-.step { display: grid; grid-template-columns: 30px minmax(0, 1fr) 150px 92px; gap: 12px; align-items: center; padding: 11px 0; border-top: 1px solid var(--hair); }
+/* --- rules */
+.step { display: grid; grid-template-columns: 30px minmax(0, 1fr) 150px 100px; gap: 12px; align-items: center; padding: 11px 0; border-top: 1px solid var(--hair); }
 .step:first-child { border-top: 0; }
 .step .no { width: 24px; height: 24px; border-radius: 50%; background: var(--sunk); border: 1px solid var(--hair-2); display: grid; place-items: center; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .step .t { font-weight: 560; } .step .d { color: var(--ink-3); font-size: 12.5px; }
 .step .share { height: 6px; border-radius: 3px; background: var(--hair); overflow: hidden; }
-.step .share i { display: block; height: 100%; background: var(--series); border-radius: 0 3px 3px 0; transition: width .5s ease; }
+.step .share i { display: block; height: 100%; background: var(--down); border-radius: 0 3px 3px 0; transition: width .5s ease; }
 .step .cnt { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; text-align: right; }
-.verdict { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--hair-2); color: var(--ink-2); white-space: nowrap; justify-self: end; }
-.verdict i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
-.verdict.tunnel i { background: var(--series); } .verdict.direct i { background: var(--good); } .verdict.drop i { background: var(--critical); }
-@media (max-width: 760px) { .step { grid-template-columns: 30px minmax(0, 1fr) 92px; } .step .meter { display: none; } }
+.step .badge { justify-self: end; }
+@media (max-width: 760px) { .step { grid-template-columns: 30px minmax(0, 1fr) 100px; } .step .meterbox { display: none; } }
+
+/* --- relays */
+.relays { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.relay { border: 1px solid var(--hair); background: var(--sunk); border-radius: 14px; padding: 11px 13px; cursor: pointer; display: grid; gap: 6px; transition: border-color .15s, transform .15s; text-align: left; }
+.relay:hover { border-color: var(--ink-3); transform: translateY(-1px); }
+.relay.sel { border-color: var(--down); box-shadow: 0 0 0 1px var(--down) inset; background: var(--surface); }
+.relay .name { font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.relay .meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-3); font-size: 12px; }
 
 /* --- lists */
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; margin: 0; }
 .kv dt { color: var(--ink-3); } .kv dd { margin: 0; text-align: right; font-weight: 520; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list { list-style: none; margin: 0; padding: 0; }
-.list li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--hair); font-size: 13px; }
+.list li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--hair); font-size: 13px; }
 .list li:first-child { border-top: 0; }
 .list li .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list li .meta { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 12px; }
-.list li.sel .name { font-weight: 600; } .list li.pick { cursor: pointer; } .list li.pick:hover .name { text-decoration: underline; }
 .check { display: flex; gap: 9px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--hair); font-size: 13px; }
 .check:first-child { border-top: 0; }
 .check svg { width: 15px; height: 15px; flex: none; margin-top: 2px; }
@@ -186,53 +213,52 @@ input.name:hover { border-color: var(--hair-2); } input.name:focus { outline: 0;
 .opt .what { flex: 1; min-width: 200px; } .opt .what b { font-weight: 560; display: block; } .opt .what span { color: var(--ink-3); font-size: 12.5px; }
 
 /* --- dialog */
-.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; place-items: center; z-index: 10; padding: 16px; }
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); backdrop-filter: blur(3px); display: none; place-items: center; z-index: 10; padding: 16px; }
 .scrim.open { display: grid; }
-.dialog { width: min(380px, 100%); background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r); box-shadow: var(--shadow); padding: 20px; display: grid; gap: 10px; }
+.dialog { width: min(380px, 100%); background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r); box-shadow: var(--shadow); padding: 22px; display: grid; gap: 10px; }
 .dialog b { font-size: 16px; } .dialog p { margin: 0; color: var(--ink-3); font-size: 12.5px; }
-.dialog input { width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--hair-2); background: var(--raised); }
+.dialog input { width: 100%; padding: 9px 11px; border-radius: 11px; border: 1px solid var(--hair-2); background: var(--raised); }
 .err { color: var(--critical); font-size: 12.5px; min-height: 18px; }
-.toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--ink); color: var(--page); padding: 8px 14px; border-radius: 10px; font-size: 13px; opacity: 0; transition: all .2s; pointer-events: none; z-index: 20; }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); background: var(--ink); color: var(--page); padding: 8px 15px; border-radius: 11px; font-size: 13px; opacity: 0; transition: all .2s; pointer-events: none; z-index: 20; }
 .toast.on { opacity: 1; transform: translate(-50%, 0); }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body>
 <div class="shell">
 <nav>
 	<a class="mark" href="#/overview">
-		<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 8c10 0 9 16 26 16M3 16c10 0 9-8 26-8M3 24c10 0 9-8 26-8" fill="none" stroke="var(--series)" stroke-width="2.6" stroke-linecap="round"/></svg>
+		<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 8c10 0 9 16 26 16M3 16c10 0 9-8 26-8M3 24c10 0 9-8 26-8" fill="none" stroke="var(--down)" stroke-width="2.6" stroke-linecap="round"/></svg>
 		<div><b>Braid</b><small>many strands, one line</small></div>
 	</a>
-	<a class="item" href="#/overview" data-p="overview"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 1 1 16 0M12 13l4-5M5 19h14"/></svg><span>概览</span></a>
-	<a class="item" href="#/strands" data-p="strands"><svg viewBox="0 0 24 24"><path d="M3 6c8 0 8 12 18 12M3 12c8 0 8-6 18-6M3 18c8 0 8-6 18-6"/></svg><span>线路</span><i class="n" id="n-strands"></i></a>
-	<a class="item" href="#/devices" data-p="devices"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="10" rx="2"/><path d="M7 19h5M9.5 15v4"/><rect x="17" y="9" width="4.5" height="10" rx="1.2"/></svg><span>设备</span><i class="n" id="n-devices"></i></a>
-	<a class="item" href="#/rules" data-p="rules"><svg viewBox="0 0 24 24"><path d="M4 6h6c4 0 4 6 8 6h2M4 18h6c4 0 4-6 8-6M17 9l3 3-3 3"/></svg><span>分流</span></a>
-	<a class="item" href="#/tunnel" data-p="tunnel"><svg viewBox="0 0 24 24"><path d="M4 19V11a8 8 0 0 1 16 0v8M9 19v-7a3 3 0 0 1 6 0v7M2 19h20"/></svg><span>隧道</span></a>
-	<a class="item" href="#/log" data-p="log"><svg viewBox="0 0 24 24"><path d="M5 5h14M5 10h14M5 15h9M5 20h6"/></svg><span>日志</span></a>
+	<a class="item" href="#/overview" data-p="overview" title="概览"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 1 1 16 0M12 13l4-5M5 19h14"/></svg><span>概览</span></a>
+	<a class="item" href="#/strands" data-p="strands" title="线路"><svg viewBox="0 0 24 24"><path d="M3 6c8 0 8 12 18 12M3 12c8 0 8-6 18-6M3 18c8 0 8-6 18-6"/></svg><span>线路</span><i class="n" id="n-strands"></i></a>
+	<a class="item" href="#/devices" data-p="devices" title="设备"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="10" rx="2"/><path d="M7 19h5M9.5 15v4"/><rect x="17" y="9" width="4.5" height="10" rx="1.2"/></svg><span>设备</span><i class="n" id="n-devices"></i></a>
+	<a class="item" href="#/connections" data-p="connections" title="连接"><svg viewBox="0 0 24 24"><path d="M7 7h10M7 7l3-3M7 7l3 3M17 17H7M17 17l-3-3M17 17l-3 3"/></svg><span>连接</span><i class="n" id="n-conn"></i></a>
+	<a class="item" href="#/rules" data-p="rules" title="分流"><svg viewBox="0 0 24 24"><path d="M4 6h6c4 0 4 6 8 6h2M4 18h6c4 0 4-6 8-6M17 9l3 3-3 3"/></svg><span>分流</span></a>
+	<a class="item" href="#/tunnel" data-p="tunnel" title="隧道"><svg viewBox="0 0 24 24"><path d="M4 19V11a8 8 0 0 1 16 0v8M9 19v-7a3 3 0 0 1 6 0v7M2 19h20"/></svg><span>隧道</span></a>
+	<a class="item" href="#/log" data-p="log" title="日志"><svg viewBox="0 0 24 24"><path d="M5 5h14M5 10h14M5 15h9M5 20h6"/></svg><span>日志</span></a>
 	<div class="foot">
+		<div class="meter"><div><i class="key"></i>下行<b id="m-down">–</b></div><div><i class="key up"></i>上行<b id="m-up">–</b></div></div>
 		<span class="pill" id="health"><i class="dot"></i><span>连接中…</span></span>
 		<div class="row"><button class="btn ghost" id="theme" title="切换明暗">◐</button><button class="btn" id="auth">登录</button></div>
 	</div>
 </nav>
 <main>
-	<h1 id="title">概览 <small id="subtitle"></small></h1>
+	<div class="head"><h1 id="title">概览</h1><small id="subtitle"></small><div class="spacer"></div><div class="row" id="actions"></div></div>
 
 	<section class="page" data-p="overview">
 		<div class="card site" id="site"></div>
-		<div class="card hero">
-			<div class="figure">
-				<div><div class="label">下行</div><div class="value" id="rate">–<span></span></div></div>
-				<div class="facts">
-					<div class="fact"><div class="k">线路</div><div class="v" id="f-strands">–</div></div>
-					<div class="fact"><div class="k">隧道延迟</div><div class="v" id="f-tunnel">–</div></div>
-					<div class="fact"><div class="k">在线设备</div><div class="v" id="f-dev">–</div></div>
-					<div class="fact"><div class="k">活动连接</div><div class="v" id="f-ct">–</div></div>
-				</div>
-			</div>
-			<div class="stage"><canvas id="braid" aria-label="每条线路的实时负载"></canvas><div class="cap" id="braid-cap"></div></div>
+		<div class="grid g4">
+			<div class="card tile"><div class="k"><i class="key"></i>下行</div><div class="v" id="t-down">–<span></span></div><div class="s" id="t-down-s"></div><svg class="mini" id="mini-down" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+			<div class="card tile"><div class="k"><i class="key up"></i>上行</div><div class="v" id="t-up">–<span></span></div><div class="s" id="t-up-s"></div><svg class="mini" id="mini-up" viewBox="0 0 120 44" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+			<div class="card tile"><div class="k">线路</div><div class="v" id="t-strands">–<span></span></div><div class="s" id="t-strands-s"></div></div>
+			<div class="card tile"><div class="k">隧道</div><div class="v" id="t-tunnel">–<span></span></div><div class="s" id="t-tunnel-s"></div></div>
 		</div>
-		<div class="card"><h2>下行速率 <small id="chart-range"></small></h2><div class="body"><div class="chart" id="chart"><div class="tip" id="tip"></div></div></div></div>
+		<div class="card"><h2>拓扑 <small>左边是设备，右边是上游的每一条线路；线越粗、光点越密，流量越大</small></h2>
+			<div class="topo"><canvas id="topo" aria-label="设备经 Braid 到各条线路的实时流量"></canvas><div class="cap" style="left:20px" id="cap-dev"></div><div class="cap" style="right:20px" id="cap-str"></div></div>
+		</div>
+		<div class="card"><h2>速率 <small id="chart-range"></small><span class="legend"><span><i class="key"></i>下行</span><span><i class="key up"></i>上行</span></span></h2><div class="body"><div class="chart" id="chart"><div class="tip" id="tip"></div></div></div></div>
 		<div class="grid g2">
 			<div class="card"><h2>需要你留意的</h2><div class="body" id="attention"></div></div>
 			<div class="card"><h2>最活跃的设备</h2><div class="body"><ul class="list" id="top-dev"></ul></div></div>
@@ -242,26 +268,36 @@ input.name:hover { border-color: var(--hair-2); } input.name:focus { outline: 0;
 	<section class="page" data-p="strands">
 		<div class="card"><h2>编织 <small id="weave-cap"></small></h2><div class="body">
 			<div class="pattern" id="pattern" aria-hidden="true"></div>
-			<div class="hint">图样：每格是一个槽位，新连接依次落入；格子多的线路分到的新连接多。悬停下方线路可高亮它占的槽位。</div>
+			<div class="hint" style="margin-top:8px">图样：每格是一个槽位，新连接依次落入；格子多的线路分到的新连接多。悬停下方线路可高亮它占的槽位。</div>
 			<div style="height:10px"></div>
-			<div class="opt"><div class="what"><b>分配策略</b><span>按余量：新连接偏向空闲线路，每几秒按实测负载重排。均分：永远平均。</span></div><div class="seg" data-key="weave.policy" data-opts="headroom:按余量,even:均分"></div></div>
+			<div class="opt"><div class="what"><b>分配策略</b><span>按余量：新连接偏向空闲线路，上下行都算，每几秒按实测负载重排。均分：永远平均。</span></div><div class="seg" data-key="weave.policy" data-opts="headroom:按余量,even:均分"></div></div>
 			<div class="opt"><div class="what"><b>亲和性</b><span>自动：同一设备访问同一网站走同一条线路（不会被网站踢下线），一旦它短时间内开出很多连接（下载、测速）就自动摊开叠加。</span></div><div class="seg" data-key="weave.affinity" data-opts="auto:自动,flow:总是摊开,dest:总是固定"></div></div>
 		</div></div>
-		<div class="card"><h2>线路</h2><div class="body"><div class="scroll"><table>
-			<thead><tr><th>线路</th><th>状态</th><th class="num">首包</th><th>当前速率</th><th class="num">峰值</th><th class="num">槽位</th><th>近 5 分钟</th></tr></thead>
+		<div class="card"><h2>线路 <small>每个身份上下行各约 10 Mbit/s，单个连接快不过一条线路</small></h2><div class="body"><div class="scroll"><table>
+			<thead><tr><th>线路</th><th>状态</th><th class="num">首包</th><th>下行</th><th>上行</th><th class="num">峰值 ↓ / ↑</th><th class="num">槽位</th><th>近 5 分钟</th></tr></thead>
 			<tbody id="strands"></tbody></table></div></div></div>
 	</section>
 
 	<section class="page" data-p="devices">
 		<div class="card"><h2>设备 <small>名字可直接点击修改；去向决定这台设备的流量怎么走</small></h2><div class="body"><div class="scroll"><table>
-			<thead><tr><th>设备</th><th>接入</th><th>下行</th><th class="num">上行</th><th class="num">累计 ↓ / ↑</th><th>去向</th></tr></thead>
+			<thead><tr><th>设备</th><th>接入</th><th>下行</th><th>上行</th><th class="num">累计 ↓ / ↑</th><th>去向</th></tr></thead>
 			<tbody id="devices"></tbody></table></div>
 			<div class="hint">默认：按「分流」页的规则走。直连：这台设备永不进隧道。代理：这台设备的全部流量进隧道（包括国内）。禁网：不能上网，但仍能访问路由器。</div>
 		</div></div>
 	</section>
 
+	<section class="page" data-p="connections">
+		<div class="card"><h2>连接 <small id="conn-cap"></small></h2><div class="body">
+			<div class="row" style="margin-bottom:10px"><input class="search" id="conn-q" placeholder="搜索设备、目的地、线路或中继"><div class="seg" id="conn-route"></div></div>
+			<div class="scroll"><table>
+				<thead><tr><th>设备</th><th>目的地</th><th>去向</th><th class="num">下行</th><th class="num">上行</th><th class="num">累计 ↓ / ↑</th></tr></thead>
+				<tbody id="connections"></tbody></table></div>
+			<div class="empty" id="conn-empty"></div>
+		</div></div>
+	</section>
+
 	<section class="page" data-p="rules">
-		<div class="card"><h2>一个包怎么走 <small>从上到下依次判断，命中即止；右侧是实时命中量</small></h2><div class="body"><div class="flow" id="flow"></div></div></div>
+		<div class="card"><h2>一个包怎么走 <small>从上到下依次判断，命中即止；右侧是实时命中量</small></h2><div class="body" id="flow"></div></div>
 		<div class="card"><h2>规则开关</h2><div class="body">
 			<div class="opt"><div class="what"><b>其余流量</b><span>既不是国内地址、也没被点名进隧道的流量。</span></div><div class="seg" data-key="classify.remainder" data-opts="tunnel:进隧道,direct:直连"></div></div>
 			<div class="opt"><div class="what"><b>QUIC（UDP 443）</b><span>拒绝会让浏览器立刻改用 TCP，对部分中继更稳。</span></div><div class="seg" data-key="classify.quic" data-opts="tunnel:照常,reject:拒绝"></div></div>
@@ -270,33 +306,30 @@ input.name:hover { border-color: var(--hair-2); } input.name:focus { outline: 0;
 	</section>
 
 	<section class="page" data-p="tunnel">
-		<div class="grid g2">
-			<div class="card"><h2>隧道</h2><div class="body">
-				<dl class="kv" id="tunnel-kv"></dl>
-				<div style="height:8px"></div>
-				<div class="opt"><div class="what"><b>启用隧道</b><span>关闭后所有流量直连。</span></div><div class="seg" data-key="tunnel.enabled" data-opts="1:开,0:关"></div></div>
-				<div class="opt"><div class="what"><b>隧道故障时</b><span>放行：改为直连，不断网。保持：相关目的地不可达，直到隧道恢复，不会用真实地址访问。</span></div><div class="seg" data-key="tunnel.fail_open" data-opts="1:放行,0:保持"></div></div>
-				<div class="row" style="margin-top:12px"><a class="btn" id="dash" target="_blank" rel="noopener" href="#">打开节点面板 zashboard</a></div>
-			</div></div>
-			<div class="card"><h2>中继 <small>登录后点击即可切换</small></h2><div class="body"><ul class="list" id="relays"></ul></div></div>
-		</div>
+		<div class="card"><h2>隧道</h2><div class="body">
+			<dl class="kv" id="tunnel-kv"></dl>
+			<div style="height:8px"></div>
+			<div class="opt"><div class="what"><b>启用隧道</b><span>关闭后所有流量直连。</span></div><div class="seg" data-key="tunnel.enabled" data-opts="1:开,0:关"></div></div>
+			<div class="opt"><div class="what"><b>隧道故障时</b><span>放行：改为直连，不断网。保持：相关目的地不可达，直到隧道恢复，不会用真实地址访问。</span></div><div class="seg" data-key="tunnel.fail_open" data-opts="1:放行,0:保持"></div></div>
+		</div></div>
+		<div class="card"><h2>中继 <small>点击切换；圆点颜色表示延迟</small></h2><div class="body">
+			<div class="relays" id="relays"></div>
+			<div class="hint">Trojan / VLESS 每个连接各走各的，可以摊到多条线路上叠加；Hysteria2 这类 QUIC 中继把所有流量复用在一条连接里，整条隧道只能用到一条线路（约 10 Mbit/s）。</div>
+		</div></div>
 	</section>
 
 	<section class="page" data-p="log">
 		<div class="grid g2">
 			<div class="card"><h2>事件 <small>只记录状态变化</small></h2><div class="body" id="events"></div></div>
-			<div class="card"><h2>体检 <small id="doctor-cap"></small></h2><div class="body">
-				<div id="doctor"></div>
-				<div class="row" style="margin-top:12px"><button class="btn" id="do-reconcile">立即调谐</button><button class="btn" id="do-relogin">重新登录 Portal</button></div>
-			</div></div>
+			<div class="card"><h2>体检 <small id="doctor-cap"></small></h2><div class="body" id="doctor"></div></div>
 		</div>
 	</section>
-	<footer class="hint" style="margin-top:20px" id="ver"></footer>
+	<div class="hint" style="margin-top:22px" id="ver"></div>
 </main>
 </div>
 
 <div class="scrim" id="scrim"><form class="dialog" id="login">
-	<b>登录</b><p>用路由器（LuCI）的账号登录后才能更改设置。查看状态不需要登录。</p>
+	<b>登录</b><p>用路由器（LuCI）的账号登录后才能更改设置和查看连接。查看其余状态不需要登录。</p>
 	<input id="user" value="root" autocomplete="username"><input id="pass" type="password" placeholder="路由器密码" autocomplete="current-password">
 	<div class="err" id="login-err"></div>
 	<div class="row"><div class="spacer"></div><button class="btn ghost" type="button" id="login-cancel">取消</button><button class="btn primary" id="login-go">登录</button></div>
@@ -309,26 +342,26 @@ const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [..
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const svg = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
 const ANON = "0".repeat(32);
-const UI = "4.0.0";      // must match core.uc VERSION; a mismatch means this page is a stale cached copy
-const QUIET = 125000;   // bytes/s. Below 1 Mbit/s a strand is idle: do not draw noise as load.
+const UI = "4.1.0";      // must match core.uc VERSION; a mismatch means this page is a stale cached copy
+const QUIET = 125000;   // bytes/s. Below 1 Mbit/s a line is idle: do not draw noise as load.
 const ICON = {
 	good: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--good)"/><path d="M4.6 8.2l2.2 2.2 4.6-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 	warning: '<svg viewBox="0 0 16 16"><path d="M8 1.2l7.2 13H.8z" fill="var(--warning)"/><path d="M8 6v4" stroke="#111" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="12.2" r="1" fill="#111"/></svg>',
 	critical: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--critical)"/><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
 	idle: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/></svg>',
 };
-const PAGES = { overview: "概览", strands: "线路", devices: "设备", rules: "分流", tunnel: "隧道", log: "日志" };
+const PAGES = { overview: "概览", strands: "线路", devices: "设备", connections: "连接", rules: "分流", tunnel: "隧道", log: "日志" };
 // What each classify rule means. Keyed by the comment kernel.uc gives it.
 const RULE = {
 	"device-block": ["被你设为「禁网」的设备", "不放行", "drop"],
 	"device-direct": ["被你设为「直连」的设备", "直连", "direct"],
-	"relay": ["发往隧道中继本身的流量", "直连，避免隧道套隧道", "direct"],
+	"relay": ["发往隧道中继本身的流量", "直连", "direct"],
 	"device-tunnel": ["被你设为「代理」的设备", "进隧道", "tunnel"],
 	"tunnel-range": ["目的地在「强制隧道」地址段里", "进隧道", "tunnel"],
 	"tunnel-domain": ["目的地是「强制隧道」域名解析出的地址", "进隧道", "tunnel"],
 	"tunnel-port": ["指定的 UDP 端口（NTP 对时）", "进隧道", "tunnel"],
 	"domestic": ["目的地是国内地址", "直连", "direct"],
-	"quic": ["QUIC（UDP 443）", "拒绝，浏览器改用 TCP", "drop"],
+	"quic": ["QUIC（UDP 443）", "拒绝", "drop"],
 	"rest-tunnel": ["以上都不是", "进隧道", "tunnel"],
 	"rest-direct": ["以上都不是", "直连", "direct"],
 };
@@ -353,7 +386,7 @@ const CHECK = {
 	ssh_public: ["SSH 暴露在所有接口上", "限制到 LAN"],
 	http_public: ["管理页面暴露在所有接口上", "限制到 LAN"],
 };
-const S = { sid: sessionStorage.getItem("braid.sid") || ANON, page: "overview", status: null, series: { ts: [], total: [], strands: {} }, doctor: null, events: [], tunnel: null, devices: [], rules: null, config: null, hover: null, editing: false };
+const S = { sid: sessionStorage.getItem("braid.sid") || ANON, page: "overview", status: null, series: { ts: [], total: [], up: [], strands: {} }, doctor: null, events: [], tunnel: null, devices: [], rules: null, conns: [], connPrev: {}, connAt: 0, connRoute: "all", hover: null, editing: false };
 let seq = 0, afterLogin = null;
 
 async function ubus(object, method, args = {}) {
@@ -364,7 +397,7 @@ async function ubus(object, method, args = {}) {
 	return j.result[1] || {};
 }
 function toast(text) { const t = $("#toast"); t.textContent = text; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 2200); }
-function signOut() { S.sid = ANON; sessionStorage.removeItem("braid.sid"); S.config = null; $("#auth").textContent = "登录"; render(); }
+function signOut() { S.sid = ANON; sessionStorage.removeItem("braid.sid"); S.conns = []; $("#auth").textContent = "登录"; render(); }
 function askLogin(then) { afterLogin = then || null; $("#login-err").textContent = ""; $("#scrim").classList.add("open"); setTimeout(() => $("#pass").focus(), 50); }
 // Run a write. Anonymous callers are asked to log in first, then it runs.
 async function write(method, args, done) {
@@ -390,29 +423,25 @@ const clock = (ts) => new Date(ts * 1000).toLocaleTimeString("zh-CN", { hour12: 
 const ago = (ts) => { const d = Math.max(0, Math.round(Date.now() / 1000 - ts)); return d < 60 ? d + " 秒前" : d < 3600 ? Math.round(d / 60) + " 分钟前" : Math.round(d / 3600) + " 小时前"; };
 function niceStep(v) { const p = Math.pow(10, Math.floor(Math.log10(v || 1))); for (const m of [.25, .5, 1, 2.5, 5, 10]) if (v / (m * p) <= 4) return m * p; return 10 * p; }
 const stateEl = (kind, text) => { const s = el("span", "state"); s.innerHTML = ICON[kind]; s.append(text); return s; };
+const setValue = (id, pair) => { const e = $(id); e.firstChild.nodeValue = pair[0]; e.lastChild.textContent = pair[1] || ""; };
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const barEl = (frac, up) => { const b = el("span", "bar" + (up ? " up" : "")), f = el("i"); f.style.width = (100 * Math.min(1, frac)).toFixed(1) + "%"; b.append(f); return b; };
+const delayKind = (ms) => !ms ? "" : ms < 150 ? "good" : ms < 400 ? "warning" : "serious";
+const deviceName = (ip) => { const d = S.devices.find((x) => x.ip === ip); return d ? (d.name || d.host || ip) : ip; };
 
 // --- settings that live next to the thing they change
 function renderSegs() {
+	const cur = S.status?.settings || {};
 	for (const seg of $$(".seg[data-key]")) {
-		const key = seg.dataset.key, cur = seg.dataset.cur;
-		const opts = seg.dataset.opts.split(",").map((o) => o.split(":"));
-		seg.replaceChildren(...opts.map(([v, label]) => { const b = el("button", cur === v ? "on" : "", label); b.type = "button"; b.onclick = () => write("configure", { set: { [key]: v } }, loadConfig); return b; }));
+		const key = seg.dataset.key, now = cur[key] != null ? String(cur[key]) : "";
+		seg.replaceChildren(...seg.dataset.opts.split(",").map((o) => { const [v, label] = o.split(":"), b = el("button", now === v ? "on" : "", label); b.type = "button"; b.onclick = () => write("configure", { set: { [key]: v } }); return b; }));
 	}
-}
-async function loadConfig() { if (S.sid === ANON) return; try { S.config = await ubus("braid", "config"); renderSegs(); } catch (e) { if (e.denied) signOut(); } }
-// Anonymous viewers still see the current choice: the status carries what it can.
-function seedSegs() {
-	const s = S.status; if (!s) return;
-	const cur = s.settings || {};
-	for (const seg of $$(".seg[data-key]")) if (cur[seg.dataset.key] != null) seg.dataset.cur = String(cur[seg.dataset.key]);
-	renderSegs();
 }
 
 // --- overview
 function renderSite() {
 	const s = S.status, site = s?.site, box = $("#site"); if (!site) return;
-	const n = s.strands.length, healthy = s.strands.filter((x) => x.healthy).length;
-	const what = el("div", "what");
+	const n = s.strands.length, healthy = s.strands.filter((x) => x.healthy).length, what = el("div", "what");
 	what.append(el("b", "", site.known ? site.name : site.gateway ? "陌生网络" : "正在识别网络…"),
 		el("span", "", site.aggregate ? `聚合已开启：${healthy} / ${n} 条线路在承载流量` : "聚合关闭：按普通路由器工作，只用一条线路" + (site.known ? "" : "。分流、隧道、DNS 照常")));
 	const seg = el("div", "seg");
@@ -420,114 +449,140 @@ function renderSite() {
 	box.replaceChildren(stateEl(site.aggregate ? "good" : "idle", ""), what, seg);
 	if (!site.known && site.gateway) {
 		const b = el("button", "btn", "记住这个网络并聚合"); b.title = "以后回到这个网络会自动开启聚合";
-		b.onclick = () => { const name = prompt("给这个网络起个名字", "我的网络"); if (name) write("remember", { name, aggregate: true, portal: "" }); };
-		box.append(b);
+		b.onclick = () => { const name = prompt("给这个网络起个名字", "我的网络"); if (name) write("remember", { name, aggregate: true, portal: "" }); }; box.append(b);
 	} else if (site.known) {
 		const b = el("button", "btn ghost", "忘记"); b.title = "不再把这个网络当作已知网络"; b.onclick = () => confirm("忘记「" + site.name + "」？之后在这里将按普通路由器工作。") && write("forget", {}); box.append(b);
 	}
 }
-function renderHero() {
+function miniPath(id, row, color) {
+	const box = $(id), pts = row.slice(-60), n = pts.length, max = Math.max(QUIET / 4, ...pts);
+	box.replaceChildren();
+	if (n < 2) return;
+	const p = svg("path", { d: pts.map((v, i) => (i ? "L" : "M") + (120 * i / (n - 1)).toFixed(1) + " " + (42 - 38 * v / max).toFixed(1)).join("") }); p.style.stroke = color; box.append(p);
+}
+function renderTiles() {
 	const s = S.status; if (!s) return;
-	const [n, unit] = rate(s.rate || 0);
-	$("#rate").firstChild.nodeValue = n; $("#rate span").textContent = unit;
+	setValue("#t-down", rate(s.rate || 0)); setValue("#t-up", rate(s.rate_up || 0));
+	$("#m-down").textContent = rateText(s.rate || 0); $("#m-up").textContent = rateText(s.rate_up || 0);
+	const peak = (a) => a.length ? Math.max(...a) : 0;
+	$("#t-down-s").textContent = "近一小时最高 " + rateText(peak(S.series.total)); $("#t-up-s").textContent = "近一小时最高 " + rateText(peak(S.series.up));
+	miniPath("#mini-down", S.series.total, css("--down")); miniPath("#mini-up", S.series.up, css("--up"));
 	const healthy = s.strands.filter((x) => x.healthy).length;
-	$("#f-strands").replaceChildren(String(healthy), el("small", "", "/ " + s.strands.length));
-	const t = s.tunnel || {}, ft = $("#f-tunnel");
-	if (!t.enabled) ft.replaceChildren("关闭"); else if (!t.on) ft.replaceChildren(t.running ? "旁路" : "未运行"); else ft.replaceChildren(String(t.canary_ms || "–"), el("small", "", "ms"));
-	const online = S.devices.filter((d) => d.online).length;
-	$("#f-dev").replaceChildren(String(online), el("small", "", "/ " + S.devices.length));
-	$("#f-ct").textContent = s.sys?.conntrack?.count ?? "–";
-	const bad = s.fail?.length || 0, warn = s.warn?.length || 0, pill = $("#health");
+	setValue("#t-strands", [String(healthy), "/ " + s.strands.length]);
+	$("#t-strands-s").textContent = s.site?.aggregate ? `${s.weave?.pattern?.length || 0} 个槽位在编织` : "未聚合";
+	const t = s.tunnel || {};
+	setValue("#t-tunnel", !t.enabled ? ["关闭", ""] : !t.on ? [t.running ? "旁路" : "未运行", ""] : [String(t.canary_ms || "–"), "ms"]);
+	$("#t-tunnel-s").textContent = t.on ? (S.tunnel?.selected === "AUTO" && S.tunnel?.auto ? S.tunnel.auto : S.tunnel?.selected || "") : t.enabled ? "流量直连中" : "";
+	const online = S.devices.filter((d) => d.online).length, bad = s.fail?.length || 0, warn = s.warn?.length || 0, pill = $("#health");
 	pill.firstChild.className = "dot " + (bad ? "critical" : warn ? "warning" : "good");
 	pill.lastChild.textContent = bad ? bad + " 项异常" : warn ? warn + " 项提醒" : "一切正常";
-	$("#ver").textContent = `Braid ${s.version || ""} · 上次调谐 ${s.reconciled ? ago(s.reconciled) : "—"} · 查看状态不需要登录，更改需要`;
-	$("#braid-cap").textContent = s.strands.length > 1 ? `上游 ${s.strands.length} 股 → 汇成一线` : "单线路";
-	$("#n-strands").textContent = healthy; $("#n-devices").textContent = online || "";
-	$("#subtitle").textContent = S.page === "overview" ? (s.site?.known ? s.site.name : "") : "";
+	$("#ver").textContent = `Braid ${s.version || ""} · 上次调谐 ${s.reconciled ? ago(s.reconciled) : "—"}`;
+	$("#n-strands").textContent = healthy; $("#n-devices").textContent = online || ""; $("#n-conn").textContent = S.conns.length || "";
+	$("#subtitle").textContent = S.page === "overview" && s.site?.known ? s.site.name : "";
+}
+function checkRow(c) {
+	const r = el("div", "check"), known = CHECK[c.id.split(":")[0]];
+	r.innerHTML = ICON[c.ok ? "good" : c.level === "warn" ? "warning" : "critical"];
+	const t = el("div"); t.append(known && !c.ok ? known[0] : c.id);
+	if (!c.ok) { const why = el("span", "why", (known ? known[1] : "") + (c.detail ? `（${c.detail}）` : "")); why.append(el("code", "", " " + c.id)); t.append(why); }
+	r.append(t); return r;
 }
 function renderAttention() {
 	const d = S.doctor, box = $("#attention"); if (!d) return;
 	const bad = (d.checks || []).filter((c) => !c.ok);
-	if (!bad.length) { const ok = el("div", "check"); ok.innerHTML = ICON.good; ok.append(el("div", "", `没有。${d.checks.length} 项检查全部通过。`)); box.replaceChildren(ok); return; }
-	box.replaceChildren(...bad.map(checkRow));
-}
-function checkRow(c) {
-	const r = el("div", "check"), base = c.id.split(":")[0], known = CHECK[base];
-	r.innerHTML = ICON[c.ok ? "good" : c.level === "warn" ? "warning" : "critical"];
-	const t = el("div"); t.append(known && !c.ok ? known[0] : c.id);
-	if (!c.ok) { const why = el("span", "why", (known ? known[1] : "") + (c.detail ? `（${c.detail}）` : "")); const id = el("code", "", " " + c.id); why.append(id); t.append(why); }
-	r.append(t); return r;
+	box.replaceChildren(...(bad.length ? bad.map(checkRow) : [checkRow({ ok: true, id: `没有。${d.checks.length} 项检查全部通过。` })]));
 }
 function renderTopDevices() {
 	const top = S.devices.filter((d) => d.online).sort((a, b) => (b.down + b.up) - (a.down + a.up)).slice(0, 5), ul = $("#top-dev");
 	if (!top.length) { ul.replaceChildren(el("div", "empty", "没有在线设备")); return; }
-	ul.replaceChildren(...top.map((d) => { const li = el("li"); li.append(el("i", "dot " + (d.down + d.up > 1000 ? "good" : "")), el("span", "name", d.name || d.ip || d.mac), el("span", "meta", "↓ " + rateText(d.down) + "  ↑ " + rateText(d.up))); return li; }));
+	ul.replaceChildren(...top.map((d) => { const li = el("li"); li.append(el("i", "dot " + (d.down + d.up > 1000 ? "good" : "")), el("span", "name", d.name || d.host || d.ip || d.mac), el("span", "meta", "↓ " + rateText(d.down) + "   ↑ " + rateText(d.up))); return li; }));
 }
 
-// --- the braid: every strand a line, load as weight and motion
-const braid = { particles: [], reduce: matchMedia("(prefers-reduced-motion: reduce)").matches };
-function strandPath(i, n, w, h, x) {
-	// x: 0 at the upstream edge (right), 1 where the strands meet (left)
-	const y0 = n > 1 ? 14 + (h - 28) * (i / (n - 1)) : h / 2, yc = h / 2, ease = x * x * (3 - 2 * x);
-	// Neighbours swing in antiphase, so they cross over and under each other
-	// on the way in: loose at the edge, tight where they meet.
-	const amp = Math.sin(Math.PI * x) * Math.min(20, h / 10) * (1 - x * .5);
-	return [w - x * (w - 6), y0 + (yc - y0) * ease + Math.sin(x * 10 + i * Math.PI) * amp];
+// --- topology: devices on the left, strands on the right, Braid in between
+const topo = { parts: [], reduce: matchMedia("(prefers-reduced-motion: reduce)").matches };
+function strandPoint(i, n, w, h, cx, x) {
+	// x: 0 at the upstream edge (right), 1 at the hub
+	const y0 = n > 1 ? 16 + (h - 32) * (i / (n - 1)) : h / 2, yc = h / 2, ease = x * x * (3 - 2 * x);
+	// Neighbours swing in antiphase, so they cross over and under on the way in.
+	const amp = Math.sin(Math.PI * x) * Math.min(18, h / 12) * (1 - x * .5);
+	return [w - 4 - x * (w - 4 - cx), y0 + (yc - y0) * ease + Math.sin(x * 10 + i * Math.PI) * amp];
 }
-function drawBraid() {
-	const c = $("#braid"), s = S.status, dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+function devicePoint(j, m, h, cx, lx, x) {
+	// x: 0 at the hub, 1 at the device. A cubic that leaves and arrives flat.
+	const y1 = m > 1 ? 30 + (h - 76) * (j / (m - 1)) : h / 2, y0 = h / 2, k = 1 - x, mid = (cx + lx) / 2;
+	return [k * k * k * cx + 3 * k * k * x * mid + 3 * k * x * x * mid + x * x * x * lx, k * k * k * y0 + 3 * k * k * x * y0 + 3 * k * x * x * y1 + x * x * x * y1];
+}
+function drawTopo() {
+	const c = $("#topo"), s = S.status, dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
 	if (!w || S.page !== "overview") return;
 	if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
 	const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
 	if (!s) return;
-	const css = getComputedStyle(document.documentElement), blue = css.getPropertyValue("--series").trim(), gray = css.getPropertyValue("--hair-2").trim();
-	const st = s.strands, n = st.length, top = Math.max(QUIET, ...st.map((x) => Math.max(x.rate || 0, (x.peak || 0) * .5)));
-	st.forEach((x, i) => {
-		const k = x.healthy ? Math.min(1, Math.sqrt((x.rate || 0) / top)) : 0;
-		g.beginPath();
-		for (let p = 0; p <= 64; p++) { const [px, py] = strandPath(i, n, w, h, p / 64); p ? g.lineTo(px, py) : g.moveTo(px, py); }
-		g.lineWidth = x.healthy ? 1 + 2.2 * k : 1; g.lineCap = "round"; g.strokeStyle = x.healthy ? blue : gray;
-		g.globalAlpha = x.healthy ? .22 + .7 * k : .6; g.setLineDash(x.healthy ? [] : [3, 5]); g.stroke(); g.setLineDash([]);
+	const down = css("--down"), up = css("--up"), gray = css("--hair-2"), ink = css("--ink-2");
+	const narrow = w < 560, lx = narrow ? 104 : 176, cx = Math.max(lx + 90, w * .42), cy = h / 2;
+	const st = s.strands, n = st.length, sTop = Math.max(QUIET, ...st.map((x) => Math.max(x.rate || 0, x.up || 0, (x.peak || 0) * .5)));
+	const devs = S.devices.filter((d) => d.online).sort((a, b) => (b.down + b.up) - (a.down + a.up)).slice(0, narrow ? 4 : 6), m = devs.length;
+	const dTop = Math.max(QUIET, ...devs.map((d) => d.down + d.up));
+	const line = (pt, k, color, dashed) => { g.beginPath(); for (let p = 0; p <= 48; p++) { const [px, py] = pt(p / 48); p ? g.lineTo(px, py) : g.moveTo(px, py); } g.lineWidth = 1 + 2.4 * k; g.lineCap = "round"; g.strokeStyle = color; g.globalAlpha = dashed ? .6 : .2 + .72 * k; g.setLineDash(dashed ? [3, 5] : []); g.stroke(); g.setLineDash([]); };
+	st.forEach((x, i) => line((t) => strandPoint(i, n, w, h, cx, t), x.healthy ? Math.min(1, Math.sqrt(Math.max(x.rate || 0, x.up || 0) / sTop)) : 0, x.healthy ? down : gray, !x.healthy));
+	g.font = "12px " + css("--sans"); g.textBaseline = "middle"; g.textAlign = "right";
+	devs.forEach((d, j) => {
+		line((t) => devicePoint(j, m, h, cx, lx, t), Math.min(1, Math.sqrt((d.down + d.up) / dTop)), down, false);
+		const y = devicePoint(j, m, h, cx, lx, 1)[1]; let name = d.name || d.host || d.ip;
+		g.globalAlpha = 1; g.fillStyle = ink; while (name.length > 3 && g.measureText(name).width > lx - 34) name = name.slice(0, -2) + "…";
+		g.fillText(name, lx - 12, y); g.beginPath(); g.arc(lx, y, 3, 0, 6.3); g.fillStyle = down; g.fill();
 	});
-	if (!braid.reduce) {
-		braid.particles = braid.particles.filter((p) => p.x < 1 && p.i < n);
-		st.forEach((x, i) => { if (x.healthy && Math.random() < .012 + Math.min(1, (x.now || 0) / top) * .22) braid.particles.push({ i, x: 0, v: .004 + .012 * Math.min(1, (x.now || 0) / top) + Math.random() * .003 }); });
-		g.fillStyle = blue;
-		for (const p of braid.particles) { p.x += p.v; const [px, py] = strandPath(p.i, n, w, h, Math.min(1, p.x)); g.globalAlpha = .9 * Math.sin(Math.PI * Math.min(1, p.x)) + .1; g.beginPath(); g.arc(px, py, 1.6, 0, 6.3); g.fill(); }
+	if (!topo.reduce) {
+		topo.parts = topo.parts.filter((p) => p.x < 1 && (p.dev ? p.i < m : p.i < n));
+		st.forEach((x, i) => { if (!x.healthy) return; for (const [val, isUp] of [[x.now || 0, false], [x.up_now || 0, true]]) { const k = Math.min(1, val / sTop); if (Math.random() < (isUp ? 0 : .01) + k * .2) topo.parts.push({ i, x: 0, v: .005 + .012 * k + Math.random() * .003, up: isUp }); } });
+		devs.forEach((d, j) => { for (const [val, isUp] of [[d.down, false], [d.up, true]]) { const k = Math.min(1, val / dTop); if (Math.random() < k * .22) topo.parts.push({ dev: true, i: j, x: 0, v: .006 + .012 * k + Math.random() * .003, up: isUp }); } });
+		for (const p of topo.parts) {
+			p.x += p.v;
+			// Download runs strand -> hub -> device; upload runs the other way.
+			// Both parametrisations start at 0 on the side a download enters.
+			const t = Math.min(1, p.x), along = p.up ? 1 - t : t;
+			const [px, py] = p.dev ? devicePoint(p.i, m, h, cx, lx, along) : strandPoint(p.i, n, w, h, cx, along);
+			g.globalAlpha = .9 * Math.sin(Math.PI * t) + .1; g.fillStyle = p.up ? up : down; g.beginPath(); g.arc(px, py, 1.7, 0, 6.3); g.fill();
+		}
 	}
-	g.globalAlpha = 1; g.beginPath(); g.arc(6, h / 2, 4, 0, 6.3); g.fillStyle = blue; g.fill();
+	g.globalAlpha = 1; g.beginPath(); g.arc(cx, cy, 13, 0, 6.3); g.fillStyle = css("--surface"); g.fill(); g.lineWidth = 2; g.strokeStyle = down; g.stroke();
+	g.beginPath(); g.arc(cx, cy, 4, 0, 6.3); g.fillStyle = down; g.fill();
+	$("#cap-dev").textContent = m ? `${S.devices.filter((d) => d.online).length} 台设备在线` : "没有在线设备";
+	$("#cap-str").textContent = n > 1 ? `上游 ${n} 条线路` : "上游单线路";
 }
-function loop() { drawBraid(); if (!braid.reduce) requestAnimationFrame(loop); }
+function loop() { drawTopo(); if (!topo.reduce) requestAnimationFrame(loop); }
 
-// --- throughput chart
+// --- throughput chart: download and upload on one axis
 function renderChart() {
 	const box = $("#chart"), d = S.series, n = d.total.length;
 	if (S.page !== "overview") return;
 	box.querySelector("svg")?.remove(); box.querySelector(".empty")?.remove();
 	if (n < 2) { box.append(el("div", "empty", "正在积累数据…")); return; }
-	const W = box.clientWidth, H = box.clientHeight, L = 8, R = 8, T = 10, B = 22;
-	const peak = Math.max(...d.total, QUIET / 2) * 8, step = niceStep(peak), lines = Math.max(1, Math.ceil(peak * 1.02 / step)), max = lines * step / 8;
+	const W = box.clientWidth, H = box.clientHeight, L = 8, R = 8, T = 10, B = 22, upRow = d.up.length === n ? d.up : d.total.map(() => 0);
+	const peak = Math.max(...d.total, ...upRow, QUIET / 2) * 8, step = niceStep(peak), lines = Math.max(1, Math.ceil(peak * 1.02 / step)), max = lines * step / 8;
 	const x = (i) => L + (W - L - R) * (i / (n - 1)), y = (v) => T + (H - T - B) * (1 - v / max);
-	const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "下行速率随时间变化" });
+	const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "下行与上行速率随时间变化" });
 	for (let k = 0; k <= lines; k++) {
 		const v = max * k / lines, yy = y(v);
 		root.append(svg("line", { class: "grid-line", x1: L, x2: W - R, y1: yy, y2: yy }));
 		if (k) { const t = svg("text", { class: "tick", x: L + 2, y: yy - 4 }); t.textContent = rateText(v); root.append(t); }
 	}
-	let line = ""; d.total.forEach((v, i) => { line += (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); });
-	root.append(svg("path", { class: "area", d: `${line}L${x(n - 1)} ${y(0)}L${x(0)} ${y(0)}Z` }), svg("path", { class: "line", d: line }));
+	const path = (row) => row.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1)).join("");
+	const dn = path(d.total), upPath = svg("path", { class: "line", d: path(upRow) }), dnPath = svg("path", { class: "line", d: dn });
+	upPath.style.stroke = "var(--up)"; dnPath.style.stroke = "var(--down)";
+	root.append(svg("path", { class: "area", d: `${dn}L${x(n - 1)} ${y(0)}L${x(0)} ${y(0)}Z` }), upPath, dnPath);
 	(n > 8 ? [0, Math.floor((n - 1) / 2), n - 1] : [0, n - 1]).forEach((i, k, a) => { const t = svg("text", { class: "tick", x: x(i), y: H - 5, "text-anchor": k === 0 ? "start" : k === a.length - 1 ? "end" : "middle" }); t.textContent = clock(d.ts[i]).slice(0, 5); root.append(t); });
-	const cross = svg("line", { class: "cross", y1: T, y2: H - B, visibility: "hidden" }), mark = svg("circle", { class: "mk", r: 4.5, visibility: "hidden" });
-	root.append(cross, mark); box.prepend(root);
-	const tip = $("#tip");
+	const cross = svg("line", { class: "cross", y1: T, y2: H - B, visibility: "hidden" }), m1 = svg("circle", { class: "mk", r: 4.5, visibility: "hidden" }), m2 = svg("circle", { class: "mk", r: 4.5, visibility: "hidden" });
+	m1.style.fill = "var(--down)"; m2.style.fill = "var(--up)"; root.append(cross, m2, m1); box.prepend(root);
+	const tip = $("#tip"), tipRow = (cls, v, label) => { const r = el("div"); r.append(el("i", "key" + cls), el("b", "", rateText(v)), el("span", "", label)); return r; };
 	root.onpointermove = (e) => {
 		const r = root.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.round((e.clientX - r.left - L) / (r.width - L - R) * (n - 1))));
 		cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
-		mark.setAttribute("cx", x(i)); mark.setAttribute("cy", y(d.total[i])); mark.setAttribute("visibility", "visible");
-		tip.replaceChildren(el("b", "", rateText(d.total[i])), el("span", "", clock(d.ts[i])));
-		tip.style.left = Math.max(60, Math.min(r.width - 60, x(i))) + "px"; tip.style.top = (y(d.total[i]) - 10) + "px"; tip.style.opacity = 1;
+		for (const [mk, v] of [[m1, d.total[i]], [m2, upRow[i]]]) { mk.setAttribute("cx", x(i)); mk.setAttribute("cy", y(v)); mk.setAttribute("visibility", "visible"); }
+		tip.replaceChildren(tipRow("", d.total[i], "下行"), tipRow(" up", upRow[i], "上行"), el("span", "", clock(d.ts[i])));
+		tip.style.left = Math.max(80, Math.min(r.width - 80, x(i))) + "px"; tip.style.top = (y(Math.max(d.total[i], upRow[i])) - 10) + "px"; tip.style.opacity = 1;
 	};
-	root.onpointerleave = () => { cross.setAttribute("visibility", "hidden"); mark.setAttribute("visibility", "hidden"); tip.style.opacity = 0; };
+	root.onpointerleave = () => { cross.setAttribute("visibility", "hidden"); m1.setAttribute("visibility", "hidden"); m2.setAttribute("visibility", "hidden"); tip.style.opacity = 0; };
 	const span = (d.ts[n - 1] - d.ts[0]) / 60;
 	$("#chart-range").textContent = "最近 " + (span >= 1 ? Math.round(span) + " 分钟" : Math.round(span * 60) + " 秒");
 }
@@ -543,15 +598,15 @@ function renderStrands() {
 	const w = s.weave || {}, pat = w.pattern || [], p = $("#pattern");
 	$("#weave-cap").textContent = pat.length ? `${pat.length} 个槽位，每 ${w.interval || 5} 秒按负载重排` : "只有一条线路，不需要编织";
 	if (p.children.length !== pat.length || pat.some((id, i) => +p.children[i].dataset.id !== id)) p.replaceChildren(...pat.map((id) => { const c = el("i"); c.dataset.id = id; return c; }));
-	const top = Math.max(QUIET, ...s.strands.map((x) => Math.max(x.rate || 0, x.peak || 0)));
+	const top = Math.max(QUIET, ...s.strands.map((x) => Math.max(x.rate || 0, x.peak || 0))), topUp = Math.max(QUIET, ...s.strands.map((x) => Math.max(x.up || 0, x.up_peak || 0)));
 	const sparkTop = Math.max(QUIET, ...s.strands.map((x) => Math.max(...(S.series.strands[x.dev] || [0]).slice(-60))));
 	$("#strands").replaceChildren(...s.strands.map((x) => {
 		const tr = el("tr", x.healthy ? "" : "off"), c1 = el("td"); c1.append(el("div", "t1", x.dev), el("div", "t2", x.ip || "无地址"));
 		const c2 = el("td"); c2.append(stateEl(x.healthy ? "good" : x.parked ? "warning" : "critical", x.healthy ? (x.role === "backup" ? "备用" : "健康") : x.parked ? "已停靠" : "离线"));
-		const c3 = el("td", "num", x.healthy ? Math.round((x.ttfb || 0) * 1000) + " ms" : "HTTP " + (x.http || "—"));
-		const c4 = el("td"), bar = el("span", "bar"), fill = el("i"); fill.style.width = (100 * (x.rate || 0) / top).toFixed(1) + "%"; bar.append(fill); c4.append(bar, rateText(x.rate || 0));
-		const c7 = el("td"), sp = svg("svg", { class: "spark", viewBox: "0 0 110 24", "aria-hidden": "true" }); sp.append(svg("path", { d: sparkPath(S.series.strands[x.dev] || [], sparkTop) })); c7.append(sp);
-		tr.append(c1, c2, c3, c4, el("td", "num muted", rateText(x.peak || 0)), el("td", "num", String(x.slots || 0)), c7);
+		const c4 = el("td"); c4.append(barEl((x.rate || 0) / top), rateText(x.rate || 0));
+		const c5 = el("td"); c5.append(barEl((x.up || 0) / topUp, true), rateText(x.up || 0));
+		const c8 = el("td"), sp = svg("svg", { class: "spark", viewBox: "0 0 110 24", "aria-hidden": "true" }); sp.append(svg("path", { d: sparkPath(S.series.strands[x.dev] || [], sparkTop) })); c8.append(sp);
+		tr.append(c1, c2, el("td", "num", x.healthy ? Math.round((x.ttfb || 0) * 1000) + " ms" : "HTTP " + (x.http || "—")), c4, c5, el("td", "num muted", rate(x.peak || 0)[0] + " / " + rateText(x.up_peak || 0)), el("td", "num", String(x.slots || 0)), c8);
 		tr.onpointerenter = () => setHover(x.dev); tr.onpointerleave = () => setHover(null); return tr;
 	}));
 	if (S.hover) setHover(S.hover);
@@ -562,8 +617,7 @@ const POLICY = [["auto", "默认"], ["direct", "直连"], ["tunnel", "代理"], 
 function renderDevices() {
 	if (S.page !== "devices" || S.editing) return;
 	const list = [...S.devices].sort((a, b) => (b.online - a.online) || ((b.down + b.up) - (a.down + a.up)) || (a.name || a.mac).localeCompare(b.name || b.mac));
-	const top = Math.max(QUIET, ...list.map((d) => d.down));
-	if (!list.length) { $("#devices").replaceChildren(); return; }
+	const top = Math.max(QUIET, ...list.map((d) => d.down)), topUp = Math.max(QUIET, ...list.map((d) => d.up));
 	$("#devices").replaceChildren(...list.map((d) => {
 		const tr = el("tr", d.online ? "" : "off"), c1 = el("td"), name = el("input", "name");
 		name.value = d.name || ""; name.placeholder = d.host || "未命名"; name.title = "点击改名";
@@ -571,30 +625,58 @@ function renderDevices() {
 		name.onkeydown = (e) => { if (e.key === "Enter") name.blur(); if (e.key === "Escape") { name.value = d.name || ""; name.blur(); } };
 		c1.append(name, el("div", "t2", (d.ip || "—") + "  " + d.mac));
 		const c2 = el("td"); c2.append(stateEl(d.online ? "good" : "idle", !d.online ? "离线" : d.link === "wired" ? "有线" : "Wi-Fi " + d.link + (d.signal ? "  " + d.signal + " dBm" : "")));
-		const c3 = el("td"), bar = el("span", "bar"), fill = el("i"); fill.style.width = (100 * d.down / top).toFixed(1) + "%"; bar.append(fill); c3.append(bar, rateText(d.down));
+		const c3 = el("td"); c3.append(barEl(d.down / top), rateText(d.down)); const c4 = el("td"); c4.append(barEl(d.up / topUp, true), rateText(d.up));
 		const c6 = el("td"), sel = el("select"); POLICY.forEach(([v, label]) => { const o = el("option", "", label); o.value = v; o.selected = d.policy === v; sel.append(o); });
 		sel.onchange = () => write("device", { mac: d.mac, name: d.named ? d.name : "", policy: sel.value }); c6.append(sel);
-		tr.append(c1, c2, c3, el("td", "num", rateText(d.up)), el("td", "num muted", size(d.down_bytes) + " / " + size(d.up_bytes)), c6); return tr;
+		tr.append(c1, c2, c3, c4, el("td", "num muted", size(d.down_bytes) + " / " + size(d.up_bytes)), c6); return tr;
 	}));
+}
+
+// --- connections
+function renderConnections() {
+	if (S.page !== "connections") return;
+	const body = $("#connections"), empty = $("#conn-empty"), seg = $("#conn-route");
+	seg.replaceChildren(...[["all", "全部"], ["direct", "直连"], ["tunnel", "隧道"]].map(([v, label]) => { const b = el("button", S.connRoute === v ? "on" : "", label); b.onclick = () => { S.connRoute = v; renderConnections(); }; return b; }));
+	if (S.sid === ANON) {
+		const b = el("button", "btn primary", "登录"); b.onclick = () => askLogin(poll); b.style.marginLeft = "10px";
+		body.replaceChildren(); empty.replaceChildren("谁在和谁通信属于隐私，登录后才能查看。", b); $("#conn-cap").textContent = ""; return;
+	}
+	const q = $("#conn-q").value.trim().toLowerCase();
+	const rows = S.conns.filter((c) => (S.connRoute === "all" || c.route === S.connRoute) && (!q || [deviceName(c.src), c.src, c.dst, c.via, c.proto, String(c.port)].join(" ").toLowerCase().includes(q)))
+		.sort((a, b) => ((b.rd + b.ru) - (a.rd + a.ru)) || ((b.down + b.up) - (a.down + a.up))).slice(0, 200);
+	const nd = S.conns.filter((c) => c.route === "direct").length;
+	$("#conn-cap").textContent = `${S.conns.length} 条：${nd} 直连，${S.conns.length - nd} 进隧道`;
+	empty.textContent = rows.length ? "" : "没有匹配的连接";
+	body.replaceChildren(...rows.map((c) => {
+		const tr = el("tr"), c1 = el("td"); c1.append(el("div", "t1", deviceName(c.src)), el("div", "t2", c.src));
+		const c2 = el("td", "dst"); c2.append(el("div", "t1", c.dst), el("div", "t2", c.proto + " / " + c.port)); c2.title = c.dst;
+		const c3 = el("td"), b = el("span", "badge " + c.route); b.append(el("i"), (c.route === "tunnel" ? "隧道" : "直连") + (c.via ? " · " + c.via : "")); b.title = c.via || ""; c3.append(b);
+		tr.append(c1, c2, c3, el("td", "num", c.rd ? rateText(c.rd) : "—"), el("td", "num", c.ru ? rateText(c.ru) : "—"), el("td", "num muted", size(c.down) + " / " + size(c.up))); return tr;
+	}));
+}
+// Counters only ever grow; a rate is the difference between two polls.
+function ingestConnections(list) {
+	const now = performance.now() / 1000, dt = S.connAt ? now - S.connAt : 0, prev = S.connPrev, next = {};
+	for (const c of list) { const p = prev[c.key]; c.rd = p && dt > 0 ? Math.max(0, c.down - p.down) / dt : 0; c.ru = p && dt > 0 ? Math.max(0, c.up - p.up) / dt : 0; next[c.key] = { down: c.down, up: c.up }; }
+	S.conns = list; S.connPrev = next; S.connAt = now;
 }
 
 // --- rules
 function renderRules() {
 	const r = S.rules, box = $("#flow"); if (!r || S.page !== "rules") return;
-	const z = r.sizes || {}, extra = { "tunnel-range": `${z.tunnel4} 段`, "tunnel-domain": `${z.tunnel_domains} 个域名，当前 ${z.tunnel4_dns} 个地址`, "domestic": `${z.domestic4} 段`, "relay": `${z.relay4} 个地址`, "tunnel-port": (r.ports || []).join("、") };
-	const rows = [];
-	const head = (t, d) => { const s = el("div", "step"); s.append(el("div", "no", "·"), (() => { const w = el("div"); w.append(el("div", "t", t), el("div", "d", d)); return w; })(), el("div", "meter"), el("div")); return s; };
-	rows.push(head("先放行不需要判断的", "发给路由器自己或局域网的、广播和组播、DNS（另行劫持到本机解析器）——这些直接跳过，不进下面的判断。"));
+	const z = r.sizes || {}, extra = { "tunnel-range": `${z.tunnel4} 段`, "tunnel-domain": `${z.tunnel_domains} 个域名，当前 ${z.tunnel4_dns} 个地址`, "domestic": `${z.domestic4} 段`, "relay": `${z.relay4} 个地址，避免隧道套隧道`, "tunnel-port": (r.ports || []).join("、") };
+	const note = (t, d) => { const s = el("div", "step"), w = el("div"); w.append(el("div", "t", t), el("div", "d", d)); s.append(el("div", "no", "·"), w, el("div", "meterbox"), el("div")); return s; };
+	const rows = [note("先放行不需要判断的", "发给路由器自己或局域网的、广播和组播、DNS（另行劫持到本机解析器）——这些直接跳过，不进下面的判断。")];
 	const total = Math.max(1, ...r.rules.map((x) => x.bytes));
 	r.rules.forEach((x, i) => {
-		const m = RULE[x.tag] || [x.tag, "", ""], s = el("div", "step"), w = el("div"), meter = el("div", "meter"), share = el("div", "share"), fill = el("i");
+		const m = RULE[x.tag] || [x.tag, "", ""], s = el("div", "step"), w = el("div"), box2 = el("div", "meterbox"), share = el("div", "share"), fill = el("i");
 		w.append(el("div", "t", m[0]), el("div", "d", extra[x.tag] || ""));
-		fill.style.width = (100 * x.bytes / total).toFixed(1) + "%"; share.append(fill); meter.append(share, el("div", "cnt", count(x.packets) + " 包 · " + size(x.bytes)));
-		const v = el("span", "verdict " + m[2]); v.append(el("i"), m[1].split("，")[0]); v.title = m[1];
-		s.append(el("div", "no", String(i + 1)), w, meter, v); rows.push(s);
+		fill.style.width = (100 * x.bytes / total).toFixed(1) + "%"; share.append(fill); box2.append(share, el("div", "cnt", count(x.packets) + " 包 · " + size(x.bytes)));
+		const v = el("span", "badge " + m[2]); v.append(el("i"), m[1]);
+		s.append(el("div", "no", String(i + 1)), w, box2, v); rows.push(s);
 	});
-	if (!r.tunnel_on) rows.push(head("隧道当前没有承载流量", "所以除了「禁网」以外的规则都没装：所有流量直连。"));
-	rows.push(head("最后：选一条线路", "直连的流量和隧道自己发出的流量，都会在这一步被编织到某条线路上（见「线路」页）。只有一条线路时跳过。"));
+	if (!r.tunnel_on) rows.push(note("隧道当前没有承载流量", "所以除了「禁网」以外的规则都没装：所有流量直连。"));
+	rows.push(note("最后：选一条线路", "直连的流量和隧道自己发出的流量，都会在这一步被编织到某条线路上（见「线路」页）。只有一条线路时跳过。"));
 	box.replaceChildren(...rows);
 }
 
@@ -604,21 +686,21 @@ function renderTunnel() {
 	const kv = $("#tunnel-kv"); kv.replaceChildren();
 	const row = (k, v) => { kv.append(el("dt", "", k)); const dd = el("dd"); typeof v === "string" ? dd.textContent = v : dd.append(v); kv.append(dd); };
 	const st = stateEl(!t.enabled ? "idle" : t.on ? "good" : t.fail_open ? "warning" : "critical", !t.enabled ? "已关闭" : t.on ? "承载流量" : t.fail_open ? "已旁路，流量直连" : "未运行"); st.style.justifyContent = "flex-end";
-	row("状态", st); row("探测延迟", t.canary_ms ? t.canary_ms + " ms" : "—"); row("当前中继", live.selected === "AUTO" && live.auto ? "AUTO → " + live.auto : (live.selected || "—")); row("中继数量", String(t.relays ?? "—"));
-	const admin = S.sid !== ANON, relays = (live.relays || []).filter((r) => r.name !== "DIRECT").sort((a, b) => (a.delay || 9e9) - (b.delay || 9e9));
+	row("状态", st); row("探测延迟", t.canary_ms ? t.canary_ms + " ms" : "—"); row("当前中继", live.selected === "AUTO" && live.auto ? "AUTO → " + live.auto : (live.selected || "—"));
+	const relays = (live.relays || []).filter((r) => r.name !== "DIRECT").sort((a, b) => (b.name === "AUTO") - (a.name === "AUTO") || (a.delay || 9e9) - (b.delay || 9e9));
 	$("#relays").replaceChildren(...relays.map((r) => {
-		const active = r.name === live.selected || (live.selected === "AUTO" && r.name === live.auto), li = el("li", (r.name === live.selected ? "sel " : "") + "pick");
-		li.append(el("i", "dot " + (active ? "good" : "")), el("span", "name", r.name), el("span", "meta", r.delay ? r.delay + " ms" : "—"));
-		li.onclick = () => write("select", { name: r.name }); li.title = admin ? "设为当前中继" : "登录后可切换"; return li;
+		const card = el("button", "relay" + (r.name === live.selected ? " sel" : "")), meta = el("div", "meta"), lat = el("span", "badge");
+		card.type = "button"; lat.append(el("i", "dot " + delayKind(r.delay)), r.delay ? r.delay + " ms" : "—");
+		meta.append(el("span", "", r.name === "AUTO" ? "自动选最快" : r.type + (live.selected === "AUTO" && r.name === live.auto ? " · 使用中" : "")), lat);
+		card.append(el("div", "name", r.name), meta); card.title = r.name; card.onclick = () => write("select", { name: r.name }); return card;
 	}));
-	$("#dash").href = live.dashboard || "#";
 }
 
 // --- log
 function renderLog() {
 	if (S.page !== "log") return;
-	const d = S.doctor, box = $("#events");
-	box.replaceChildren(...(S.events.length ? S.events.map((e) => {
+	const d = S.doctor;
+	$("#events").replaceChildren(...(S.events.length ? S.events.map((e) => {
 		const r = el("div", "event"), m = /^([A-Z]+) (.*)$/.exec(e.msg), body = el("div", "msg"); if (m) body.append(el("span", "tag", m[1])); body.append(m ? m[2] : e.msg);
 		const t = el("time", "", clock(e.ts)); t.title = new Date(e.ts * 1000).toLocaleString("zh-CN"); r.append(t, body); return r;
 	}) : [el("div", "empty", "还没有事件")]));
@@ -628,25 +710,32 @@ function renderLog() {
 	const det = el("details"), sum = el("summary", "hint", `查看通过的 ${good.length} 项`); sum.style.cursor = "pointer"; det.append(sum, ...good.map(checkRow));
 	$("#doctor").replaceChildren(...bad.map(checkRow), ...(bad.length ? [] : [checkRow({ ok: true, id: `全部 ${good.length} 项检查通过` })]), det);
 }
+function renderActions() {
+	const box = $("#actions"), make = (label, fn) => { const b = el("button", "btn", label); b.onclick = fn; return b; };
+	if (S.page === "log") box.replaceChildren(make("重新登录 Portal", () => write("relogin", {})), make("立即调谐", () => write("reconcile", {})));
+	else if (S.page === "tunnel" && S.tunnel?.dashboard) { const a = el("a", "btn", "节点面板 zashboard ↗"); a.href = S.tunnel.dashboard; a.target = "_blank"; a.rel = "noopener"; a.style.textDecoration = "none"; box.replaceChildren(a); }
+	else box.replaceChildren();
+}
 
 // --- data + routing
-function render() { renderSite(); renderHero(); renderAttention(); renderTopDevices(); renderChart(); renderStrands(); renderDevices(); renderRules(); renderTunnel(); renderLog(); seedSegs(); renderSegs(); if (braid.reduce) drawBraid(); }
+function render() { renderSite(); renderTiles(); renderAttention(); renderTopDevices(); renderChart(); renderStrands(); renderDevices(); renderConnections(); renderRules(); renderTunnel(); renderLog(); renderSegs(); renderActions(); if (topo.reduce) drawTopo(); }
 async function poll() {
 	try {
 		const s = await ubus("braid", "status"), fresh = !S.status || s.ts !== S.status.ts; S.status = s;
 		if (s.version && s.version !== UI && sessionStorage.getItem("braid.reloaded") !== s.version) { sessionStorage.setItem("braid.reloaded", s.version); location.replace(location.pathname + "?v=" + s.version + location.hash); return; }
-		if (fresh && S.seeded) { const d = S.series; d.ts.push(s.ts); d.total.push(s.rate || 0); for (const x of s.strands) (d.strands[x.dev] ||= []).push(x.now || 0); if (d.ts.length > 720) { d.ts.shift(); d.total.shift(); for (const k in d.strands) d.strands[k].shift(); } }
+		if (fresh && S.seeded) { const d = S.series; d.ts.push(s.ts); d.total.push(s.rate || 0); d.up.push(s.rate_up || 0); for (const x of s.strands) (d.strands[x.dev] ||= []).push(x.now || 0); if (d.ts.length > 720) { d.ts.shift(); d.total.shift(); d.up.shift(); for (const k in d.strands) d.strands[k].shift(); } }
 		const jobs = [ubus("braid", "devices").then((d) => { S.devices = d.devices || []; })];
 		if (S.page === "rules") jobs.push(ubus("braid", "rules").then((d) => { S.rules = d; }));
+		if (S.page === "connections" && S.sid !== ANON) jobs.push(ubus("braid", "connections").then((d) => ingestConnections(d.connections || [])).catch((e) => { if (e.denied) signOut(); }));
 		await Promise.allSettled(jobs); render();
 	} catch (e) { const pill = $("#health"); pill.firstChild.className = "dot critical"; pill.lastChild.textContent = "连不上 braidd"; }
 }
 async function loadSlow() { await Promise.allSettled([ubus("braid", "doctor").then((d) => { S.doctor = d; }), ubus("braid", "events", { limit: 80 }).then((d) => { S.events = d.events || []; }), ubus("braid", "tunnel").then((d) => { S.tunnel = d; })]); render(); }
-async function refreshAll() { await poll(); await loadSlow(); loadConfig(); }
+async function refreshAll() { await poll(); await loadSlow(); }
 function route() {
 	const p = location.hash.replace("#/", ""); S.page = PAGES[p] ? p : "overview";
 	$$(".page").forEach((x) => x.classList.toggle("on", x.dataset.p === S.page)); $$("nav a.item").forEach((x) => x.classList.toggle("on", x.dataset.p === S.page));
-	$("#title").firstChild.nodeValue = PAGES[S.page] + " "; render(); if (S.page === "rules") poll();
+	$("#title").textContent = PAGES[S.page]; render(); if (S.page === "rules" || S.page === "connections") poll();
 }
 async function start() {
 	const saved = localStorage.getItem("braid.theme"); if (saved) document.documentElement.dataset.theme = saved;
@@ -655,15 +744,15 @@ async function start() {
 	$("#login-cancel").onclick = () => $("#scrim").classList.remove("open");
 	$("#login").onsubmit = async (e) => {
 		e.preventDefault(); $("#login-go").disabled = true;
-		try { const r = await ubus("session", "login", { username: $("#user").value, password: $("#pass").value }); S.sid = r.ubus_rpc_session; sessionStorage.setItem("braid.sid", S.sid); $("#pass").value = ""; $("#scrim").classList.remove("open"); $("#auth").textContent = "退出"; await loadConfig(); render(); const f = afterLogin; afterLogin = null; f && f(); }
+		try { const r = await ubus("session", "login", { username: $("#user").value, password: $("#pass").value }); S.sid = r.ubus_rpc_session; sessionStorage.setItem("braid.sid", S.sid); $("#pass").value = ""; $("#scrim").classList.remove("open"); $("#auth").textContent = "退出"; render(); const f = afterLogin; afterLogin = null; f ? f() : poll(); }
 		catch (x) { $("#login-err").textContent = "登录失败：账号或密码不正确"; }
 		$("#login-go").disabled = false;
 	};
-	$("#do-reconcile").onclick = () => write("reconcile", {}); $("#do-relogin").onclick = () => write("relogin", {});
-	addEventListener("hashchange", route); addEventListener("resize", () => { renderChart(); if (braid.reduce) drawBraid(); });
+	$("#conn-q").oninput = renderConnections;
+	addEventListener("hashchange", route); addEventListener("resize", () => { renderChart(); if (topo.reduce) drawTopo(); });
 	addEventListener("keydown", (e) => e.key === "Escape" && $("#scrim").classList.remove("open"));
 	if (S.sid !== ANON) $("#auth").textContent = "退出";
-	try { const h = await ubus("braid", "series", { limit: 720 }); S.series = { ts: h.ts || [], total: h.total || [], strands: h.strands || {} }; S.interval = h.interval || 5; } catch (e) { S.interval = 5; }
+	try { const h = await ubus("braid", "series", { limit: 720 }); S.series = { ts: h.ts || [], total: h.total || [], up: h.up || [], strands: h.strands || {} }; S.interval = h.interval || 5; } catch (e) { S.interval = 5; }
 	S.seeded = true; route(); await refreshAll(); loop();
 	setInterval(poll, Math.max(2, S.interval) * 1000); setInterval(loadSlow, 15000);
 }
