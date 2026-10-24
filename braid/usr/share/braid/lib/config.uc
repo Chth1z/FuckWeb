@@ -20,8 +20,10 @@ const SCHEMA = {
 		uplink: [ "wan" ],              // always a strand
 		identity: [],                   // extra identities, up only while aggregating
 		backup: [],                     // carry traffic only when no primary strand is healthy
-		probe_url: "http://www.baidu.com",
-		probe_expect: 200,
+		// Must be an empty-body endpoint: a captive portal answers any plain
+		// HTTP request with its own 200 page, so 200 cannot prove a login.
+		probe_url: "http://connect.rom.miui.com/generate_204",
+		probe_expect: 204,
 		probe_timeout: 3,
 		probe_interval: 180,
 		fail_keep: 2,

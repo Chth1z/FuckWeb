@@ -28,8 +28,10 @@ config strands 'strands'
 	# Carry traffic only when no primary strand is healthy.
 	list backup 'phy*-sta*'
 	# A strand is healthy when this URL answers probe_expect through it.
-	option probe_url 'http://www.baidu.com'
-	option probe_expect '200'
+	# Keep it a 204 endpoint: a captive portal answers any plain HTTP
+	# request with its own 200 page, so a 200 cannot prove a login.
+	option probe_url 'http://connect.rom.miui.com/generate_204'
+	option probe_expect '204'
 	option probe_interval '180'
 
 # A network we recognise, by the MAC address of its gateway. Anywhere else

@@ -223,6 +223,8 @@ braid provision [--dry]
 - 分类时 `tunnel4` 必须先于 `domestic4` 判断，否则 Cloudflare 中国段会绕过隧道。
 - `prerouting` 必须先放行广播/组播和非单播目的，否则 Wi-Fi 客户端拿不到 DHCP。
 - 策略路由先于探测、先于 nft：流量不能被标记到一张还空着的路由表。
+- 探测必须打 204 端点、期望 204：portal 对任何明文 HTTP 都回自己的 200 页面，
+  期望 200 会把掉了认证的线路当成健康，也就永远不会去重新登录。
 - 隧道的监听地址（lo 上的 198.51.100.1）必须先于 mihomo 存在，否则 tproxy 监听器
   会被悄悄跳过（`braid prepare` 负责；reconcile 发现后会重启 mihomo）。
 - `weave` 链里的 `mod N` 必须等于 `@pattern` 的长度；N 只由 reconcile 决定，
