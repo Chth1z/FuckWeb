@@ -152,7 +152,6 @@ function portal_login(devs, here, cfg) {
 		push(cmds, "wait");
 		core.sh(join("\n", cmds));
 	}
-	core.event("PORTAL login %s on %s", here.portal, join(" ", devs));
 	return true;
 }
 
@@ -196,8 +195,16 @@ export function check(ctx) {
 			h.parked = now;
 		push(login, s);
 	}
-	if (length(login) && portal_login(map(login, (s) => s.dev), ctx.site, cfg))
+	// The re-probe, not the portal's answer, says whether a login worked:
+	// log both outcomes so a portal that stops accepting us is visible.
+	if (length(login) && portal_login(map(login, (s) => s.dev), ctx.site, cfg)) {
 		run(login);
+		let back = filter(login, good), down = filter(login, (s) => !good(s));
+		let devs = (set) => join(" ", map(set, (s) => s.dev + (!good(s) && state(s).parked ? " (parked)" : "")));
+		core.event("PORTAL %s login: %s%s", ctx.site.portal,
+			length(back) ? "back " + devs(back) : "",
+			length(down) ? (length(back) ? "; " : "") + "still down " + devs(down) : "");
+	}
 
 	// A strand survives fail_keep-1 bad rounds so one lost probe does not flap it.
 	let healthy = [];
