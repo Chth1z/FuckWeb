@@ -82,17 +82,17 @@ function build(ctx) {
 	// set, or Cloudflare's mainland ranges would slip out direct.
 	let classify = [ rule("ether saddr @dev_block", "drop", "device-block") ];
 	if (tun.on) {
-		push(classify, rule("ether saddr @dev_direct", "return", "device-direct"));
-		push(classify, rule("ip daddr @relay4", "return", "relay"));
+		push(classify, rule("ether saddr @dev_direct", "goto direct_ok", "device-direct"));
+		push(classify, rule("ip daddr @relay4", "goto direct_ok", "relay"));
 		push(classify, rule("ether saddr @dev_tunnel", "goto divert", "device-tunnel"));
 		push(classify, rule("ip daddr @tunnel4", "goto divert", "tunnel-range"));
 		push(classify, rule("ip daddr @tunnel4_dns", "goto divert", "tunnel-domain"));
 		if (length(c.tunnel_udp_port))
 			push(classify, rule(sprintf("udp dport { %s }", join(", ", c.tunnel_udp_port)), "goto divert", "tunnel-port"));
-		push(classify, rule("ip daddr @domestic4", "return", "domestic"));
+		push(classify, rule("ip daddr @domestic4", "goto direct_ok", "domestic"));
 		if (c.quic == "reject")
 			push(classify, rule("udp dport 443", "reject", "quic"));
-		push(classify, c.remainder == "tunnel" ? rule("", "goto divert", "rest-tunnel") : rule("", "return", "rest-direct"));
+		push(classify, c.remainder == "tunnel" ? rule("", "goto divert", "rest-tunnel") : rule("", "goto direct_ok", "rest-direct"));
 	}
 
 	// See weave.uc for what the two maps mean. In auto, a pair's first

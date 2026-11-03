@@ -2,7 +2,8 @@
 //
 //   tunnel up    cn-list -> domestic DoH, everything else -> mihomo's resolver
 //               (so a name is resolved the same way its traffic is forwarded)
-//   tunnel down  everything -> domestic DoH
+//   fail-open    tunnel down -> domestic DoH
+//   fail-closed  boot/down/stop never changes foreign DNS to a direct upstream
 //
 // Plain UDP/53 is never an upstream: networks like this one intercept it.
 
@@ -69,7 +70,7 @@ function smartdns_conf(cfg, proxy_on) {
 		"audit-enable no",
 	];
 
-	if (proxy_on) {
+	if (proxy_on || !cfg.tunnel.fail_open) {
 		push(conf,
 			"speed-check-mode none",
 			sprintf("server 127.0.0.1:%d", cfg.tunnel.dns_port),
@@ -223,6 +224,12 @@ export function apply(ctx) {
 // Service stop: hand dnsmasq the DHCP-provided resolvers so the LAN keeps
 // resolving on a plain router.
 export function teardown(ctx) {
+	// Preserve the local resolver chain when privacy takes precedence. A
+	// stopped SmartDNS must cause DNS failure, not forwarding to the uplink.
+	if (!ctx.cfg.tunnel.fail_open) {
+		wire_dnsmasq(ctx, [ sprintf("127.0.0.1#%d", ctx.cfg.dns.port) ], true);
+		return;
+	}
 	let upstream = [];
 	for (let n in values(ctx.facts.netifd))
 		for (let s in n.upstream_dns ?? [])

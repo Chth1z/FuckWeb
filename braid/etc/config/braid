@@ -70,7 +70,7 @@ config tunnel 'tunnel'
 	option enabled '1'
 	option relays 'relays.json'
 	# 1: a dead tunnel steps aside and traffic goes direct. 0: it fails closed.
-	option fail_open '1'
+	option fail_open '0'
 
 config dns 'dns'
 	option ipv4_only '1'

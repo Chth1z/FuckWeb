@@ -10,7 +10,7 @@ SHARE=/usr/share/braid
 tar czf - --owner=0 --group=0 -C braid --exclude='*.gz' --exclude=zashboard --exclude=relays.json . |
 	tools/rsh "rm -rf $DEV/tree $DEV/etc && mkdir -p $DEV/tree $DEV/run $DEV/uci $DEV/etc \
 		&& tar xzf - -C $DEV/tree \
-		&& cp $DEV/tree/etc/config/braid $DEV/uci/braid \
+		&& if [ -f /etc/config/braid ]; then cp /etc/config/braid $DEV/uci/braid; else cp $DEV/tree/etc/config/braid $DEV/uci/braid; fi \
 		&& cp -r $DEV/tree/etc/braid/. $DEV/etc/ \
 		&& for d in /usr/share/braid /usr/share/hotel; do [ -f \$d/mihomo.gz ] && ln -sf \$d/mihomo.gz \$d/cn-domains.gz \$d/ad-domains.gz $DEV/tree$SHARE/ && break; done \
 		&& if [ -d /etc/braid ]; then ln -sf /etc/braid/relays.json /etc/braid/controller.secret /etc/braid/portal.secret /etc/braid/zashboard $DEV/etc/; \

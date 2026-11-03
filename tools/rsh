@@ -1,5 +1,7 @@
 #!/bin/sh
 # ssh to the router with the dedicated key. Usage: tools/rsh [remote command]
+set -- root@192.168.16.1 "$@"
+# DHCP can change the development PC's address. Bind only when explicitly set.
+[ -z "${BRAID_BIND_ADDRESS:-}" ] || set -- -o "BindAddress=$BRAID_BIND_ADDRESS" "$@"
 exec ssh -i ~/.ssh/id_ed25519_ax6000 -o IdentitiesOnly=yes -o BatchMode=yes \
-	-o ConnectTimeout=10 -o ServerAliveInterval=15 -o BindAddress=192.168.16.50 \
-	root@192.168.16.1 "$@"
+	-o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 "$@"

@@ -13,6 +13,7 @@ import * as strands from "./mod/strands.uc";
 import * as weave from "./mod/weave.uc";
 import * as tunnel from "./mod/tunnel.uc";
 import * as kernel from "./mod/kernel.uc";
+import * as guard from "./mod/guard.uc";
 import * as dns from "./mod/dns.uc";
 import * as host from "./mod/host.uc";
 import * as wifi from "./mod/wifi.uc";
@@ -109,6 +110,7 @@ function reconcile(ctx) {
 	ctx.tunnel = tunnel.observe(ctx);
 	ctx.weave = weave.plan(ctx);
 	kernel.apply(ctx);
+	guard.apply(ctx);
 	dns.apply(ctx);
 	host.apply(ctx);
 	wifi.apply(ctx);

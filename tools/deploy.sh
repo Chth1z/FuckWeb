@@ -40,7 +40,9 @@ tools/rsh sh -s <<'REMOTE'
 set -e
 STAGE=/tmp/braid-stage
 PREV=/tmp/braid-prev.tgz
-KEEP="etc/config/braid etc/init.d/braid etc/braid/lists etc/braid/provision.json etc/sysctl.d/99-braid.conf usr/sbin/braid usr/share/braid/braid.uc usr/share/braid/braidd.uc usr/share/braid/lib usr/share/braid/mod usr/share/braid/portal usr/share/braid/tpl usr/share/rpcd/acl.d/braid.json www/braid"
+KEEP="etc/config/braid etc/init.d/braid etc/braid/lists etc/braid/guard.nft etc/braid/provision.json etc/sysctl.d/99-braid.conf usr/sbin/braid usr/share/braid/braid.uc usr/share/braid/braidd.uc usr/share/braid/lib usr/share/braid/mod usr/share/braid/portal usr/share/braid/tpl usr/share/nftables.d/ruleset-post/30-braid-guard.nft usr/share/rpcd/acl.d/braid.json www/braid"
+guard_before=0
+[ ! -f /etc/braid/guard.nft ] || guard_before=1
 
 cd /
 have=""
@@ -55,7 +57,15 @@ chmod 600 /etc/braid/relays.json /etc/braid/controller.secret /etc/braid/portal.
 
 restore() {
 	echo "deploy: $1; restoring the previous version" >&2
-	[ -f "$PREV" ] && tar xzf "$PREV" -C / && /etc/init.d/braid restart
+	if [ -f "$PREV" ]; then
+		tar xzf "$PREV" -C /
+		if [ "$guard_before" = 0 ]; then
+			rm -f /etc/braid/guard.nft /usr/share/nftables.d/ruleset-post/30-braid-guard.nft
+			nft delete table inet braid_guard 2>/dev/null || true
+		fi
+		fw4 reload
+		/etc/init.d/braid restart
+	fi
 	exit 1
 }
 

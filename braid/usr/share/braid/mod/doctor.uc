@@ -35,6 +35,15 @@ export function run(ctx) {
 	fail("ip_forward", core.read("/proc/sys/net/ipv4/ip_forward") == "1");
 	fail("nft_table", nft_has("chain inet braid prerouting", "jump classify"));
 	fail("dns_hijack", nft_has("chain inet braid dns_hijack", "redirect"));
+	if (!cfg.tunnel.fail_open) {
+		fail("privacy_guard", nft_has("chain inet braid_guard forward", "blocked-fallback"));
+		fail("privacy_guard_persistent", fs.stat(path("guard.nft")) &&
+			fs.stat("/usr/share/nftables.d/ruleset-post/30-braid-guard.nft") &&
+			uci.get("firewall", "@defaults[0]", "auto_includes") != "0");
+		fail("privacy_direct_mark", nft_has("chain inet braid direct_ok", "0x20000000"));
+		fail("privacy_no_offload", uci.get("firewall", "@defaults[0]", "flow_offloading") != "1" &&
+			uci.get("firewall", "@defaults[0]", "flow_offloading_hw") != "1", "offload would bypass per-packet privacy checks");
+	}
 	fail("strands_healthy", n > 0, sprintf("%d of %d", n, length(ctx.strands)));
 	if (n > 1) {
 		fail("weave", nft_has("chain inet braid weave", "ct state new"));
@@ -61,7 +70,7 @@ export function run(ctx) {
 		fail("tunnel_running", tun.running);
 		fail("tunnel_divert", !tun.on || nft_has("chain inet braid classify", "goto divert"));
 		fail("tunnel_mixed_local", !tun.running || listening(sprintf("127.0.0.1:%d ", cfg.tunnel.mixed_port)));
-		caution("tunnel_fail_open", !ctx.st.tunnel?.open, "canary down, traffic goes direct");
+		caution("tunnel_fail_open", !cfg.tunnel.fail_open || !ctx.st.tunnel?.open, "canary down, fail-open enabled");
 		caution("tunnel_canary", !tun.running || (ctx.st.tunnel?.fails ?? 0) == 0, sprintf("%d failed", ctx.st.tunnel?.fails ?? 0));
 	}
 

@@ -67,7 +67,9 @@ const SCHEMA = {
 		canary_grace: 90,
 		// 1: a dead tunnel takes its nft rules out, traffic goes direct.
 		// 0: rules stay, tunnelled destinations fail until it is back.
-		fail_open: 1,
+		fail_open: 0,
+		// SSH maintenance destinations allowed even with the whole service stopped.
+		guard_ssh4: [],
 	},
 	dns: {
 		port: 6053,

@@ -56,8 +56,17 @@ tools/rsh sh -s < tools/router_snapshot.sh > snap.tgz   # 只读快照（密钥�
 ## 应急
 
 ```sh
-/etc/init.d/braid stop      # 撤掉全部内核状态，退回普通路由器（DNS 改用上游下发的）
+/etc/init.d/braid stop      # fail_open=0 时保留独立防泄露保护；受保护设备公共流量断开
 /etc/init.d/braid start
 ```
 
 最初 v1 的文件备份在路由器 `/etc/braid/backup-v1.tgz`（仅文件，不会自动启用）。
+
+`fail_open=0` 也覆盖启动和停止期间的 DNS：解析器不可用就失败，不改用上游。
+独立 `inet braid_guard` 由 fw4 在启动/重载时加载，保留局域网、明确设为直连的
+设备、固定 IP 节点的实际传输端口和 `tunnel.guard_ssh4` 指定的 SSH 地址。
+普通设备的中国直连在 Braid 正常运行时保留；整项服务停止时也暂停。
+不要开启 flow offload，它会绕过逐包的保护检查，体检会报告此错误。
+
+`tools/test-privacy-netns.sh` 在路由器三个完全隔离的网络命名空间里验证直连、
+强制代理、停止服务和防火墙重载的保护。测试目标均在测试命名空间内，不访问互联网。

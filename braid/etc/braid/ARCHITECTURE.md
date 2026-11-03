@@ -215,10 +215,16 @@ braid doctor [json]   体检（非 0 退出码 = 有 fail）
 braid status | events | kick
 braid tunnel reload | ui
 braid provision [--dry]
-/etc/init.d/braid reload | stop    stop 会撤掉全部内核状态，退回普通路由器
+/etc/init.d/braid reload | stop    fail_open=0 时 stop 保留独立保护，禁止公共直连回退
 ```
 
 ## 不变量（改代码前先读）
+
+- `inet braid_guard` 与 `inet braid` 生命周期独立，由 fw4 的 ruleset-post 包含
+  持久生成的 `/etc/braid/guard.nft`。停止 Braid 不删除 guard。
+- 只有本次分类认可的直连流量，在 weave 选线后取得 packet mark `0x20000000`。
+  这个授权位不得写入 conntrack；停止分类后，已有连接也不能靠旧授权直出。
+- fail_open=0 时启动、代理缺失、服务停止均不可把境外 DNS 回退至国内上游。
 
 - 分类时 `tunnel4` 必须先于 `domestic4` 判断，否则 Cloudflare 中国段会绕过隧道。
 - `prerouting` 必须先放行广播/组播和非单播目的，否则 Wi-Fi 客户端拿不到 DHCP。

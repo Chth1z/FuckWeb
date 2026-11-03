@@ -4,7 +4,7 @@
   transaction, so switching the tunnel on or off never reloads this file.
 
   Packet path, LAN -> upstream:
-    dns_hijack   nat      53/853 from LAN lands on the local resolver
+    dns_hijack   nat      53 from LAN lands on the local resolver; guard rejects 853
     prerouting   mangle   classify: divert to the tunnel, or return = direct
                           weave   : lay the flow onto a strand
     output       mangle   the tunnel's own sockets (routing-mark) -> weave_out
@@ -117,7 +117,7 @@ table inet braid {
 
 	chain dns_hijack {
 		type nat hook prerouting priority dstnat; policy accept;
-		iifname @lan meta l4proto { tcp, udp } th dport { 53, 853 } redirect to :53
+		iifname @lan meta l4proto { tcp, udp } th dport 53 redirect to :53
 	}
 
 	chain prerouting {
@@ -131,6 +131,7 @@ table inet braid {
 		update @dev_up { ip saddr }
 		meta l4proto != { tcp, udp } return
 		th dport { 53, 853 } return
+		meta mark set meta mark & 0xdfffffff
 		jump classify
 		jump weave
 	}
@@ -161,6 +162,13 @@ table inet braid {
 
 	chain divert {
 		meta l4proto { tcp, udp } tproxy ip to {{ listen_addr }}:{{ tproxy_port }} meta mark set {{ mark_diverted }} ct mark set {{ mark_diverted }} accept
+	}
+
+	chain direct_ok {
+		# Stamp after weave overwrites the packet mark. This permission never
+		# enters conntrack, so even existing direct flows close on service stop.
+		jump weave
+		meta mark set meta mark | 0x20000000 accept
 	}
 
 	chain classify {
