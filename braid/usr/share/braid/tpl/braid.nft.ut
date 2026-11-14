@@ -81,6 +81,10 @@ table inet braid {
 		type ether_addr
 	}
 
+	set dev_game {
+		type ether_addr
+	}
+
 	# Per-device accounting, by LAN address. Elements appear on first packet.
 	set dev_up {
 		type ipv4_addr
@@ -112,6 +116,10 @@ table inet braid {
 	}
 
 	map anchor {
+		type mark : mark
+	}
+
+	map vip_lane {
 		type mark : mark
 	}
 
@@ -156,6 +164,13 @@ table inet braid {
 
 	chain postrouting {
 		type filter hook postrouting priority mangle; policy accept;
+		meta priority set 1:20
+		ct bytes >= 4194304 meta priority set 1:30
+		ct mark & 0x100 != 0 meta priority set 1:10
+		meta l4proto tcp tcp flags & (syn | ack | fin | rst) != 0 meta length < 128 meta priority set 1:10
+		meta l4proto icmp meta priority set 1:10
+		meta l4proto { tcp, udp } th sport 53 meta priority set 1:10
+		meta l4proto { tcp, udp } th dport 53 meta priority set 1:10
 		oifname @lan ip saddr != @local4 update @dev_down { ip daddr }
 		oifname @strands_up return
 	}

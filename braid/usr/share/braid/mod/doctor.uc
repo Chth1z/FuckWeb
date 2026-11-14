@@ -8,6 +8,7 @@ import * as core from "../lib/core.uc";
 import * as facts from "../lib/facts.uc";
 import { path } from "../lib/config.uc";
 import { ap_forwarding } from "./wifi.uc";
+import { responsive as dns_responsive } from "./dns.uc";
 
 function nft_has(what, pattern) {
 	let r = core.sh("nft list " + what);
@@ -77,6 +78,7 @@ export function run(ctx) {
 	// --- DNS and DHCP
 	fail("smartdns", core.pidof("smartdns"));
 	fail("smartdns_loopback", index(fs.readfile(core.RUN + "/smartdns.conf") ?? "", "bind 127.0.0.1:") == 0);
+	fail("smartdns_responsive", dns_responsive(cfg.dns.port), "SmartDNS query timeout");
 	fail("dnsmasq", core.pidof("dnsmasq"));
 	fail("dhcp_listen", listening("0.0.0.0:67 "));
 	fail("dhcp_lan", uci.get("dhcp", "lan", "dhcpv4") == "server" && uci.get("dhcp", "lan", "ignore") != "1");

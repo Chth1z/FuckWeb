@@ -248,15 +248,16 @@ const COMMANDS = {
 		},
 	},
 	strands: {
-		help: "one line per strand: health, load, share of new flows",
+		help: "one line per strand: health, load, bucket state, share of new flows",
 		run: () => {
 			let s = live("status");
 			if (!s)
 				return 1;
-			printf("%-10s %3s %-16s %-8s %4s %6s %10s %10s %5s\n", "STRAND", "ID", "ADDRESS", "HEALTH", "HTTP", "TTFB", "KBIT/S", "PEAK", "SLOTS");
+			printf("%-10s %3s %-16s %-8s %-9s %6s %6s %10s %10s %5s\n", "STRAND", "ID", "ADDRESS", "HEALTH", "BUCKET", "TOK_KB", "TTFB", "KBIT/S", "PEAK", "SLOTS");
 			for (let x in s.strands)
-				printf("%-10s %3d %-16s %-8s %4d %6.3f %10.0f %10.0f %5d\n", x.dev, x.id, x.ip,
-					x.healthy ? "ok" : (x.parked ? "parked" : "down"), x.http, x.ttfb,
+				printf("%-10s %3d %-16s %-8s %-9s %6.0f %6.3f %10.0f %10.0f %5d\n", x.dev, x.id, x.ip,
+					x.healthy ? "ok" : (x.parked ? "parked" : "down"),
+					x.vip ? "vip*" : (x.bucket ?? "-"), (x.tokens ?? 0) / 1000, x.ttfb,
 					kbit(x.rate ?? 0), kbit(x.peak ?? 0), x.slots ?? 0);
 			printf("\n%s: aggregation %s. %d of %d healthy, %s/%s weave over %d slots, %.0f kbit/s down\n",
 				s.site?.known ? s.site.name : "unknown network", s.site?.aggregate ? "on" : "off",

@@ -58,7 +58,7 @@ function smartdns_conf(cfg, proxy_on) {
 		sprintf("rr-ttl-min %d", d.rr_ttl_min),
 		"rr-ttl-max 3600",
 		"rr-ttl-reply-max 60",
-		"max-reply-ip-num 1",
+		"max-reply-ip-num 4",
 		"dualstack-ip-selection no",
 		// HTTPS records would hand clients ECH/alt-svc hints that bypass the A answer.
 		"force-qtype-SOA " + (d.ipv4_only ? "28 65" : "65"),
@@ -208,6 +208,10 @@ export function bootstrap(cfg) {
 		core.write_atomic(conf_path(), smartdns_conf(cfg, false));
 };
 
+export function responsive(port) {
+	return core.ok(sprintf("nslookup -port=%d -timeout=2 -retry=1 braid-dns 127.0.0.1", port ?? 6053));
+};
+
 export function apply(ctx) {
 	let text = smartdns_conf(ctx.cfg, ctx.tunnel.on);
 	let file = core.outpath("smartdns.conf");
@@ -215,8 +219,21 @@ export function apply(ctx) {
 		ctx.want_service_sync = true;
 		core.event("DNS smartdns conf changed (tunnel %s)", ctx.tunnel.on ? "on" : "off");
 	}
-	if (!core.pidof("smartdns"))
+	if (!core.pidof("smartdns")) {
+		ctx.st.dns_fails = 0;
 		ctx.want_service_sync = true;
+	}
+	else if (!core.is_dry()) {
+		if (responsive(ctx.cfg.dns.port)) {
+			ctx.st.dns_fails = 0;
+		}
+		else if ((ctx.st.dns_fails = (ctx.st.dns_fails ?? 0) + 1) >= 2) {
+			ctx.st.dns_fails = 0;
+			core.act("killall -9 smartdns 2>/dev/null || true");
+			ctx.want_service_sync = true;
+			core.event("DNS smartdns deadlock recovered");
+		}
+	}
 	wire_dnsmasq(ctx, [ sprintf("127.0.0.1#%d", ctx.cfg.dns.port) ], true);
 	wire_resolver(ctx);
 };

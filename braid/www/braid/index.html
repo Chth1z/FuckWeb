@@ -270,11 +270,11 @@ td .badge i { display: inline-block; margin-right: 6px; vertical-align: middle; 
 			<div class="pattern" id="pattern" aria-hidden="true"></div>
 			<div class="hint" style="margin-top:8px">图样：每格是一个槽位，新连接依次落入；格子多的线路分到的新连接多。悬停下方线路可高亮它占的槽位。</div>
 			<div style="height:10px"></div>
-			<div class="opt"><div class="what"><b>分配策略</b><span>按余量：新连接偏向空闲线路，上下行都算，每几秒按实测负载重排。均分：永远平均。</span></div><div class="seg" data-key="weave.policy" data-opts="headroom:按余量,even:均分"></div></div>
-			<div class="opt"><div class="what"><b>亲和性</b><span>自动：同一设备访问同一网站走同一条线路（不会被网站踢下线），一旦它短时间内开出很多连接（下载、测速）就自动摊开叠加。</span></div><div class="seg" data-key="weave.affinity" data-opts="auto:自动,flow:总是摊开,dest:总是固定"></div></div>
+			<div class="opt"><div class="what"><b>分配策略</b><span>Burst-Harvest 2.0：追踪每条线路 1.0 MB 突发令牌桶（20 Mbit/s 脉冲窗口），优先调度满桶线路，并隔离独立 @vip_lane 电竞专线。</span></div><span class="badge tunnel"><i></i>脉冲收割（已锁定）</span></div>
+			<div class="opt"><div class="what"><b>并发亲和性</b><span>21 条线路共享同一酒店出口公网 IP，全流平滑交错摊开（ISWRR），兼顾 0 跨 IP 掉线风险与满速多流叠加。</span></div><span class="badge direct"><i></i>全流摊开（已锁定）</span></div>
 		</div></div>
-		<div class="card"><h2>线路 <small>每个身份上下行各约 10 Mbit/s，单个连接快不过一条线路</small></h2><div class="body"><div class="scroll"><table>
-			<thead><tr><th>线路</th><th>状态</th><th class="num">首包</th><th>下行</th><th>上行</th><th class="num">峰值 ↓ / ↑</th><th class="num">槽位</th><th>近 5 分钟</th></tr></thead>
+		<div class="card"><h2>线路 <small>每个身份稳态 10 Mbit/s + 1.0 MB 突发脉冲桶（20 Mbit/s），最低延迟线路自动设为 VIP 专线</small></h2><div class="body"><div class="scroll"><table>
+			<thead><tr><th>线路</th><th>令牌桶 / 状态</th><th class="num">纯 RTT</th><th>下行</th><th>上行</th><th class="num">峰值 ↓ / ↑</th><th class="num">槽位</th><th>近 5 分钟</th></tr></thead>
 			<tbody id="strands"></tbody></table></div></div></div>
 	</section>
 
@@ -298,19 +298,19 @@ td .badge i { display: inline-block; margin-right: 6px; vertical-align: middle; 
 
 	<section class="page" data-p="rules">
 		<div class="card"><h2>一个包怎么走 <small>从上到下依次判断，命中即止；右侧是实时命中量</small></h2><div class="body" id="flow"></div></div>
-		<div class="card"><h2>规则开关</h2><div class="body">
-			<div class="opt"><div class="what"><b>其余流量</b><span>既不是国内地址、也没被点名进隧道的流量。</span></div><div class="seg" data-key="classify.remainder" data-opts="tunnel:进隧道,direct:直连"></div></div>
-			<div class="opt"><div class="what"><b>QUIC（UDP 443）</b><span>拒绝会让浏览器立刻改用 TCP，对部分中继更稳。</span></div><div class="seg" data-key="classify.quic" data-opts="tunnel:照常,reject:拒绝"></div></div>
+		<div class="card"><h2>安全与协议策略</h2><div class="body">
+			<div class="opt"><div class="what"><b>其余流量（防泄漏）</b><span>所有非中国大陆地址及 Claude / Stripe / GrowthBook 关联域名一律强制进台湾家宽隧道，严禁直连泄漏。</span></div><span class="badge tunnel"><i></i>强制进隧道（已锁定）</span></div>
+			<div class="opt"><div class="what"><b>QUIC（UDP 443）</b><span>内核层毫秒级拦截 UDP 443，强制浏览器与应用回退至多流 TCP，突破单连接 10 Mbit/s 限速帽。</span></div><span class="badge direct"><i></i>强制回退 TCP（已锁定）</span></div>
 			<div class="opt"><div class="what"><b>广告域名拦截</b><span>在 DNS 层直接返回空地址。</span></div><div class="seg" data-key="dns.ads" data-opts="1:开,0:关"></div></div>
 		</div></div>
 	</section>
 
 	<section class="page" data-p="tunnel">
-		<div class="card"><h2>隧道</h2><div class="body">
+		<div class="card"><h2>隧道与 Claude 防封锁笼</h2><div class="body">
 			<dl class="kv" id="tunnel-kv"></dl>
 			<div style="height:8px"></div>
-			<div class="opt"><div class="what"><b>启用隧道</b><span>关闭后所有流量直连。</span></div><div class="seg" data-key="tunnel.enabled" data-opts="1:开,0:关"></div></div>
-			<div class="opt"><div class="what"><b>隧道故障时</b><span>放行：改为直连，不断网。保持：相关目的地不可达，直到隧道恢复，不会用真实地址访问。</span></div><div class="seg" data-key="tunnel.fail_open" data-opts="1:放行,0:保持"></div></div>
+			<div class="opt"><div class="what"><b>隧道总控</b><span>全局启用透明代理与 SmartDNS 域名锚定（@tunnel4_dns），禁止关闭以防真实 IP 暴露。</span></div><span class="badge tunnel"><i></i>始终开启（已锁定）</span></div>
+			<div class="opt"><div class="what"><b>故障保护（Fail-Closed 硬件锁）</b><span>braid_guard 独立内核表：即使隧道进程异常，海外流量也绝对禁止回退直连，确保 Claude 0 大陆 IP 泄漏。</span></div><span class="badge direct"><i></i>严禁放行（已锁定）</span></div>
 		</div></div>
 		<div class="card"><h2>中继 <small>点击切换；圆点颜色表示延迟</small></h2><div class="body">
 			<div class="relays" id="relays"></div>
@@ -342,7 +342,7 @@ const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [..
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const svg = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
 const ANON = "0".repeat(32);
-const UI = "4.1.0";      // must match core.uc VERSION; a mismatch means this page is a stale cached copy
+const UI = "5.0.0";      // must match core.uc VERSION; a mismatch means this page is a stale cached copy
 const QUIET = 125000;   // bytes/s. Below 1 Mbit/s a line is idle: do not draw noise as load.
 const ICON = {
 	good: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="var(--good)"/><path d="M4.6 8.2l2.2 2.2 4.6-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -376,6 +376,7 @@ const CHECK = {
 	tunnel_canary: ["隧道探测有失败", "偶发可忽略"],
 	tunnel_divert: ["隧道在线但分流规则没装上", "点「立即调谐」"],
 	smartdns: ["DNS 解析器没在运行", "系统会自动拉起"],
+	smartdns_responsive: ["SmartDNS 解析无响应", "系统会自动重启 SmartDNS 恢复"],
 	dns_forward: ["dnsmasq 没有把请求交给 SmartDNS", "点「立即调谐」"],
 	dhcp_listen: ["DHCP 服务没在监听", "设备将拿不到地址；重启 dnsmasq"],
 	uplink_carrier: ["上联网线没插好", "检查 WAN 口"],
@@ -472,7 +473,7 @@ function renderTiles() {
 	$("#t-strands-s").textContent = s.site?.aggregate ? `${s.weave?.pattern?.length || 0} 个槽位在编织` : "未聚合";
 	const t = s.tunnel || {};
 	setValue("#t-tunnel", !t.enabled ? ["关闭", ""] : !t.on ? [t.running ? "旁路" : "未运行", ""] : [String(t.canary_ms || "–"), "ms"]);
-	$("#t-tunnel-s").textContent = t.on ? (S.tunnel?.selected === "AUTO" && S.tunnel?.auto ? S.tunnel.auto : S.tunnel?.selected || "") : t.enabled ? "流量直连中" : "";
+	$("#t-tunnel-s").textContent = t.on ? (S.tunnel?.selected === "TW-HOME" && S.tunnel?.tw_home ? S.tunnel.tw_home : S.tunnel?.selected === "AUTO" && S.tunnel?.auto ? S.tunnel.auto : S.tunnel?.selected || "") : t.enabled ? "流量直连中" : "";
 	const online = S.devices.filter((d) => d.online).length, bad = s.fail?.length || 0, warn = s.warn?.length || 0, pill = $("#health");
 	pill.firstChild.className = "dot " + (bad ? "critical" : warn ? "warning" : "good");
 	pill.lastChild.textContent = bad ? bad + " 项异常" : warn ? warn + " 项提醒" : "一切正常";
@@ -602,7 +603,10 @@ function renderStrands() {
 	const sparkTop = Math.max(QUIET, ...s.strands.map((x) => Math.max(...(S.series.strands[x.dev] || [0]).slice(-60))));
 	$("#strands").replaceChildren(...s.strands.map((x) => {
 		const tr = el("tr", x.healthy ? "" : "off"), c1 = el("td"); c1.append(el("div", "t1", x.dev), el("div", "t2", x.ip || "无地址"));
-		const c2 = el("td"); c2.append(stateEl(x.healthy ? "good" : x.parked ? "warning" : "critical", x.healthy ? (x.role === "backup" ? "备用" : "健康") : x.parked ? "已停靠" : "离线"));
+		const pct = Math.round(Math.min(100, Math.max(0, (x.tokens ?? 1000000) / 10000)));
+		const bLabel = !x.healthy ? (x.parked ? "已停靠" : "离线") : x.vip ? "⚡ VIP 专线" : x.bucket === "charged" ? `满桶脉冲 ${pct}%` : x.bucket === "draining" ? `脉冲释放 ${pct}%` : x.bucket === "depleted" ? `限速压制 ${pct}%` : x.bucket === "cooling" ? `冷却回血 ${pct}%` : "健康";
+		const bKind = !x.healthy ? (x.parked ? "warning" : "critical") : (x.vip || x.bucket === "charged") ? "good" : (x.bucket === "draining" || x.bucket === "cooling") ? "warning" : "critical";
+		const c2 = el("td"); c2.append(stateEl(bKind, bLabel));
 		const c4 = el("td"); c4.append(barEl((x.rate || 0) / top), rateText(x.rate || 0));
 		const c5 = el("td"); c5.append(barEl((x.up || 0) / topUp, true), rateText(x.up || 0));
 		const c8 = el("td"), sp = svg("svg", { class: "spark", viewBox: "0 0 110 24", "aria-hidden": "true" }); sp.append(svg("path", { d: sparkPath(S.series.strands[x.dev] || [], sparkTop) })); c8.append(sp);
@@ -613,7 +617,7 @@ function renderStrands() {
 }
 
 // --- devices
-const POLICY = [["auto", "默认"], ["direct", "直连"], ["tunnel", "代理"], ["block", "禁网"]];
+const POLICY = [["auto", "默认"], ["game", "电竞VIP"], ["direct", "直连"], ["tunnel", "代理"], ["block", "禁网"]];
 function renderDevices() {
 	if (S.page !== "devices" || S.editing) return;
 	const list = [...S.devices].sort((a, b) => (b.online - a.online) || ((b.down + b.up) - (a.down + a.up)) || (a.name || a.mac).localeCompare(b.name || b.mac));
@@ -686,12 +690,12 @@ function renderTunnel() {
 	const kv = $("#tunnel-kv"); kv.replaceChildren();
 	const row = (k, v) => { kv.append(el("dt", "", k)); const dd = el("dd"); typeof v === "string" ? dd.textContent = v : dd.append(v); kv.append(dd); };
 	const st = stateEl(!t.enabled ? "idle" : t.on ? "good" : t.fail_open ? "warning" : "critical", !t.enabled ? "已关闭" : t.on ? "承载流量" : t.fail_open ? "已旁路，流量直连" : "未运行"); st.style.justifyContent = "flex-end";
-	row("状态", st); row("探测延迟", t.canary_ms ? t.canary_ms + " ms" : "—"); row("当前中继", live.selected === "AUTO" && live.auto ? "AUTO → " + live.auto : (live.selected || "—"));
-	const relays = (live.relays || []).filter((r) => r.name !== "DIRECT").sort((a, b) => (b.name === "AUTO") - (a.name === "AUTO") || (a.delay || 9e9) - (b.delay || 9e9));
+	row("状态", st); row("探测延迟", t.canary_ms ? t.canary_ms + " ms" : "—"); row("当前中继", live.selected === "TW-HOME" && live.tw_home ? "TW-HOME → " + live.tw_home : live.selected === "AUTO" && live.auto ? "AUTO → " + live.auto : (live.selected || "—"));
+	const relays = (live.relays || []).filter((r) => r.name !== "DIRECT").sort((a, b) => (b.name === "TW-HOME") - (a.name === "TW-HOME") || (b.name === "AUTO") - (a.name === "AUTO") || (a.delay || 9e9) - (b.delay || 9e9));
 	$("#relays").replaceChildren(...relays.map((r) => {
 		const card = el("button", "relay" + (r.name === live.selected ? " sel" : "")), meta = el("div", "meta"), lat = el("span", "badge");
 		card.type = "button"; lat.append(el("i", "dot " + delayKind(r.delay)), r.delay ? r.delay + " ms" : "—");
-		meta.append(el("span", "", r.name === "AUTO" ? "自动选最快" : r.type + (live.selected === "AUTO" && r.name === live.auto ? " · 使用中" : "")), lat);
+		meta.append(el("span", "", r.name === "TW-HOME" ? "台湾家宽零跳IP容灾" : r.name === "AUTO" ? "台湾家宽自动容灾" : r.type + ((live.selected === "TW-HOME" && r.name === live.tw_home) || (live.selected === "AUTO" && r.name === live.auto) ? " · 使用中" : "")), lat);
 		card.append(el("div", "name", r.name), meta); card.title = r.name; card.onclick = () => write("select", { name: r.name }); return card;
 	}));
 }

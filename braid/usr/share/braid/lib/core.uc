@@ -5,10 +5,11 @@ import * as fs from "fs";
 import * as ulog from "log";
 import { md5 } from "digest";
 
-export const VERSION = "4.1.0";
+export const VERSION = "5.0.0";
 export const SHARE = fs.dirname(sourcepath(0, true));
 export const RUN = getenv("BRAID_RUN") ?? "/tmp/braid";
 export const ETC = getenv("BRAID_ETC") ?? "/etc/braid";
+export const STATE_DIR = ETC + "/state";
 export const UCI_DIR = getenv("BRAID_UCI");
 
 let dry = false;
@@ -195,4 +196,6 @@ export function lock(name) {
 
 export function init_dirs() {
 	fs.mkdir(RUN);
+	if (!dry)
+		fs.mkdir(STATE_DIR);
 };

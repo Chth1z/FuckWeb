@@ -81,46 +81,53 @@ function build(ctx) {
 	// overrides everything; then forced-tunnel ranges before the domestic
 	// set, or Cloudflare's mainland ranges would slip out direct.
 	let classify = [ rule("ether saddr @dev_block", "drop", "device-block") ];
+	if (tun.on)
+		push(classify, rule("ip daddr @relay4", "goto direct_ok", "relay"));
+	if (c.quic == "reject")
+		push(classify, rule("udp dport 443", "reject with icmpx type admin-prohibited", "quic"));
 	if (tun.on) {
 		push(classify, rule("ether saddr @dev_direct", "goto direct_ok", "device-direct"));
-		push(classify, rule("ip daddr @relay4", "goto direct_ok", "relay"));
 		push(classify, rule("ether saddr @dev_tunnel", "goto divert", "device-tunnel"));
 		push(classify, rule("ip daddr @tunnel4", "goto divert", "tunnel-range"));
 		push(classify, rule("ip daddr @tunnel4_dns", "goto divert", "tunnel-domain"));
+		push(classify, rule("ip daddr @domestic4", "goto direct_ok", "domestic"));
 		if (length(c.tunnel_udp_port))
 			push(classify, rule(sprintf("udp dport { %s }", join(", ", c.tunnel_udp_port)), "goto divert", "tunnel-port"));
-		push(classify, rule("ip daddr @domestic4", "goto direct_ok", "domestic"));
-		if (c.quic == "reject")
-			push(classify, rule("udp dport 443", "reject", "quic"));
 		push(classify, c.remainder == "tunnel" ? rule("", "goto divert", "rest-tunnel") : rule("", "goto direct_ok", "rest-direct"));
 	}
 
-	// See weave.uc for what the two maps mean. In auto, a pair's first
-	// connections follow @anchor; once it opens them faster than the burst
-	// allowance, the overflow takes the next @pattern slot instead.
-	// The strand lives in the low byte of the conntrack mark.
+	// See weave.uc for what the maps mean.
+	// Low byte of conntrack mark = strand ID (1..21); bit 0x100 = VIP realtime lane.
 	let w = ctx.weave, lay = [], lay_out = [];
 	if (w.slots > 0) {
+		let evict = sprintf("ct mark and 0x100 != 0 ct bytes >= 50000000 ct mark set numgen inc mod %d map @pattern", w.slots);
 		let known = "ct mark and 0xff != 0 meta mark set ct mark and 0xff return";
 		let apply = "meta mark set ct mark and 0xff";
 		let spread = sprintf("ct mark set numgen inc mod %d map @pattern", w.slots);
 		let pin = sprintf("ct mark set jhash ip saddr . ip daddr mod %d map @anchor", weave.ANCHOR_SLOTS);
 		let spill = max(1, cfg.weave.spill);
-		push(lay, known);
+		push(lay, evict, known);
+		if (length(w.vip) > 0) {
+			let vip_set = sprintf("ct mark set numgen inc mod %d map @vip_lane", length(w.vip));
+			push(lay,
+				"ct state new ether saddr @dev_game " + vip_set,
+				"ct state new meta l4proto udp th dport != { 80, 443 } meta length < 800 " + vip_set,
+				"ct state new ip dscp { ef, cs4, cs5, cs6, cs7 } " + vip_set,
+				"ct state new meta l4proto tcp th dport 22 " + vip_set
+			);
+		}
 		if (cfg.weave.affinity == "flow") {
-			push(lay, "ct state new " + spread);
+			push(lay, "ct state new ct mark and 0xff == 0 " + spread);
 		}
 		else if (cfg.weave.affinity == "dest") {
-			push(lay, "ct state new " + pin);
+			push(lay, "ct state new ct mark and 0xff == 0 " + pin);
 		}
 		else {
-			push(lay, sprintf("ct state new add @bursty { ip saddr . ip daddr limit rate over %d/minute burst %d packets } %s", spill * 2, spill, spread));
+			push(lay, sprintf("ct state new ct mark and 0xff == 0 add @bursty { ip saddr . ip daddr limit rate over %d/minute burst %d packets } %s", spill * 2, spill, spread));
 			push(lay, "ct state new ct mark and 0xff == 0 " + pin);
 		}
 		push(lay, apply);
-		// The tunnel's own connections always spread. The far end of those is
-		// a relay, which neither knows nor cares which strand a packet took;
-		// pinning them would squeeze the whole tunnel through one identity.
+		// The tunnel's own connections always spread across the non-VIP harvest pool.
 		lay_out = [ known, "ct state new " + spread, apply ];
 	}
 
@@ -133,6 +140,7 @@ function build(ctx) {
 		set_unit("set", "dev_direct", dev.direct),
 		set_unit("set", "dev_tunnel", dev.tunnel),
 		set_unit("set", "dev_block", dev.block),
+		set_unit("set", "dev_game", dev.game),
 		unit("anchor", weave.script("anchor", w.anchor)),
 		chain_unit("classify", classify),
 		chain_unit("weave", lay),
@@ -178,11 +186,13 @@ function apply_nft(ctx) {
 		script += u.text();
 		push(changed, u.name);
 	}
-	// The pattern map belongs to the weave. It rides along only when the map
-	// was just emptied by a rebuild or is no longer valid for the healthy set.
+	// The pattern and vip_lane maps belong to the weave. They ride along only
+	// when emptied by a rebuild or no longer valid for the healthy set.
 	let lay_pattern = full || ctx.weave.repair;
-	if (lay_pattern)
+	if (lay_pattern) {
 		script += weave.script("pattern", ctx.weave.pattern);
+		script += weave.script("vip_lane", ctx.weave.vip);
+	}
 	if (!length(script))
 		return true;
 
@@ -199,7 +209,7 @@ function apply_nft(ctx) {
 	}
 	ctx.st.nft = digests;
 	if (lay_pattern)
-		weave.remember(ctx.weave.pattern);
+		weave.remember(ctx.weave.pattern, ctx.weave.vip);
 	if (full)
 		core.event("NFT rebuilt");
 	else if (length(changed))
@@ -400,7 +410,7 @@ export function teardown(ctx) {
 	if (length(cmds))
 		core.act(join("\n", cmds));
 	delete ctx.st.nft;
-	weave.remember([]);
+	weave.remember([], []);
 	core.event("KERNEL state removed");
 };
 

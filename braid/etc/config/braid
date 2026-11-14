@@ -5,7 +5,6 @@
 
 config braid 'main'
 	option enabled '1'
-	# Devices LAN clients arrive on (bridge, its ports, the APs).
 	list lan_dev 'br-lan'
 	list lan_dev 'lan1'
 	list lan_dev 'lan2'
@@ -17,25 +16,14 @@ config braid 'main'
 	option ipv6 '0'
 
 config strands 'strands'
-	# auto: aggregate only on a network remembered as a site that wants it.
-	# on / off: always / never, wherever we are.
 	option aggregate 'auto'
-	# The uplink port: always a strand.
 	list uplink 'wan'
-	# Extra identities. Braid brings these interfaces up only while aggregating,
-	# so an ordinary network sees one device and hands out one lease.
 	list identity 'vwan*'
-	# Carry traffic only when no primary strand is healthy.
 	list backup 'phy*-sta*'
-	# A strand is healthy when this URL answers probe_expect through it.
-	# Keep it a 204 endpoint: a captive portal answers any plain HTTP
-	# request with its own 200 page, so a 200 cannot prove a login.
 	option probe_url 'http://connect.rom.miui.com/generate_204'
 	option probe_expect '204'
 	option probe_interval '180'
 
-# A network we recognise, by the MAC address of its gateway. Anywhere else
-# Braid is an ordinary router (still classifying, tunnelling and resolving).
 config site 'ihg'
 	option name 'IHG 酒店'
 	list gateway 'b4:4b:d6:57:18:0b'
@@ -44,52 +32,48 @@ config site 'ihg'
 	option portal_secret 'portal.secret'
 
 config weave 'weave'
-	# headroom: new flows favour strands with spare capacity, re-laid every
-	#           few seconds from measured load. even: equal shares, always.
-	option policy 'headroom'
-	# auto: a client and a server share one strand (sites that pin a session
-	#       to an address keep working) until the pair opens connections in a
-	#       burst, which then spreads and adds up. flow: always spread.
-	#       dest: never spread.
-	option affinity 'auto'
+	# harvest: token-bucket burst harvester (charges idle strands, bursts
+	#          new flows on full buckets, cools down before policer tail-drop).
+	# headroom: spare capacity. even: equal shares.
+	option policy 'harvest'
+	# flow: spread every new connection across @pattern (optimal when all
+	#       strands share one public NAT IP). auto: spread after burst.
+	option affinity 'flow'
 	option spill '6'
-	# Pattern length. 0 = six slots per healthy strand.
 	option slots '0'
-	option interval '5'
-	# Per-strand ceiling in kbit/s. 0 = learn it from observed peaks.
+	option interval '2'
 	option strand_kbit '0'
 
 config classify 'classify'
-	# What is neither domestic nor forced into the tunnel: tunnel | direct
 	option remainder 'tunnel'
-	# NTP through the tunnel so the clock source matches the exit.
+	option quic 'reject'
 	list tunnel_udp_port '123'
-	option quic 'tunnel'
+	list tunnel_udp_port '3478'
+	list tunnel_udp_port '5349'
+	list tunnel_udp_port '19302'
 
 config tunnel 'tunnel'
 	option enabled '1'
 	option relays 'relays.json'
-	# 1: a dead tunnel steps aside and traffic goes direct. 0: it fails closed.
 	option fail_open '0'
+	list guard_ssh4 '18.176.216.3'
 
 config dns 'dns'
 	option ipv4_only '1'
 	option ads '1'
-	# "<DoH url> <TLS name to verify>". Never plain UDP/53: it is intercepted here.
 	list cn_upstream 'https://223.5.5.5/dns-query dns.alidns.com'
 	list cn_upstream 'https://223.6.6.6/dns-query dns.alidns.com'
-	list cn_upstream 'https://1.12.12.12/dns-query doh.pub'
 
 config shaper 'shaper'
 	option mode 'auto'
 	option device 'wan'
 	option pct '95'
+	option pct_down '72'
 
 config wifi 'wifi'
 	option guard '1'
 	list ap 'phy0-ap0'
 	list ap 'phy1-ap0'
-	# Client radio that takes over when the copper is unplugged.
 	option backup_sta 'sta'
 
 config led 'led'
@@ -98,8 +82,38 @@ config led 'led'
 	option green '18'
 	option yellow '8'
 
-# Devices are added from the dashboard: a name and where their traffic goes.
-#   config device
-#   	option mac 'aa:bb:cc:dd:ee:ff'
-#   	option name 'TV'
-#   	option policy 'direct'      # auto | direct | tunnel | block
+config device
+	option mac 'f0:1f:c7:39:b8:30'
+	option policy 'direct'
+
+config device
+	option mac '2a:89:78:1e:fa:40'
+	option policy 'direct'
+
+config device
+	option mac '74:4c:a1:d6:bc:1d'
+	option policy 'direct'
+
+config device
+	option mac 'ba:b8:2a:77:2e:47'
+	option policy 'direct'
+
+config device
+	option mac '6e:bf:a3:ed:4e:b7'
+	option policy 'direct'
+
+config device
+	option mac '9e:61:ba:f0:c9:a4'
+	option policy 'direct'
+
+config device
+	option mac '22:4d:1b:e0:82:cc'
+	option policy 'direct'
+
+config device
+	option mac 'd0:39:57:d0:00:db'
+	option policy 'direct'
+
+config device
+	option mac '4a:62:67:72:37:3c'
+	option policy 'direct'

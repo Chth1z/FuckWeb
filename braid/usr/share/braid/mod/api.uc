@@ -10,6 +10,7 @@ import * as fs from "fs";
 import * as core from "../lib/core.uc";
 import * as config from "../lib/config.uc";
 import * as series from "../lib/series.uc";
+import { save_selected } from "./tunnel.uc";
 
 function controller(cfg, lan_ip, method, url, body) {
 	let cmd = sprintf("curl -4 -m 3 -sS -X %s -H %s", method,
@@ -119,13 +120,14 @@ export function methods(d) {
 	let methods = {
 		status: {
 			call: function() {
-				let snap = d.snapshot() ?? {}, load = d.load(), pattern = d.pattern();
+				let snap = d.snapshot() ?? {}, load = d.load(), pattern = d.pattern(), vip = d.vip?.() ?? [];
+				let vip_id = (vip[0] ?? 0) & 0xff;
 				let weight = {}, total = 0;
 				for (let id in pattern)
 					weight[id] = (weight[id] ?? 0) + 1;
 				let total_up = 0;
 				let strands = map(snap.strands ?? [], (s) => {
-					let down = load[s.dev]?.down ?? {}, up = load[s.dev]?.up ?? {};
+					let down = load[s.dev]?.down ?? {}, up = load[s.dev]?.up ?? {}, b = load[s.dev]?.bucket ?? {};
 					total += down.now ?? 0;
 					total_up += up.now ?? 0;
 					return {
@@ -133,6 +135,9 @@ export function methods(d) {
 						rate: int(down.rate ?? 0), now: int(down.now ?? 0), peak: int(down.peak ?? 0),
 						up: int(up.rate ?? 0), up_now: int(up.now ?? 0), up_peak: int(up.peak ?? 0),
 						slots: weight[s.id] ?? 0,
+						vip: s.id == vip_id,
+						bucket: b.state ?? "charged",
+						tokens: int(b.tokens ?? 1000000),
 					};
 				});
 				// The current choice for every tunable, so a viewer who is not
@@ -151,7 +156,7 @@ export function methods(d) {
 					rate: int(total),
 					rate_up: int(total_up),
 					strands,
-					weave: { ...(snap.weave ?? {}), pattern, interval: d.interval() },
+					weave: { ...(snap.weave ?? {}), pattern, vip, interval: d.interval() },
 				};
 			},
 		},
@@ -192,6 +197,7 @@ export function methods(d) {
 				return {
 					reachable: true,
 					selected: all.PROXY?.now ?? "",
+					tw_home: all["TW-HOME"]?.now ?? "",
 					auto: all.AUTO?.now ?? "",
 					relays,
 					dashboard: sprintf("http://%s:%d/ui/", lan_ip(), d.cfg().tunnel.controller_port),
@@ -322,8 +328,10 @@ export function methods(d) {
 			call: function(req) {
 				let name = req.args?.name ?? "";
 				let res = controller(d.cfg(), lan_ip(), "PUT", "/proxies/PROXY", sprintf("%J", { name }));
-				if (res != null)
+				if (res != null) {
+					save_selected(name);
 					core.event("TUNNEL relay selected: %s", name);
+				}
 				return { ok: res != null };
 			},
 		},

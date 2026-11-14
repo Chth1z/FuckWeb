@@ -126,13 +126,16 @@ function probe(devs, cfg) {
 	if (!length(devs))
 		return res;
 	let cmds = map(devs, (d) => sprintf(
-		"curl -4 --interface %s -m %d -sS -o /dev/null -w '%s %%{http_code} %%{time_starttransfer}\\n' %s 2>/dev/null &",
+		"curl -4 --interface %s -m %d -sS -o /dev/null -w '%s %%{http_code} %%{time_starttransfer} %%{time_namelookup}\\n' %s 2>/dev/null &",
 		d, cfg.probe_timeout, d, core.shq(cfg.probe_url)));
 	push(cmds, "wait");
 	for (let line in split(core.sh(join("\n", cmds)).out, "\n")) {
-		let m = match(line, /^(\S+) ([0-9]+) ([0-9.]+)/);
-		if (m && !res[m[1]])
-			res[m[1]] = { code: int(m[2]), ttfb: +m[3] };
+		let m = match(line, /^(\S+) ([0-9]+) ([0-9.]+) ([0-9.]+)/);
+		if (m && !res[m[1]]) {
+			let code = int(m[2]);
+			let pure = code > 0 ? max(0.005, (+m[3]) - (+m[4])) : 0;
+			res[m[1]] = { code, ttfb: pure };
+		}
 	}
 	return res;
 }
@@ -177,7 +180,13 @@ export function check(ctx) {
 		for (let s in set) {
 			let h = state(s), r = res[s.dev] ?? { code: 0, ttfb: 0 };
 			h.code = r.code;
-			h.ttfb = r.ttfb;
+			if (r.code == cfg.probe_expect && r.ttfb > 0) {
+				let sample = (h.ttfb > 0 && r.ttfb > h.ttfb * 1.8) ? (h.ttfb * 1.25) : r.ttfb;
+				h.ttfb = (h.ttfb > 0 && h.ttfb < 0.5) ? (0.35 * sample + 0.65 * h.ttfb) : min(0.25, sample);
+			}
+			else {
+				h.ttfb = max(0.45, (h.ttfb ?? 0.20) * 1.5);
+			}
 			h.probed = now;
 		}
 	};
@@ -210,6 +219,8 @@ export function check(ctx) {
 	let healthy = [];
 	for (let s in routed) {
 		let h = state(s);
+		s.ttfb = h.ttfb ?? 0;
+		s.http = h.code ?? 0;
 		if (good(s))
 			h.strikes = h.logins = h.parked = 0;
 		else if (s in due)

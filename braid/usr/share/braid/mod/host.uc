@@ -105,7 +105,10 @@ function aql(limits) {
 
 // --- shaper ----------------------------------------------------------------
 
-// HTB at `rate` Mbit with fq_codel underneath, or nothing when rate is 0.
+// 3-Band Priority HTB at `rate` Mbit with fq_codel leaves, or nothing when rate is 0.
+//   1:10 (prio 0): VIP gaming/realtime, TCP SYN/ACK, DNS, ICMP (target 2ms, quantum 300)
+//   1:20 (prio 1): Interactive & short bursts < 4 MB (target 5ms, 2 MB buffer)
+//   1:30 (prio 2): Bulk transfers >= 4 MB (target 5ms, 2 MB buffer)
 // Returns true when it changed something.
 function shape(dev, rate) {
 	let have = core.sh("tc qdisc show dev " + dev).out, ours = index(have, "htb") >= 0;
@@ -114,15 +117,27 @@ function shape(dev, rate) {
 			core.act(sprintf("tc qdisc del dev %s root", dev));
 		return ours;
 	}
-	if (ours && index(core.sh("tc class show dev " + dev).out, sprintf("rate %dMbit", rate)) >= 0)
+	let classes = ours ? core.sh("tc class show dev " + dev).out : "";
+	if (ours && index(classes, sprintf("1:1 root rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
 		return false;
-	let leaf = sprintf("tc qdisc add dev %s parent 1:10 handle 10: fq_codel", dev);
+	if (ours && index(classes, sprintf("1:1 htb rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
+		return false;
+	let r10 = max(5, int(rate * 20 / 100));
+	let r20 = max(10, int(rate * 50 / 100));
+	let r30 = max(5, rate - r10 - r20);
+	let q10 = sprintf("tc qdisc add dev %s parent 1:10 handle 10: fq_codel", dev);
+	let q20 = sprintf("tc qdisc add dev %s parent 1:20 handle 20: fq_codel", dev);
+	let q30 = sprintf("tc qdisc add dev %s parent 1:30 handle 30: fq_codel", dev);
 	core.act(join("\n", [
-		sprintf("tc qdisc del dev %s root 2>/dev/null", dev),
-		sprintf("tc qdisc add dev %s root handle 1: htb default 10", dev),
-		sprintf("tc class add dev %s parent 1: classid 1:10 htb rate %dmbit ceil %dmbit quantum 1514", dev, rate, rate),
-		// 100 Mbit x 20 ms is about 250 kB; the default 4 MB is a lag reservoir.
-		sprintf("%s limit 1000 target 5ms interval 100ms memory_limit 250000 noecn || %s noecn || %s", leaf, leaf, leaf),
+		sprintf("tc qdisc del dev %s root 2>/dev/null || true", dev),
+		sprintf("tc qdisc add dev %s root handle 1: htb default 20", dev),
+		sprintf("tc class add dev %s parent 1: classid 1:1 htb rate %dmbit ceil %dmbit burst 128k cburst 128k", dev, rate, rate),
+		sprintf("tc class add dev %s parent 1:1 classid 1:10 htb rate %dmbit ceil %dmbit prio 0 quantum 1514", dev, r10, rate),
+		sprintf("tc class add dev %s parent 1:1 classid 1:20 htb rate %dmbit ceil %dmbit prio 1 burst 64k cburst 64k quantum 1514", dev, r20, rate),
+		sprintf("tc class add dev %s parent 1:1 classid 1:30 htb rate %dmbit ceil %dmbit prio 2 burst 64k cburst 64k quantum 1514", dev, r30, rate),
+		sprintf("%s limit 1000 target 2ms interval 50ms quantum 300 memory_limit 1048576 noecn || %s noecn || %s", q10, q10, q10),
+		sprintf("%s limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 2097152 noecn || %s noecn || %s", q20, q20, q20),
+		sprintf("%s limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 2097152 noecn || %s noecn || %s", q30, q30, q30),
 	]));
 	return true;
 }

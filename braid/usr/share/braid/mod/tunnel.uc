@@ -11,6 +11,7 @@ import { MARK_TUNNEL_OUT } from "./kernel.uc";
 
 const BIN_GZ = core.SHARE + "/mihomo.gz";
 const SECRET = core.ETC + "/controller.secret";
+const SELECTED_FILE = core.STATE_DIR + "/selected.json";
 const SKIP_TYPES = [ "selector", "urltest", "direct", "block", "dns" ];
 const RELAY_RESOLVE_SEC = 600;
 
@@ -47,6 +48,9 @@ const CONVERT = {
 			p.sni = tls.server_name;
 		if (tls.insecure)
 			p["skip-cert-verify"] = true;
+		let fp = tls.utls?.fingerprint ?? tls.fingerprint ?? n.fingerprint;
+		if (fp)
+			p.fingerprint = fp;
 		if (obfs.type)
 			p.obfs = obfs.type;
 		if (obfs.password)
@@ -84,7 +88,7 @@ export function load_relays(cfg) {
 	let raw = core.load_json(path(cfg.tunnel.relays), []);
 	if (type(raw) == "object")
 		raw = raw.outbounds ?? (raw.type ? [ raw ] : []);
-	let proxies = [], ips = [], hosts = [], seen = {};
+	let proxies = [], ips = [], hosts = [], seen = {}, by_name = {};
 	for (let n in raw) {
 		if (type(n) != "object" || !n.tag || !n.type || n.type in SKIP_TYPES || seen[n.tag])
 			continue;
@@ -94,11 +98,31 @@ export function load_relays(cfg) {
 			continue;
 		}
 		seen[n.tag] = true;
-		push(proxies, { name: n.tag, server: n.server, port: n.server_port ?? 443, ...convert(n) });
+		let p = { name: n.tag, server: n.server, port: n.server_port ?? 443, ...convert(n) };
+		by_name[n.tag] = p;
+		push(proxies, p);
 		let literal = match(n.server ?? "", /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/);
 		let list = literal ? ips : hosts;
 		if (length(n.server) && !(n.server in list))
 			push(list, n.server);
+	}
+	// Synthesize Lightsail -> Taiwan residential chained backups so even if the
+	// domestic relay entry fails, traffic still exits from the exact same Taiwan
+	// Chunghwa Telecom residential IP (1.170.213.93).
+	if (by_name["JP-Lightsail-owner"]) {
+		let chains = [
+			[ "🇹🇼【亚洲】台湾家宽01丨专线【3x】", "🔗 台湾家宽01丨Lightsail链式" ],
+			[ "🇹🇼【亚洲】台湾家宽02丨专线【3x】", "🔗 台湾家宽02丨Lightsail链式" ],
+		];
+		for (let pair in chains) {
+			let base = by_name[pair[0]], tag = pair[1];
+			if (base && !seen[tag]) {
+				seen[tag] = true;
+				let cp = { ...base, name: tag, "dialer-proxy": "JP-Lightsail-owner" };
+				by_name[tag] = cp;
+				push(proxies, cp);
+			}
+		}
 	}
 	return { proxies, ips, hosts };
 };
@@ -114,18 +138,43 @@ function secret() {
 	return s ?? "";
 }
 
+function tw_order(names) {
+	let pref = [
+		"🇹🇼【亚洲】台湾家宽01丨专线【3x】",
+		"🔗 台湾家宽01丨Lightsail链式",
+		"🇨🇳【亚洲】台湾家宽01丨直连",
+		"🇹🇼【亚洲】台湾家宽02丨专线【3x】",
+		"🔗 台湾家宽02丨Lightsail链式",
+		"🇨🇳【亚洲】台湾家宽02丨直连",
+	];
+	let out = [];
+	for (let n in pref)
+		if (n in names)
+			push(out, n);
+	for (let n in names)
+		if (!(n in out) && (index(n, "台湾") >= 0 || index(n, "台灣") >= 0 || index(n, "TW") >= 0))
+			push(out, n);
+	return length(out) ? out : slice(names);
+}
+
 function build_config(cfg, lan_ip, proxies) {
 	let c = cfg.tunnel, names = map(proxies, (p) => p.name);
+	let tw_list = tw_order(names);
 	let cn_doh = map(cfg.dns.cn_upstream, (u) => split(u, " ")[0]);
 	let groups = [];
-	if (length(names))
+	if (length(names)) {
 		push(groups, {
-			name: "AUTO", type: "url-test", url: c.test_url, interval: c.test_interval,
-			tolerance: c.tolerance, lazy: true, "expected-status": 204, proxies: names,
+			name: "TW-HOME", type: "fallback", url: c.test_url, interval: c.test_interval,
+			lazy: false, "expected-status": 204, proxies: tw_list,
 		});
+		push(groups, {
+			name: "AUTO", type: "fallback", url: c.test_url, interval: c.test_interval,
+			lazy: false, "expected-status": 204, proxies: tw_list,
+		});
+	}
 	push(groups, {
 		name: "PROXY", type: "select",
-		proxies: length(names) ? [ "AUTO", ...names, "DIRECT" ] : [ "DIRECT" ],
+		proxies: length(names) ? [ "TW-HOME", "AUTO", ...names ] : [ "DIRECT" ],
 	});
 	return {
 		mode: "rule",
@@ -163,7 +212,11 @@ function build_config(cfg, lan_ip, proxies) {
 			"respect-rules": false,
 			"default-nameserver": cn_doh,
 			"proxy-server-nameserver": cn_doh,
-			nameserver: length(names) ? [ "https://1.1.1.1/dns-query#PROXY" ] : cn_doh,
+			nameserver: length(names) ? [
+				"https://dns.adguard-dns.com/dns-query#PROXY",
+				"https://208.67.222.222/dns-query#PROXY",
+				"https://dns.quad9.net/dns-query#PROXY",
+			] : cn_doh,
 		},
 		listeners: [
 			{ name: "mixed-in", type: "mixed", port: c.mixed_port, listen: "127.0.0.1" },
@@ -226,10 +279,24 @@ function api(cfg, lan_ip, method, url, body) {
 	return { status: int(pop(lines)), body: join("\n", lines) };
 }
 
+export function save_selected(name) {
+	if (length(name))
+		core.save_json(SELECTED_FILE, { name, ts: time() });
+};
+
+export function restore_selected(cfg, lan_ip) {
+	let saved = core.load_json(SELECTED_FILE, {})?.name;
+	let target = length(saved) ? saved : "TW-HOME";
+	api(cfg, lan_ip, "PUT", "/proxies/PROXY", sprintf("%J", { name: target }));
+};
+
 export function reload(cfg, lan_ip) {
 	let r = api(cfg, lan_ip, "PUT", "/configs?force=true", sprintf("%J", { path: core.RUN + "/mihomo.yaml" }));
+	let ok = r.status == 204 || r.status == 200;
+	if (ok)
+		restore_selected(cfg, lan_ip);
 	core.event("TUNNEL reload http=%d", r.status);
-	return r.status == 204 || r.status == 200;
+	return ok;
 };
 
 function urlenc(s) {
@@ -307,8 +374,11 @@ export function observe(ctx) {
 		plan.on = !c.fail_open;
 		return plan;
 	}
-	if (!st.since)
+	if (!st.since) {
 		st.since = now;
+		if (!core.is_dry())
+			restore_selected(cfg, ctx.facts.lan_ip);
+	}
 	if (prep.changed && !core.is_dry())
 		reload(cfg, ctx.facts.lan_ip);
 

@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as core from "../lib/core.uc";
 import { path } from "../lib/config.uc";
 
-export function render_rules(cfg) {
+export function render_rules(cfg, ctx) {
 	let rows = [ "table inet braid_guard", "delete table inet braid_guard", "table inet braid_guard {" ];
 	let set = (name, kind, items) => {
 		push(rows, "set " + name + " { type " + kind + ";");
@@ -19,15 +19,18 @@ export function render_rules(cfg) {
 	set("direct_devices", "ether_addr", map(filter(cfg.devices, (d) => d.policy == "direct"), (d) => d.mac));
 	set("blocked_devices", "ether_addr", map(filter(cfg.devices, (d) => d.policy == "block"), (d) => d.mac));
 	let raw = core.load_json(path(cfg.tunnel.relays), []), relays = [];
+	let resolved_ips = filter(ctx?.tunnel?.relay_ips ?? [], (ip) => match(ip, /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/));
 	if (type(raw) == "object") raw = raw.outbounds ?? (raw.type ? [ raw ] : []);
 	for (let n in raw) {
-		if (!match(n.server ?? "", /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/)) continue;
 		let port = int(n.server_port ?? 443);
 		if (!(port > 0 && port <= 65535)) continue;
 		// Fixed proxy transports only; arbitrary destination ports stay closed.
-		for (let proto in (n.type in [ "hysteria", "hysteria2", "tuic" ] ? [ "udp" ] :
-			(n.type in [ "shadowsocks", "ss" ] ? [ "tcp", "udp" ] : [ "tcp" ])))
-			push(relays, sprintf("%s . %s . %d", n.server, proto, port));
+		let protos = n.type in [ "hysteria", "hysteria2", "tuic" ] ? [ "udp" ] :
+			(n.type in [ "shadowsocks", "ss" ] ? [ "tcp", "udp" ] : [ "tcp" ]);
+		let servers = match(n.server ?? "", /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) ? [ n.server ] : resolved_ips;
+		for (let srv in servers)
+			for (let proto in protos)
+				push(relays, sprintf("%s . %s . %d", srv, proto, port));
 	}
 	for (let ip in cfg.tunnel.guard_ssh4)
 		if (match(ip, /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/)) push(relays, ip + " . tcp . 22");
@@ -51,7 +54,7 @@ export function render_rules(cfg) {
 };
 
 export function apply(ctx) {
-	let text = render_rules(ctx.cfg), persistent = path("guard.nft");
+	let text = render_rules(ctx.cfg, ctx), persistent = path("guard.nft");
 	if (!core.is_dry() && fs.readfile(persistent) == text && core.ok("nft list table inet braid_guard"))
 		return true;
 	let draft = core.outpath("guard.nft");

@@ -32,11 +32,11 @@ const SCHEMA = {
 		park_sec: 1800,
 	},
 	weave: {
-		policy: "headroom",             // headroom | even
-		affinity: "auto",               // auto | flow | dest
+		policy: "harvest",              // harvest | headroom | even
+		affinity: "flow",               // auto | flow | dest
 		spill: 6,                       // auto: connections a pair may open in a burst before spreading
 		slots: 0,                       // pattern length, 0 = 6 per healthy strand
-		interval: 5,                    // seconds between load samples
+		interval: 2,                    // seconds between load samples
 		smoothing: 0.3,                 // EWMA weight of the newest sample
 		strand_kbit: 0,                 // per-strand ceiling, 0 = learn from peaks
 	},
@@ -46,7 +46,7 @@ const SCHEMA = {
 		tunnel4: "lists/tunnel4.list",
 		tunnel_domains: "lists/tunnel-domains.list",
 		tunnel_udp_port: [],
-		quic: "tunnel",                 // tunnel | reject
+		quic: "reject",                 // tunnel | reject
 	},
 	tunnel: {
 		enabled: 1,
@@ -90,7 +90,7 @@ const SCHEMA = {
 		mode: "auto",                   // auto | off
 		device: "wan",
 		pct: 95,                        // upload: percent of a 10/100 link speed
-		pct_down: 90,                   // download, shaped on the LAN side. 0 = off
+		pct_down: 72,                   // download, shaped on the LAN side. 0 = off
 	},
 	wifi: {
 		guard: 1,
@@ -108,14 +108,14 @@ const SCHEMA = {
 export const TUNABLE = {
 	"strands.aggregate": { choices: [ "auto", "on", "off" ] },
 	"strands.probe_interval": { min: 30, max: 3600 },
-	"weave.policy": { choices: [ "headroom", "even" ] },
-	"weave.affinity": { choices: [ "auto", "flow", "dest" ] },
+	"weave.policy": { choices: [ "harvest" ] },
+	"weave.affinity": { choices: [ "flow" ] },
 	"weave.slots": { min: 0, max: 252 },
 	"weave.strand_kbit": { min: 0, max: 1000000 },
-	"classify.remainder": { choices: [ "tunnel", "direct" ] },
-	"classify.quic": { choices: [ "tunnel", "reject" ] },
-	"tunnel.enabled": { min: 0, max: 1 },
-	"tunnel.fail_open": { min: 0, max: 1 },
+	"classify.remainder": { choices: [ "tunnel" ] },
+	"classify.quic": { choices: [ "reject" ] },
+	"tunnel.enabled": { min: 1, max: 1 },
+	"tunnel.fail_open": { min: 0, max: 0 },
 	"dns.ads": { min: 0, max: 1 },
 	"main.mss": { min: 0, max: 1460 },
 };
@@ -211,7 +211,7 @@ function find(uci, stype, test) {
 export function device_store(mac, name, policy) {
 	if (!match(mac, /^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/))
 		return { ok: false, error: "bad mac" };
-	if (!(policy in [ "auto", "direct", "tunnel", "block" ]))
+	if (!(policy in [ "auto", "direct", "tunnel", "block", "game" ]))
 		return { ok: false, error: "bad policy" };
 	name = clean(name);
 	let uci = cursor(core.UCI_DIR);

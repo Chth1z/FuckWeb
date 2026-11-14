@@ -16,7 +16,7 @@ import * as ubus from "ubus";
 import * as core from "../lib/core.uc";
 import * as facts from "../lib/facts.uc";
 
-export const POLICIES = [ "auto", "direct", "tunnel", "block" ];
+export const POLICIES = [ "auto", "direct", "tunnel", "block", "game" ];
 
 function leases() {
 	let out = {};
@@ -79,9 +79,9 @@ export function scan(cfg) {
 	return list;
 };
 
-// MAC lists for the three policy sets.
+// MAC lists for the policy sets.
 export function policy_sets(cfg) {
-	let out = { direct: [], tunnel: [], block: [] };
+	let out = { direct: [], tunnel: [], block: [], game: [] };
 	for (let d in cfg.devices)
 		if (out[d.policy])
 			push(out[d.policy], d.mac);
