@@ -1,0 +1,11 @@
+/etc/prism/
+/etc/init.d/prism
+/etc/rc.d/S99prism
+/etc/rc.d/K10prism
+/etc/sysctl.d/99-prism.conf
+/usr/sbin/prism
+/usr/share/prism/
+/usr/share/nftables.d/ruleset-post/30-prism-guard.nft
+/usr/share/rpcd/acl.d/prism.json
+/www/prism/
+/lib/upgrade/keep.d/prism

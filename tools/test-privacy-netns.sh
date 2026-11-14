@@ -2,7 +2,7 @@
 # Run on the router after rehearsal. Three isolated namespaces, no Internet.
 # All target addresses below are assigned to the isolated test WAN namespace.
 set -eu
-BASE=${1:-/tmp/braid-rehearsal/run/plan}
+BASE=${1:-/tmp/prism-rehearsal/run/plan}
 C=bp-c-$$
 R=bp-r-$$
 W=bp-w-$$
@@ -73,9 +73,9 @@ probe() {
 }
 probe pass 223.5.5.5 8080 domestic_direct_live
 probe block 203.0.113.10 8080 foreign_tunnel_without_listener
-ip netns exec "$R" nft add element inet braid tunnel4 '{ 223.5.5.5 }'
+ip netns exec "$R" nft add element inet prism tunnel4 '{ 223.5.5.5 }'
 probe block 223.5.5.5 8080 forced_tunnel_precedes_domestic
-ip netns exec "$R" nft delete table inet braid
+ip netns exec "$R" nft delete table inet prism
 probe block 223.5.5.5 8080 domestic_closed_after_service_stop
 probe block 203.0.113.10 8080 foreign_closed_after_service_stop
 probe pass 18.176.216.3 443 proxy_transport_survives_stop
@@ -84,7 +84,7 @@ probe block 18.176.216.3 80 other_relay_ports_closed
 probe block 223.5.5.5 53 dns_intercept_survives_stop
 probe block 223.5.5.5 853 dot_rejected_after_stop
 probe block '[2001:db8:777::1]' 8080 ipv6_closed_after_stop
-# Re-loading the guard (the fw4 include path) remains closed without Braid.
+# Re-loading the guard (the fw4 include path) remains closed without Prism.
 ip netns exec "$R" nft -f "$BASE/guard.nft"
-probe block 203.0.113.10 8080 firewall_reload_without_braid
+probe block 203.0.113.10 8080 firewall_reload_without_prism
 echo 'PRIVACY_NETNS_OK (no external interfaces or Claude requests)'

@@ -1,0 +1,647 @@
+/* ============================================================================
+ * PRISM 5.0 — Dark Side of the Moon Stage, Animated Blueprint & UI Components
+ * ============================================================================ */
+
+/* --- 01. Standalone Dark Side of the Moon Stage -------------------------- */
+.dsotm-stage {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 165px);
+  min-height: 540px;
+  max-height: 780px;
+  background: #030407;
+  overflow: hidden;
+  user-select: none;
+}
+
+#topo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+/* 4-Corner Minimal Telemetry Overlays */
+.corner-hud {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 340px;
+}
+
+.corner-hud.tl { top: 22px; left: 26px; align-items: flex-start; }
+.corner-hud.tr { top: 22px; right: 26px; align-items: flex-end; text-align: right; }
+.corner-hud.bl { bottom: 22px; left: 26px; align-items: flex-start; }
+.corner-hud.br { bottom: 22px; right: 26px; align-items: flex-end; text-align: right; }
+
+.corner-tag {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.corner-rate-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.corner-rate-main {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: -0.02em;
+}
+
+.corner-rate-up {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-blue);
+}
+
+.corner-sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.corner-math {
+  font-family: var(--font-math);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* Hover Tooltip on Prism Canvas */
+.topo-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(10, 12, 18, 0.94);
+  border: 1px solid var(--c-blue);
+  padding: 10px 14px;
+  font-size: 11.5px;
+  color: var(--text-primary);
+  z-index: 20;
+  min-width: 235px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.1s ease, transform 0.1s ease;
+}
+.topo-tooltip.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--line-subtle);
+  padding-bottom: 5px;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.tt-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 14px;
+}
+.tt-k { color: var(--text-muted); }
+.tt-v { text-align: right; color: var(--text-bright); font-variant-numeric: tabular-nums; }
+
+/* --- 02. Blueprint Schematic Header & Legend (Reference Image Style) ----- */
+.bp-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 0 10px;
+  border-bottom: 1px solid var(--line-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-wrap: wrap;
+}
+
+.bp-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 8px 0 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legend-sq {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+}
+
+/* 1px Wireframe Schematic Node Boxes */
+.s-box {
+  background: var(--bg-panel);
+  border: 1px solid var(--line-window);
+  padding: 13px 16px;
+  position: relative;
+}
+.s-box.amber  { border-color: var(--c-amber); }
+.s-box.mint   { border-color: var(--c-mint); }
+.s-box.blue   { border-color: var(--c-blue); }
+.s-box.violet { border-color: var(--c-violet); }
+.s-box.gold   { border-color: var(--c-gold); }
+
+/* Left Tall Advisor / Guard Column */
+.guard-rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  padding: 16px;
+  position: relative;
+}
+
+.guard-title {
+  text-align: center;
+  font-weight: 700;
+  color: var(--c-violet);
+  letter-spacing: 0.04em;
+  font-size: 13.5px;
+}
+
+.guard-sub {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  margin-bottom: 10px;
+}
+
+.guard-step {
+  color: var(--text-primary);
+  font-size: 12px;
+  margin: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.guard-body {
+  border-left: 1px solid var(--line-dashed);
+  margin-left: 6px;
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.guard-footer-bar {
+  margin: 10px -16px -16px;
+  padding: 7px 16px;
+  background: rgba(163, 137, 224, 0.14);
+  border-top: 1px solid rgba(163, 137, 224, 0.35);
+  color: var(--text-bright);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Horizontal dotted connector from Guard Rail to Main Pipeline */
+.horiz-bridge {
+  position: absolute;
+  right: -24px;
+  width: 24px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+.horiz-bridge-line {
+  width: 100%;
+  border-top: 1px dotted var(--line-dashed);
+  position: relative;
+}
+.horiz-dot {
+  position: absolute;
+  top: -3.5px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-violet);
+  box-shadow: 0 0 6px var(--c-violet);
+  animation: horiz-slide 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes horiz-slide {
+  0%   { transform: translateX(0); opacity: 0.2; }
+  50%  { opacity: 1; }
+  100% { transform: translateX(20px); opacity: 0.2; }
+}
+
+/* Animated Vertical & Fork/Merge Connectors */
+.v-conn-svg {
+  display: block;
+  overflow: visible;
+}
+
+.fork-svg {
+  width: 100%;
+  height: 44px;
+  display: block;
+  overflow: visible;
+}
+
+.math-formula {
+  font-family: var(--font-math);
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+/* Running Status Dot inside Blue Sub-nodes */
+.run-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-blue);
+  box-shadow: 0 0 6px var(--c-blue);
+  animation: run-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes run-pulse {
+  0%, 100% { transform: scale(0.85); opacity: 0.65; }
+  50%      { transform: scale(1.2); opacity: 1; }
+}
+
+/* Segmented Progress Bars (████░░) */
+.seg-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 13px;
+  padding: 1px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.seg-cell {
+  width: 9px;
+  height: 11px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.seg-cell.on.mint   { background: var(--c-mint-bar); }
+.seg-cell.on.blue   { background: var(--c-blue-bar); }
+.seg-cell.on.amber  { background: var(--c-amber); }
+.seg-cell.on.violet { background: var(--c-violet); }
+.seg-cell.on.gold   { background: var(--c-gold); }
+
+.fork-row {
+  display: grid;
+  grid-template-columns: 118px 132px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 2.5px 0;
+  font-size: 12px;
+}
+
+/* Session Log Box (─| session log |─) */
+.session-log-box {
+  border: 1px solid var(--line-window);
+  background: var(--bg-panel-alt);
+  padding: 14px 16px 11px;
+  position: relative;
+  margin-top: 8px;
+}
+
+.session-log-title {
+  position: absolute;
+  top: -10px;
+  left: 16px;
+  background: var(--bg-window);
+  padding: 0 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.log-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+
+.log-row {
+  display: grid;
+  grid-template-columns: 70px 92px 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+}
+.log-ts  { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.log-tag { font-weight: 600; }
+.log-msg { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-meta { color: var(--text-secondary); font-size: 11px; }
+
+/* --- 03. Spectrum 126-Slot Matrix & Tables ------------------------------- */
+.slot-matrix {
+  display: grid;
+  grid-template-columns: repeat(42, minmax(0, 1fr));
+  gap: 3px;
+  padding: 10px;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--line-subtle);
+}
+
+.slot-cell {
+  height: 15px;
+  border-radius: 1px;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.slot-cell.dim {
+  opacity: 0.14 !important;
+}
+.slot-cell.hi {
+  transform: scaleY(1.25);
+  box-shadow: 0 0 6px currentColor;
+  z-index: 2;
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.bp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.bp-table th {
+  text-align: left;
+  padding: 7px 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--line-window);
+}
+.bp-table th.num, .bp-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-subtle);
+  vertical-align: middle;
+}
+
+.bp-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+/* Badges, Buttons & Inputs */
+.st-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  font-size: 11px;
+  border: 1px solid transparent;
+}
+.st-badge.vip      { color: var(--c-blue); border-color: rgba(104, 163, 220, 0.45); background: var(--c-blue-dim); }
+.st-badge.charged  { color: var(--c-mint); border-color: rgba(91, 194, 140, 0.35); background: var(--c-mint-dim); }
+.st-badge.draining { color: var(--c-amber); border-color: rgba(224, 145, 90, 0.35); background: var(--c-amber-dim); }
+.st-badge.cooling  { color: var(--c-violet); border-color: rgba(163, 137, 224, 0.35); background: var(--c-violet-dim); }
+.st-badge.depleted { color: var(--c-crimson); border-color: rgba(224, 108, 117, 0.35); background: var(--c-crimson-dim); }
+
+.btn-cmd {
+  appearance: none;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--line-window);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.btn-cmd:hover {
+  border-color: var(--c-amber);
+  color: var(--text-bright);
+}
+.btn-cmd.primary {
+  border-color: var(--c-mint);
+  color: var(--c-mint);
+}
+
+.seg-group {
+  display: inline-flex;
+  border: 1px solid var(--line-window);
+  background: var(--bg-panel-alt);
+}
+
+.seg-btn {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--line-subtle);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.seg-btn:last-child { border-right: none; }
+.seg-btn:hover { color: var(--text-bright); }
+.seg-btn.on {
+  background: var(--c-blue-dim);
+  color: var(--c-blue);
+  font-weight: 600;
+}
+
+.bp-input {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--line-window);
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px 8px;
+  outline: none;
+}
+.bp-input:focus {
+  border-color: var(--c-blue);
+}
+
+/* Relay Pills Row */
+.relay-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.relay-pill {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--line-window);
+  padding: 6px 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11.5px;
+  transition: border-color 0.12s;
+}
+.relay-pill:hover {
+  border-color: var(--c-blue);
+}
+.relay-pill.active {
+  border-color: var(--c-mint);
+  background: var(--c-mint-dim);
+}
+
+/* Modal & Toast */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 5, 8, 0.84);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal-scrim.open { display: flex; }
+
+.modal-box {
+  width: 100%;
+  max-width: 370px;
+  background: var(--bg-window);
+  border: 1px solid var(--c-amber);
+  padding: 18px 20px;
+}
+
+.toast-bar {
+  position: fixed;
+  bottom: 20px;
+  right: 22px;
+  background: var(--bg-titlebar);
+  border: 1px solid var(--c-mint);
+  color: var(--text-bright);
+  padding: 8px 14px;
+  font-size: 12px;
+  z-index: 200;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.toast-bar.show { opacity: 1; transform: translateY(0); }
+.toast-bar.bad  { border-color: var(--c-crimson); color: var(--c-crimson); }
+
+/* Oscilloscope & Sparklines */
+.scope-box {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--line-subtle);
+}
+.scope-box svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Doctor Checks & Tunable Config Grids */
+.bp-split-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.doctor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.doc-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--line-subtle);
+  font-size: 11.5px;
+}
+.doc-item.bad { border-color: var(--c-crimson); }
+.doc-item.warn { border-color: var(--c-amber); }
+
+.cfg-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-subtle);
+  gap: 10px;
+  font-size: 12px;
+}
+.cfg-row:last-child { border-bottom: none; }
+
+.rules-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rule-chip {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--line-subtle);
+  padding: 4px 10px;
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .bp-split-2 { grid-template-columns: 1fr; }
+  .fork-row { grid-template-columns: 1fr; }
+  .slot-matrix { grid-template-columns: repeat(21, minmax(0, 1fr)); }
+}
+
+/* Utility */
+.c-amber   { color: var(--c-amber); }
+.c-mint    { color: var(--c-mint); }
+.c-blue    { color: var(--c-blue); }
+.c-violet  { color: var(--c-violet); }
+.c-gold    { color: var(--c-gold); }
+.c-crimson { color: var(--c-crimson); }
+.c-muted   { color: var(--text-muted); }
+.c-sec     { color: var(--text-secondary); }
+.c-bright  { color: var(--text-bright); }

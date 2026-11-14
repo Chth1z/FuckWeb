@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/bin/ucode -S /usr/share/prism/prism.uc "$@"

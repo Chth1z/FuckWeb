@@ -1,6 +1,6 @@
-# Braid 5.0 — Frontend HTTP / ubus API Specification
+# Prism 5.0 — Frontend HTTP / ubus API Specification
 
-This document defines the complete backend API contract exposed by `braidd` (`usr/share/braid/mod/api.uc`) over OpenWrt `uhttpd-mod-ubus` (`POST /ubus`). It is designed as the authoritative reference for building or redesigning the `/www/braid/index.html` frontend.
+This document defines the complete backend API contract exposed by `prismd` (`usr/share/prism/mod/api.uc`) over OpenWrt `uhttpd-mod-ubus` (`POST /ubus`). It is designed as the authoritative reference for the modular `/www/prism/` frontend (`index.html`, `css/`, `js/`).
 
 ---
 
@@ -16,7 +16,7 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
   "method": "call",
   "params": [
     "<session_token>",
-    "braid",
+    "prism",
     "<method_name>",
     { ...args }
   ]
@@ -52,19 +52,19 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
   ]
 }
 ```
-- `result[0] === 0` indicates ubus transport success; `result[1]` is the JSON payload returned by `braid`.
+- `result[0] === 0` indicates ubus transport success; `result[1]` is the JSON payload returned by `prism`.
 - `result[0] === 6` (`UBUS_STATUS_PERMISSION_DENIED`) indicates the session token is missing or expired for a protected method.
 - JSON-RPC batching (sending an array of RPC objects in a single `POST /ubus`) is natively supported by `uhttpd-mod-ubus` and should be used when polling multiple endpoints simultaneously.
 
 ---
 
-## 2. Permission Matrix (`/usr/share/rpcd/acl.d/braid.json`)
+## 2. Permission Matrix (`/usr/share/rpcd/acl.d/prism.json`)
 
 | Category | Methods | Auth Required |
 |---|---|---|
 | **Public Read** | `status`, `series`, `devices`, `tunnel`, `doctor`, `rules`, `events` | No (`0000...0000`) |
-| **Private Read** | `config`, `connections` | Yes (`braid-admin`) |
-| **Write Actions** | `reconcile`, `configure`, `device`, `select`, `relogin`, `remember`, `forget` | Yes (`braid-admin`) |
+| **Private Read** | `config`, `connections` | Yes (`prism-admin`) |
+| **Write Actions** | `reconcile`, `configure`, `device`, `select`, `relogin`, `remember`, `forget` | Yes (`prism-admin`) |
 
 ---
 
@@ -72,13 +72,13 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
 
 ### 3.1 `status` — Global Snapshot, 21 Strands, Token Buckets & Weave State
 - **Args**: `{}`
-- **Cadence**: Updated in-memory every `2` seconds by `braidd` (`weave.interval`), and reconciled every `60` seconds by `braid reconcile`.
+- **Cadence**: Updated in-memory every `2` seconds by `prismd` (`weave.interval`), and reconciled every `60` seconds by `prism reconcile`.
 
 ```typescript
-interface BraidStatusResponse {
+interface PrismStatusResponse {
   version: string;          // "5.0.0"
   ts: number;               // Current Unix timestamp (seconds)
-  reconciled: number;       // Timestamp of last full `braid reconcile` pass
+  reconciled: number;       // Timestamp of last full `prism reconcile` pass
   ok: boolean;              // True if all `fail`-level doctor checks pass
   fail: string[];           // IDs of failing critical checks (empty when healthy)
   warn: string[];           // IDs of warning checks
@@ -194,7 +194,7 @@ interface StrandStatus {
 ### 3.2 `series` — Historical Time-Series (Total & Per-Strand)
 - **Args**: `{ "limit"?: number }` (default `0` = all available samples, up to `720` samples = 24 minutes at 2s interval)
 ```typescript
-interface BraidSeriesResponse {
+interface PrismSeriesResponse {
   interval: number;                      // Seconds between samples (2)
   ts: number[];                          // Unix timestamps (seconds) for each sample
   total: number[];                       // Total download rate (bytes/s) at each sample
@@ -209,7 +209,7 @@ interface BraidSeriesResponse {
 ### 3.3 `devices` — LAN Clients, Wi-Fi Signal, Traffic & Per-Device Policy
 - **Args**: `{}`
 ```typescript
-interface BraidDevicesResponse {
+interface PrismDevicesResponse {
   devices: LanDevice[];
 }
 
@@ -241,7 +241,7 @@ interface LanDevice {
 ### 3.4 `tunnel` — Mihomo Relay Groups & Taiwan Residential Cage Status
 - **Args**: `{}`
 ```typescript
-interface BraidTunnelResponse {
+interface PrismTunnelResponse {
   reachable: boolean;       // True if mihomo external-controller answered
   selected: string;         // Active selection in top-level `PROXY` group (default: "TW-HOME")
   tw_home: string;          // Active relay inside `TW-HOME` fallback group (e.g. "🇹🇼【亚洲】台湾家宽01丨专线【3x】")
@@ -260,7 +260,7 @@ interface BraidTunnelResponse {
 ### 3.5 `doctor` — Live System Health Verification
 - **Args**: `{}`
 ```typescript
-interface BraidDoctorResponse {
+interface PrismDoctorResponse {
   ts: number;
   ok: boolean;
   fail: string[];           // IDs of failed checks with level == "fail"
@@ -279,7 +279,7 @@ interface BraidDoctorResponse {
 ### 3.6 `rules` — nftables Classification Counters & Set Sizes
 - **Args**: `{}`
 ```typescript
-interface BraidRulesResponse {
+interface PrismRulesResponse {
   tunnel_on: boolean;
   rules: Array<{
     tag: "device-block" | "relay" | "quic" | "device-direct" | "device-tunnel" | "tunnel-range" | "tunnel-domain" | "domestic" | "tunnel-port" | "rest-tunnel" | "rest-direct";
@@ -302,7 +302,7 @@ interface BraidRulesResponse {
 ### 3.7 `events` — Recent State Transition Log
 - **Args**: `{ "limit"?: number }` (default `60`)
 ```typescript
-interface BraidEventsResponse {
+interface PrismEventsResponse {
   events: Array<{
     ts: number;             // Unix timestamp (seconds)
     msg: string;            // e.g. "STRANDS 21 of 21 healthy: 1 2 3 ..."
@@ -315,7 +315,7 @@ interface BraidEventsResponse {
 ### 3.8 `config` — Tunable Settings & Lock Metadata *(Auth Required)*
 - **Args**: `{}`
 ```typescript
-interface BraidConfigResponse {
+interface PrismConfigResponse {
   values: Record<string, string | number>;
   tunable: Record<string, {
     choices?: string[];
@@ -346,7 +346,7 @@ interface BraidConfigResponse {
 ### 3.9 `connections` — Active Direct & Tunnelled Flows *(Auth Required)*
 - **Args**: `{}`
 ```typescript
-interface BraidConnectionsResponse {
+interface PrismConnectionsResponse {
   connections: Array<{
     key: string;            // Unique flow identifier
     src: string;            // LAN client IPv4, e.g. "192.168.16.178"
@@ -371,10 +371,10 @@ All write endpoints return `{ "ok": boolean, "error"?: string }` and automatical
 
 | Method | Args Schema | Description |
 |---|---|---|
-| `reconcile` | `{}` | Triggers an immediate `braid reconcile` pass. |
-| `configure` | `{ "set": Record<string, string \| number> }` | Validates and commits one or more `TUNABLE` settings to `/etc/config/braid`. Atomic: rejects the entire batch if any key is invalid or out of bounds. |
+| `reconcile` | `{}` | Triggers an immediate `prism reconcile` pass. |
+| `configure` | `{ "set": Record<string, string \| number> }` | Validates and commits one or more `TUNABLE` settings to `/etc/config/prism`. Atomic: rejects the entire batch if any key is invalid or out of bounds. |
 | `device` | `{ "mac": string, "name": string, "policy": "auto" \| "game" \| "direct" \| "tunnel" \| "block" }` | Updates a LAN client's display name and/or routing policy. If reset to `name: ""` and `policy: "auto"`, removes the UCI entry cleanly. |
-| `select` | `{ "name": string }` | Switches the active proxy/group in `mihomo`'s `PROXY` selector (e.g. `"TW-HOME"`) and persists it across reboots in `/etc/braid/state/selected.json`. |
+| `select` | `{ "name": string }` | Switches the active proxy/group in `mihomo`'s `PROXY` selector (e.g. `"TW-HOME"`) and persists it across reboots in `/etc/prism/state/selected.json`. |
 | `relogin` | `{}` | Clears all portal park timers and forces an immediate probe + captive-portal re-authentication across all strands. |
-| `remember` | `{ "name": string, "aggregate": boolean, "portal"?: string }` | Saves the current upstream gateway MAC as a known site in `/etc/config/braid`. |
-| `forget` | `{}` | Removes the current upstream gateway MAC from saved sites in `/etc/config/braid`. |
+| `remember` | `{ "name": string, "aggregate": boolean, "portal"?: string }` | Saves the current upstream gateway MAC as a known site in `/etc/config/prism`. |
+| `forget` | `{}` | Removes the current upstream gateway MAC from saved sites in `/etc/config/prism`. |

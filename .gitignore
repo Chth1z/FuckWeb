@@ -1,11 +1,11 @@
 # Secrets: relay credentials never go into the repository.
 # tools/deploy.sh --secrets pushes the local copy to the router.
-braid/etc/braid/relays.json
+prism/etc/prism/relays.json
 legacy/v1/etc/hotel/proxy-nodes.json
 
 # The mihomo binary (20 MB). Lives on the router; tools/deploy.sh --assets
 # pushes a local copy when one is present.
-braid/usr/share/braid/mihomo.gz
+prism/usr/share/prism/mihomo.gz
 
 # Router snapshots can carry addresses and configuration of the live network.
 *.tgz

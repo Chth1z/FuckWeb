@@ -1,0 +1,76 @@
+/* ============================================================================
+ * PRISM 5.0 — Design Tokens & Schematic Color System
+ * ============================================================================ */
+
+:root {
+  /* Obsidian Terminal Canvas */
+  --bg-void: #050608;
+  --bg-window: #0d0f15;
+  --bg-titlebar: #151822;
+  --bg-panel: #10131b;
+  --bg-panel-alt: #0b0d13;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+
+  /* Structural Hairlines */
+  --line-window: #252a3a;
+  --line-subtle: #1c202e;
+  --line-dashed: #343b52;
+
+  /* 5 Semantic Blueprint Accents (from reference schematic) */
+  --c-amber: #e0915a;
+  --c-amber-dim: rgba(224, 145, 90, 0.14);
+
+  --c-mint: #5bc28c;
+  --c-mint-dim: rgba(91, 194, 140, 0.14);
+  --c-mint-bar: #79d2a6;
+
+  --c-blue: #68a3dc;
+  --c-blue-dim: rgba(104, 163, 220, 0.14);
+  --c-blue-bar: #7db4e8;
+
+  --c-violet: #a389e0;
+  --c-violet-dim: rgba(163, 137, 224, 0.14);
+
+  --c-gold: #ebc465;
+  --c-gold-dim: rgba(235, 196, 101, 0.14);
+
+  --c-crimson: #e06c75;
+  --c-crimson-dim: rgba(224, 108, 117, 0.15);
+
+  /* Typography Hierarchy */
+  --text-bright: #eef2f8;
+  --text-primary: #c9d1df;
+  --text-secondary: #838da2;
+  --text-muted: #525b70;
+
+  /* macOS Window Traffic Lights */
+  --dot-close: #ff5f56;
+  --dot-min: #ffbd2e;
+  --dot-max: #27c93f;
+
+  /* Font Stacks */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Mono', 'Consolas',
+               'PingFang TC', 'Microsoft JhengHei', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'PingFang TC',
+               'Microsoft JhengHei', system-ui, sans-serif;
+  --font-math: 'Times New Roman', 'STIX Two Math', 'Cambria Math', Georgia, serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  overflow-x: hidden;
+  selection-background-color: var(--c-blue-dim);
+}

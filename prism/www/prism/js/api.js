@@ -1,0 +1,147 @@
+/* ============================================================================
+ * PRISM 5.0 — OpenWrt ubus JSON-RPC 2.0 Client & Session Auth
+ * ============================================================================ */
+
+import { S } from './state.js';
+import { $, toast } from './dom.js';
+
+const ANON_TOKEN = '00000000000000000000000000000000';
+let rpcSeq = 1;
+let pendingAction = null;
+let onAuthSuccessCallback = null;
+
+export function setAuthCallback(fn) {
+  onAuthSuccessCallback = fn;
+}
+
+export async function ubusCall(object, method, args = {}, token = S.session || ANON_TOKEN) {
+  const res = await fetch('/ubus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: rpcSeq++,
+      method: 'call',
+      params: [token, object, method, args]
+    })
+  });
+  const data = await res.json();
+  if (data.error) {
+    const err = new Error(data.error.message || 'RPC Error');
+    err.code = data.error.code;
+    throw err;
+  }
+  const [status, payload] = data.result || [0, null];
+  if (status !== 0) {
+    const err = new Error('ubus status ' + status);
+    err.ubus = status;
+    throw err;
+  }
+  return payload;
+}
+
+export async function call(method, args = {}) {
+  try {
+    return await ubusCall('prism', method, args);
+  } catch (e) {
+    if ((e.ubus === 6 || e.code === -32002) && S.session) {
+      clearSession();
+      return await ubusCall('prism', method, args, ANON_TOKEN);
+    }
+    throw e;
+  }
+}
+
+export async function write(method, args = {}, successMsg = '已套用') {
+  if (!S.session) {
+    openLoginModal(() => write(method, args, successMsg));
+    return null;
+  }
+  try {
+    const res = await ubusCall('prism', method, args, S.session);
+    if (res && res.ok === false) {
+      toast(res.error || '操作失敗', true);
+      return null;
+    }
+    if (successMsg) toast(successMsg);
+    if (onAuthSuccessCallback) onAuthSuccessCallback();
+    return res;
+  } catch (e) {
+    if (e.ubus === 6 || e.code === -32002) {
+      clearSession();
+      openLoginModal(() => write(method, args, successMsg));
+      return null;
+    }
+    toast(e.message || '請求失敗', true);
+    return null;
+  }
+}
+
+export function clearSession() {
+  S.session = '';
+  S.user = '';
+  localStorage.removeItem('prism_session');
+  localStorage.removeItem('prism_user');
+  updateAuthButton();
+}
+
+export function updateAuthButton() {
+  const btn = $('#btn-auth');
+  if (!btn) return;
+  if (S.session) {
+    btn.textContent = `${S.user || 'root'} · 登出`;
+    btn.style.borderColor = 'var(--c-mint)';
+    btn.style.color = 'var(--c-mint)';
+  } else {
+    btn.textContent = '管理登入';
+    btn.style.borderColor = 'var(--line-window)';
+    btn.style.color = 'var(--text-secondary)';
+  }
+}
+
+export function openLoginModal(afterFn = null) {
+  pendingAction = afterFn;
+  const scrim = $('#scrim');
+  if (!scrim) return;
+  scrim.classList.add('open');
+  $('#login-err').textContent = '';
+  $('#pass').value = '';
+  setTimeout(() => $('#pass')?.focus(), 40);
+}
+
+export function closeLoginModal() {
+  $('#scrim')?.classList.remove('open');
+  pendingAction = null;
+}
+
+export async function submitLogin(e) {
+  if (e) e.preventDefault();
+  const username = ($('#user')?.value || 'root').trim();
+  const password = $('#pass')?.value || '';
+  const errEl = $('#login-err');
+  const goBtn = $('#login-go');
+  if (!password) {
+    errEl.textContent = '請輸入密碼';
+    return;
+  }
+  goBtn.disabled = true;
+  errEl.textContent = '';
+  try {
+    const res = await ubusCall('session', 'login', { username, password }, ANON_TOKEN);
+    if (!res || !res.ubus_rpc_session) throw new Error('帳號或密碼錯誤');
+    S.session = res.ubus_rpc_session;
+    S.user = username;
+    localStorage.setItem('prism_session', S.session);
+    localStorage.setItem('prism_user', S.user);
+    updateAuthButton();
+    const fn = pendingAction;
+    closeLoginModal();
+    toast('管理會話已建立');
+    if (fn) await fn();
+    else if (onAuthSuccessCallback) onAuthSuccessCallback();
+  } catch (err) {
+    errEl.textContent = '登入失敗：請確認路由器管理密碼';
+  } finally {
+    goBtn.disabled = false;
+  }
+}

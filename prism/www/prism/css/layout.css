@@ -1,0 +1,215 @@
+/* ============================================================================
+ * PRISM 5.0 — Terminal Window Chrome, 4-Tab Nav & Page Layouts
+ * ============================================================================ */
+
+.viewport-wrap {
+  max-width: 1420px;
+  margin: 0 auto;
+  padding: 14px 16px 24px;
+}
+
+.terminal-window {
+  background: var(--bg-window);
+  border: 1px solid var(--line-window);
+  border-radius: 9px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Titlebar */
+.titlebar {
+  background: var(--bg-titlebar);
+  border-bottom: 1px solid var(--line-window);
+  height: 34px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+
+.traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tl-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+.tl-dot.close { background: var(--dot-close); }
+.tl-dot.min   { background: var(--dot-min); }
+.tl-dot.max   { background: var(--dot-max); }
+
+.titlebar-path {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
+.titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Navigation Bar (4 Minimal Tabs) */
+.nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--line-subtle);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+  letter-spacing: 0.04em;
+}
+.nav-tab:hover {
+  color: var(--text-bright);
+}
+.nav-tab.active {
+  color: var(--text-bright);
+  border-bottom-color: var(--c-amber);
+}
+.nav-tab .tab-idx {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+.nav-tab.active .tab-idx {
+  color: var(--c-amber);
+}
+.nav-tab .tab-badge {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+
+.nav-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* Canvas Body & Pages */
+.terminal-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  display: none;
+}
+.page.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-padded {
+  padding: 20px 22px;
+  gap: 18px;
+}
+
+/* Blueprint Two-Column Schematic Layout (Matches Reference Image) */
+.blueprint-stage {
+  display: grid;
+  grid-template-columns: 265px minmax(0, 1fr);
+  gap: 24px;
+  align-items: stretch;
+  position: relative;
+}
+
+.blueprint-pipeline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.blueprint-subnodes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+/* Terminal CLI Prompt Footer */
+.cli-footer {
+  background: var(--bg-panel-alt);
+  border-top: 1px solid var(--line-window);
+  padding: 11px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.cli-cmd-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cli-status-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.cli-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: var(--c-mint);
+  vertical-align: middle;
+  animation: cursor-blink 1.1s steps(2, start) infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@media (max-width: 1024px) {
+  .blueprint-stage {
+    grid-template-columns: 1fr;
+  }
+  .blueprint-subnodes {
+    grid-template-columns: 1fr;
+  }
+}

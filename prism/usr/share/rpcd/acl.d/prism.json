@@ -1,0 +1,23 @@
+{
+	"unauthenticated": {
+		"description": "Prism dashboard: read-only status for anyone on the LAN",
+		"read": {
+			"ubus": {
+				"prism": [ "status", "series", "events", "doctor", "tunnel", "devices", "rules" ]
+			}
+		}
+	},
+	"prism-admin": {
+		"description": "Prism management",
+		"read": {
+			"ubus": {
+				"prism": [ "status", "series", "events", "doctor", "tunnel", "devices", "rules", "config", "connections" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"prism": [ "reconcile", "configure", "relogin", "select", "device", "remember", "forget" ]
+			}
+		}
+	}
+}

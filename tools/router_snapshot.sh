@@ -2,7 +2,7 @@
 # Read-only snapshot of the live router. Run through ssh with this file on
 # stdin; a tar.gz comes back on stdout. Secrets are redacted or left behind.
 main() {
-S=/tmp/braid-snap.$$
+S=/tmp/prism-snap.$$
 mkdir -p "$S/info" "$S/root" || exit 1
 RED='s/\(key\|password\|passwd\|sae_password\|secret\|uuid\|public-key\|short-id\|identity\|username\)\([^A-Za-z]*[=:][ ]*\).*/\1\2REDACTED/'
 export RED
@@ -12,7 +12,7 @@ cap release 'cat /etc/openwrt_release; uname -a; cat /tmp/sysinfo/model /tmp/sys
 cap pkgs 'apk list -I 2>/dev/null || apk info -v 2>/dev/null || opkg list-installed'
 cap tools 'for b in ucode lua luajit python3 jq curl wget nft tc ip ethtool flock timeout resolveip iw iwinfo smartdns dnsmasq mwan3 sing-box xray; do printf "%s=" $b; command -v $b || echo -; done; ls -la /usr/lib/ucode /usr/share/ucode /usr/lib/lua 2>&1; nft --version; readlink -f $(command -v ip); readlink -f $(command -v tc)'
 cap nft_terse 'nft -t list ruleset'
-cap nft_braid 'nft -t list table inet braid; nft list set inet braid strands; nft list map inet braid pattern; nft list set inet braid relay4; nft list set inet braid tunnel4_dns; nft list chain inet braid classify; nft list chain inet braid weave'
+cap nft_prism 'nft -t list table inet prism; nft list set inet prism strands; nft list map inet prism pattern; nft list set inet prism relay4; nft list set inet prism tunnel4_dns; nft list chain inet prism classify; nft list chain inet prism weave'
 cap ip_link 'ip -br link; echo; ip -d link show'
 cap ip_addr 'ip -4 -br addr; echo; ip -6 -br addr'
 cap ip_rule 'ip rule; echo; ip -6 rule'
@@ -21,16 +21,16 @@ cap ubus_iface 'ubus call network.interface dump'
 cap ubus_dev 'ubus call network.device status'
 cap ubus_list 'ubus list'
 cap ubus_service 'ubus call service list | sed "$RED"'
-for c in braid network firewall dhcp system uhttpd dropbear wireless; do
+for c in prism network firewall dhcp system uhttpd dropbear wireless; do
 	cap "uci_$c" "uci -q show $c | sed \"$RED\""
 done
 cap rc 'ls -la /etc/rc.d /etc/init.d; echo; cat /etc/crontabs/root; echo; cat /etc/rc.local; echo; cat /etc/sysupgrade.conf; ls -la /lib/upgrade/keep.d'
 cap ps 'ps w; echo; top -bn1 | head -30; echo; for p in mihomo smartdns dnsmasq hostapd; do for i in $(pidof $p); do echo $p $i; grep -E "VmRSS|VmSize|Threads" /proc/$i/status; done; done'
 cap listen 'netstat -lntup'
-cap state_ls 'ls -la /tmp/braid /etc/braid /etc/braid/lists /usr/share/braid /usr/share/braid/lib /usr/share/braid/mod 2>&1'
-cap state_json 'for f in status.json doctor.json smartdns.conf; do echo "=== $f"; cat /tmp/braid/$f; echo; done; braid strands'
-cap events 'tail -n 400 /tmp/braid/events.log'
-cap mihomo '/tmp/braid/mihomo -v; echo; sed "s/\(\"\(server\|password\|uuid\|public-key\|short-id\|secret\|sni\|servername\|obfs-password\)\": \)\"[^\"]*\"/\1\"REDACTED\"/" /tmp/braid/mihomo.yaml'
+cap state_ls 'ls -la /tmp/prism /etc/prism /etc/prism/lists /usr/share/prism /usr/share/prism/lib /usr/share/prism/mod 2>&1'
+cap state_json 'for f in status.json doctor.json smartdns.conf; do echo "=== $f"; cat /tmp/prism/$f; echo; done; prism strands'
+cap events 'tail -n 400 /tmp/prism/events.log'
+cap mihomo '/tmp/prism/mihomo -v; echo; sed "s/\(\"\(server\|password\|uuid\|public-key\|short-id\|secret\|sni\|servername\|obfs-password\)\": \)\"[^\"]*\"/\1\"REDACTED\"/" /tmp/prism/mihomo.yaml'
 cap dns 'smartdns -v 2>&1 | head -3; dnsmasq -v 2>&1 | head -4; echo; for f in /var/etc/dnsmasq.conf.* /tmp/resolv.conf /tmp/resolv.conf.auto /tmp/resolv.conf.d/*; do echo "=== $f"; cat $f; done; ls -la /tmp/dnsmasq.d /tmp/dnsmasq.*.d 2>&1'
 cap dns_test 'for h in www.taobao.com www.bilibili.com api.anthropic.com www.google.com; do echo "--- $h"; nslookup $h 127.0.0.1 2>&1 | tail -n 6; done
 echo "--- udp53 to TEST-NET (reply means the network intercepts 53)"; nslookup www.baidu.com 203.0.113.53 2>&1 | tail -n 5
@@ -44,10 +44,10 @@ cap sysctl 'sysctl -a 2>/dev/null | grep -E "tcp_congestion|available_congestion
 cap kernel 'lsmod; echo; cat /proc/interrupts; echo; ls /sys/class/leds; ls /sys/kernel/debug/ieee80211 2>&1'
 cap wifi 'iw dev; echo; iwinfo 2>&1; echo; ubus call network.wireless status | sed "$RED"'
 cap logs 'logread | tail -n 500; echo ===dmesg; dmesg | tail -n 120'
-cap hashes 'find /usr/share/braid /usr/sbin/braid /etc/init.d/braid /etc/config/braid /etc/sysctl.d /etc/braid -type f ! -path "*/zashboard/*" 2>/dev/null | sort | xargs md5sum'
+cap hashes 'find /usr/share/prism /usr/sbin/prism /etc/init.d/prism /etc/config/prism /etc/sysctl.d /etc/prism -type f ! -path "*/zashboard/*" 2>/dev/null | sort | xargs md5sum'
 cap conntrack 'cat /proc/sys/net/netfilter/nf_conntrack_count; cat /proc/net/stat/nf_conntrack | head -3'
 
-for p in /usr/share/braid/braid.uc /usr/share/braid/braidd.uc /usr/share/braid/lib 	/usr/share/braid/mod /usr/share/braid/portal /usr/share/braid/tpl /usr/sbin/braid 	/etc/init.d/braid /etc/config/braid /etc/braid/lists /etc/braid/provision.json 	/etc/braid/ARCHITECTURE.md /usr/share/rpcd/acl.d/braid.json /www/braid /etc/sysctl.d /etc/crontabs/root /etc/rc.local /etc/nftables.d; do
+for p in /usr/share/prism/prism.uc /usr/share/prism/prismd.uc /usr/share/prism/lib 	/usr/share/prism/mod /usr/share/prism/portal /usr/share/prism/tpl /usr/sbin/prism 	/etc/init.d/prism /etc/config/prism /etc/prism/lists /etc/prism/provision.json 	/etc/prism/ARCHITECTURE.md /usr/share/rpcd/acl.d/prism.json /www/prism /etc/sysctl.d /etc/crontabs/root /etc/rc.local /etc/nftables.d; do
 	[ -e "$p" ] || continue
 	mkdir -p "$S/root$(dirname "$p")"
 	cp -a "$p" "$S/root$(dirname "$p")/" 2>/dev/null
