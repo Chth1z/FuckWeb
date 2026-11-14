@@ -106,18 +106,18 @@ const SCHEMA = {
 };
 
 export const TUNABLE = {
-	"strands.aggregate": { choices: [ "auto", "on", "off" ] },
-	"strands.probe_interval": { min: 30, max: 3600 },
-	"weave.policy": { choices: [ "harvest" ] },
-	"weave.affinity": { choices: [ "flow" ] },
-	"weave.slots": { min: 0, max: 252 },
-	"weave.strand_kbit": { min: 0, max: 1000000 },
-	"classify.remainder": { choices: [ "tunnel" ] },
-	"classify.quic": { choices: [ "reject" ] },
-	"tunnel.enabled": { min: 1, max: 1 },
-	"tunnel.fail_open": { min: 0, max: 0 },
-	"dns.ads": { min: 0, max: 1 },
-	"main.mss": { min: 0, max: 1460 },
+	"strands.aggregate": { choices: [ "auto", "on", "off" ], locked: false },
+	"strands.probe_interval": { min: 30, max: 3600, locked: false },
+	"weave.policy": { choices: [ "harvest" ], locked: true },
+	"weave.affinity": { choices: [ "flow" ], locked: true },
+	"weave.slots": { min: 0, max: 252, locked: false },
+	"weave.strand_kbit": { min: 0, max: 1000000, locked: false },
+	"classify.remainder": { choices: [ "tunnel" ], locked: true },
+	"classify.quic": { choices: [ "reject" ], locked: true },
+	"tunnel.enabled": { min: 1, max: 1, locked: true },
+	"tunnel.fail_open": { min: 0, max: 0, locked: true },
+	"dns.ads": { min: 0, max: 1, locked: false },
+	"main.mss": { min: 0, max: 1460, locked: false },
 };
 
 function coerce(value, fallback) {

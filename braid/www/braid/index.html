@@ -125,32 +125,11 @@ input.search { width: 260px; max-width: 100%; } input.search:focus { outline: 0;
 .tile svg.mini { position: absolute; right: 0; bottom: 0; width: 55%; height: 44px; opacity: .9; }
 .tile svg.mini path { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
 
-/* --- topology (Dark Side of the Moon Prism) */
-.prism-card { background: #090909; border-color: rgba(255,255,255,.09); color: rgba(255,255,255,.85); overflow: hidden; }
-.prism-card > h2 { color: rgba(255,255,255,.78); }
-.prism-card > h2 small { color: rgba(255,255,255,.38); }
-.topo { position: relative; height: 286px; cursor: crosshair; }
+/* --- topology */
+.topo { position: relative; height: 270px; }
 .topo canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.topo .cap { position: absolute; bottom: 13px; font-size: 11.5px; color: rgba(255,255,255,.34); font-family: var(--mono); pointer-events: none; }
-.topo-tip { position: absolute; pointer-events: none; background: rgba(18,18,17,.92); border: 1px solid rgba(255,255,255,.15); color: #f4f4ef; backdrop-filter: blur(8px); border-radius: 10px; padding: 7px 11px; box-shadow: 0 8px 24px rgba(0,0,0,.5); font: 12px/1.45 var(--mono); white-space: nowrap; transform: translate(-50%, -115%); opacity: 0; transition: opacity .1s; z-index: 4; }
-@media (max-width: 760px) { .topo { height: 224px; } }
-
-/* --- 21-channel vertical capacitor equalizer */
-.eq-card { background: #0b0b0a; border-color: rgba(255,255,255,.09); color: rgba(255,255,255,.88); }
-.eq-card > h2 { color: rgba(255,255,255,.82); flex-wrap: wrap; }
-.eq-card > h2 small { color: rgba(255,255,255,.38); }
-.eq-readout { margin-left: auto; font: 12px/1.3 var(--mono); color: rgba(255,255,255,.78); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); padding: 4px 10px; border-radius: 8px; font-weight: 450; }
-.eq-stage { display: grid; grid-template-columns: repeat(21, minmax(0, 1fr)); gap: 6px; height: 196px; padding: 14px 4px 4px; align-items: end; user-select: none; }
-.eq-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; cursor: pointer; position: relative; }
-.eq-vip { width: 5px; height: 5px; border-radius: 50%; background: transparent; margin-bottom: 7px; flex: none; transition: transform .15s; }
-.eq-col.vip .eq-vip { background: #e8c455; box-shadow: 0 0 7px rgba(232,196,85,.85); }
-.eq-track { width: 5px; flex: 1; border-radius: 999px; background: rgba(255,255,255,.08); position: relative; overflow: hidden; display: flex; align-items: flex-end; transition: transform .15s, background .15s; }
-.eq-col:hover .eq-track { transform: scaleX(1.45); background: rgba(255,255,255,.15); }
-.eq-fill { width: 100%; border-radius: 999px; transition: height .35s ease; }
-.eq-idx { margin-top: 9px; font: 11px/1 var(--mono); color: rgba(255,255,255,.38); transition: color .15s; }
-.eq-col.vip .eq-idx, .eq-col:hover .eq-idx { color: #f5f5f0; font-weight: 600; }
-.eq-col.off .eq-track { opacity: .25; }
-@media (max-width: 680px) { .eq-stage { gap: 2px; height: 160px; } .eq-track { width: 4px; } .eq-idx { font-size: 9.5px; } }
+.topo .cap { position: absolute; bottom: 12px; font-size: 11.5px; color: var(--ink-3); }
+@media (max-width: 760px) { .topo { height: 220px; } }
 
 /* --- chart */
 .chart { position: relative; height: 190px; }
@@ -188,10 +167,10 @@ td .badge { max-width: 280px; overflow: hidden; text-overflow: ellipsis; display
 td .badge i { display: inline-block; margin-right: 6px; vertical-align: middle; }
 
 /* --- pattern */
-.pattern { display: flex; gap: 2px; height: 16px; margin: 4px 0 2px; align-items: flex-end; }
-.pattern i { flex: 1; height: 10px; min-width: 1px; border-radius: 2px; background: var(--down-soft); transition: height .14s, opacity .14s, transform .14s; }
-.pattern i.on { height: 16px; opacity: 1 !important; }
-.pattern.dim i:not(.on) { height: 6px; opacity: .16 !important; }
+.pattern { display: flex; gap: 2px; height: 18px; margin: 4px 0 2px; }
+.pattern i { flex: 1; min-width: 1px; border-radius: 2px; background: var(--down-soft); transition: background .12s, transform .12s; }
+.pattern i.on { background: var(--down); transform: scaleY(1.25); }
+.pattern.dim i:not(.on) { background: var(--hair); }
 
 /* --- rules */
 .step { display: grid; grid-template-columns: 30px minmax(0, 1fr) 150px 100px; gap: 12px; align-items: center; padding: 11px 0; border-top: 1px solid var(--hair); }
@@ -276,8 +255,8 @@ td .badge i { display: inline-block; margin-right: 6px; vertical-align: middle; 
 			<div class="card tile"><div class="k">线路</div><div class="v" id="t-strands">–<span></span></div><div class="s" id="t-strands-s"></div></div>
 			<div class="card tile"><div class="k">隧道</div><div class="v" id="t-tunnel">–<span></span></div><div class="s" id="t-tunnel-s"></div></div>
 		</div>
-		<div class="card prism-card"><h2>拓扑 <small>左侧设备白光汇聚入棱镜，右侧折射为 21 层连续光谱色带；悬停光束或色带查看实时状态</small></h2>
-			<div class="topo"><canvas id="topo" aria-label="设备经 Braid 棱镜到各条线路的实时光谱"></canvas><div class="topo-tip" id="topo-tip"></div><div class="cap" style="left:20px" id="cap-dev"></div><div class="cap" style="right:20px" id="cap-str"></div></div>
+		<div class="card"><h2>拓扑 <small>左边是设备，右边是上游的每一条线路；线越粗、光点越密，流量越大</small></h2>
+			<div class="topo"><canvas id="topo" aria-label="设备经 Braid 到各条线路的实时流量"></canvas><div class="cap" style="left:20px" id="cap-dev"></div><div class="cap" style="right:20px" id="cap-str"></div></div>
 		</div>
 		<div class="card"><h2>速率 <small id="chart-range"></small><span class="legend"><span><i class="key"></i>下行</span><span><i class="key up"></i>上行</span></span></h2><div class="body"><div class="chart" id="chart"><div class="tip" id="tip"></div></div></div></div>
 		<div class="grid g2">
@@ -294,14 +273,9 @@ td .badge i { display: inline-block; margin-right: 6px; vertical-align: middle; 
 			<div class="opt"><div class="what"><b>分配策略</b><span>Burst-Harvest 2.0：追踪每条线路 1.0 MB 突发令牌桶（20 Mbit/s 脉冲窗口），优先调度满桶线路，并隔离独立 @vip_lane 电竞专线。</span></div><span class="badge tunnel"><i></i>脉冲收割（已锁定）</span></div>
 			<div class="opt"><div class="what"><b>并发亲和性</b><span>21 条线路共享同一酒店出口公网 IP，全流平滑交错摊开（ISWRR），兼顾 0 跨 IP 掉线风险与满速多流叠加。</span></div><span class="badge direct"><i></i>全流摊开（已锁定）</span></div>
 		</div></div>
-		<div class="card eq-card"><h2>脉冲阵列 <small>柱高代表 1.0 MB 突发令牌桶余量，圆点标记 VIP 专线</small><span class="eq-readout" id="eq-readout">悬停通道查看指标</span></h2><div class="body">
-			<div class="eq-stage" id="eq-stage"></div>
-			<details style="margin-top:12px"><summary class="hint" style="cursor:pointer;user-select:none">展开 21 条线路详细数据表</summary>
-				<div class="scroll" style="margin-top:10px"><table>
-				<thead><tr><th>线路</th><th>令牌桶 / 状态</th><th class="num">纯 RTT</th><th>下行</th><th>上行</th><th class="num">峰值 ↓ / ↑</th><th class="num">槽位</th><th>近 5 分钟</th></tr></thead>
-				<tbody id="strands"></tbody></table></div>
-			</details>
-		</div></div>
+		<div class="card"><h2>线路 <small>每个身份稳态 10 Mbit/s + 1.0 MB 突发脉冲桶（20 Mbit/s），最低延迟线路自动设为 VIP 专线</small></h2><div class="body"><div class="scroll"><table>
+			<thead><tr><th>线路</th><th>令牌桶 / 状态</th><th class="num">纯 RTT</th><th>下行</th><th>上行</th><th class="num">峰值 ↓ / ↑</th><th class="num">槽位</th><th>近 5 分钟</th></tr></thead>
+			<tbody id="strands"></tbody></table></div></div></div>
 	</section>
 
 	<section class="page" data-p="devices">
@@ -525,220 +499,57 @@ function renderTopDevices() {
 	ul.replaceChildren(...top.map((d) => { const li = el("li"); li.append(el("i", "dot " + (d.down + d.up > 1000 ? "good" : "")), el("span", "name", d.name || d.host || d.ip || d.mac), el("span", "meta", "↓ " + rateText(d.down) + "   ↑ " + rateText(d.up))); return li; }));
 }
 
-// --- topology: Dark Side of the Moon optical prism dispersion
-const topo = { mx: -1, my: -1, bound: false, reduce: matchMedia("(prefers-reduced-motion: reduce)").matches };
-function spectrumColor(i, n, alpha = 1) {
-	const hue = Math.round(4 + (i / Math.max(1, n - 1)) * 268);
-	return `hsla(${hue}, 85%, 56%, ${alpha})`;
+// --- topology: devices on the left, strands on the right, Braid in between
+const topo = { parts: [], reduce: matchMedia("(prefers-reduced-motion: reduce)").matches };
+function strandPoint(i, n, w, h, cx, x) {
+	// x: 0 at the upstream edge (right), 1 at the hub
+	const y0 = n > 1 ? 16 + (h - 32) * (i / (n - 1)) : h / 2, yc = h / 2, ease = x * x * (3 - 2 * x);
+	// Neighbours swing in antiphase, so they cross over and under on the way in.
+	const amp = Math.sin(Math.PI * x) * Math.min(18, h / 12) * (1 - x * .5);
+	return [w - 4 - x * (w - 4 - cx), y0 + (yc - y0) * ease + Math.sin(x * 10 + i * Math.PI) * amp];
 }
-function distToSeg(px, py, x1, y1, x2, y2) {
-	const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
-	if (!l2) return Math.hypot(px - x1, py - y1);
-	const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2));
-	return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
-}
-function inQuad(px, py, q) {
-	let inside = false;
-	for (let i = 0, j = q.length - 1; i < q.length; j = i++) {
-		const xi = q[i][0], yi = q[i][1], xj = q[j][0], yj = q[j][1];
-		if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi + 1e-9) + xi)) inside = !inside;
-	}
-	return inside;
+function devicePoint(j, m, h, cx, lx, x) {
+	// x: 0 at the hub, 1 at the device. A cubic that leaves and arrives flat.
+	const y1 = m > 1 ? 30 + (h - 76) * (j / (m - 1)) : h / 2, y0 = h / 2, k = 1 - x, mid = (cx + lx) / 2;
+	return [k * k * k * cx + 3 * k * k * x * mid + 3 * k * x * x * mid + x * x * x * lx, k * k * k * y0 + 3 * k * k * x * y0 + 3 * k * x * x * y1 + x * x * x * y1];
 }
 function drawTopo() {
-	const c = $("#topo"), tip = $("#topo-tip"), s = S.status, dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+	const c = $("#topo"), s = S.status, dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
 	if (!w || S.page !== "overview") return;
-	if (!topo.bound) {
-		topo.bound = true;
-		c.addEventListener("pointermove", (e) => { const r = c.getBoundingClientRect(); topo.mx = e.clientX - r.left; topo.my = e.clientY - r.top; if (topo.reduce) drawTopo(); });
-		c.addEventListener("pointerleave", () => { topo.mx = -1; topo.my = -1; if (tip) tip.style.opacity = 0; if (topo.reduce) drawTopo(); });
-	}
 	if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
 	const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
 	if (!s) return;
-
-	const st = s.strands || [], n = st.length || 1;
-	const sTop = Math.max(QUIET, ...st.map((x) => Math.max(x.now || 0, x.rate || 0, x.up || 0, (x.peak || 0) * .5)));
-	const devs = S.devices.filter((d) => d.online).sort((a, b) => (b.down + b.up) - (a.down + a.up)).slice(0, 6), m = devs.length;
+	const down = css("--down"), up = css("--up"), gray = css("--hair-2"), ink = css("--ink-2");
+	const narrow = w < 560, lx = narrow ? 104 : 176, cx = Math.max(lx + 90, w * .42), cy = h / 2;
+	const st = s.strands, n = st.length, sTop = Math.max(QUIET, ...st.map((x) => Math.max(x.rate || 0, x.up || 0, (x.peak || 0) * .5)));
+	const devs = S.devices.filter((d) => d.online).sort((a, b) => (b.down + b.up) - (a.down + a.up)).slice(0, narrow ? 4 : 6), m = devs.length;
 	const dTop = Math.max(QUIET, ...devs.map((d) => d.down + d.up));
-
-	// Equilateral prism geometry
-	const px = w * 0.45, py = h * 0.52, R = Math.min(82, h * 0.36);
-	const vTop = [px, py - R], vBL = [px - R * 0.866, py + R * 0.5], vBR = [px + R * 0.866, py + R * 0.5];
-	const lerp2 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-
-	let hovered = null;
-
-	// 1. Left incident white rays (Devices -> Prism left face)
-	const rayCount = Math.max(1, m);
-	const devRays = [];
-	for (let j = 0; j < rayCount; j++) {
-		const d = devs[j] || { name: "局域网终端", down: s.total_rate || 0, up: s.total_up || 0, ip: "192.168.16.0/24" };
-		const tL = rayCount === 1 ? 0.46 : 0.38 + (j / (rayCount - 1)) * 0.16;
-		const hit = lerp2(vTop, vBL, tL);
-		const startY = hit[1] + hit[0] * 0.24 + (j - (rayCount - 1) / 2) * (rayCount > 1 ? 16 : 0);
-		devRays.push({ d, x1: 0, y1: startY, x2: hit[0], y2: hit[1] });
-		if (topo.mx >= 0 && topo.mx < hit[0] && distToSeg(topo.mx, topo.my, 0, startY, hit[0], hit[1]) < 9) {
-			hovered = { type: "dev", data: d };
-		}
-	}
-
-	// 2. Right continuous gapless spectrum ribbon geometry (Prism right face -> Right edge)
-	const outTop = lerp2(vTop, vBR, 0.32), outBot = lerp2(vTop, vBR, 0.66);
-	const rEndTopY = outTop[1] + (w - outTop[0]) * 0.15;
-	const rEndBotY = outBot[1] + (w - outBot[0]) * 0.24;
-	const quads = st.map((x, i) => {
-		const t0 = i / n, t1 = (i + 1) / n;
-		const pL0 = lerp2(outTop, outBot, t0), pL1 = lerp2(outTop, outBot, t1);
-		const yR0 = rEndTopY + (rEndBotY - rEndTopY) * t0;
-		const yR1 = rEndTopY + (rEndBotY - rEndTopY) * t1;
-		const q = [[pL0[0], pL0[1] - 0.45], [w, yR0 - 0.45], [w, yR1 + 0.45], [pL1[0], pL1[1] + 0.45]];
-		if (!hovered && topo.mx >= pL0[0] && inQuad(topo.mx, topo.my, q)) {
-			hovered = { type: "strand", data: x, idx: i };
-		}
-		return { x, i, q, pL0, pL1, yR0, yR1 };
+	const line = (pt, k, color, dashed) => { g.beginPath(); for (let p = 0; p <= 48; p++) { const [px, py] = pt(p / 48); p ? g.lineTo(px, py) : g.moveTo(px, py); } g.lineWidth = 1 + 2.4 * k; g.lineCap = "round"; g.strokeStyle = color; g.globalAlpha = dashed ? .6 : .2 + .72 * k; g.setLineDash(dashed ? [3, 5] : []); g.stroke(); g.setLineDash([]); };
+	st.forEach((x, i) => line((t) => strandPoint(i, n, w, h, cx, t), x.healthy ? Math.min(1, Math.sqrt(Math.max(x.rate || 0, x.up || 0) / sTop)) : 0, x.healthy ? down : gray, !x.healthy));
+	g.font = "12px " + css("--sans"); g.textBaseline = "middle"; g.textAlign = "right";
+	devs.forEach((d, j) => {
+		line((t) => devicePoint(j, m, h, cx, lx, t), Math.min(1, Math.sqrt((d.down + d.up) / dTop)), down, false);
+		const y = devicePoint(j, m, h, cx, lx, 1)[1]; let name = d.name || d.host || d.ip;
+		g.globalAlpha = 1; g.fillStyle = ink; while (name.length > 3 && g.measureText(name).width > lx - 34) name = name.slice(0, -2) + "…";
+		g.fillText(name, lx - 12, y); g.beginPath(); g.arc(lx, y, 3, 0, 6.3); g.fillStyle = down; g.fill();
 	});
-
-	if (!hovered && topo.mx >= 0 && inQuad(topo.mx, topo.my, [vTop, vBR, vBL])) {
-		hovered = { type: "prism" };
-	}
-
-	// Render right-side continuous rainbow ribbon
-	g.save();
-	for (const b of quads) {
-		const isHov = hovered?.type === "strand" && hovered.idx === b.i;
-		const loadK = Math.min(1, Math.sqrt(Math.max(b.x.now || 0, b.x.rate || 0) / sTop));
-		const tokK = Math.min(1, Math.max(0, (b.x.tokens ?? 1000000) / 1000000));
-		let alpha = !b.x.healthy ? 0.14 : (0.68 + 0.24 * Math.max(loadK, tokK * 0.5));
-		if (hovered?.type === "strand") alpha = isHov ? 1.0 : alpha * 0.42;
-
-		g.beginPath();
-		g.moveTo(b.q[0][0], b.q[0][1]);
-		g.lineTo(b.q[1][0], b.q[1][1]);
-		g.lineTo(b.q[2][0], b.q[2][1]);
-		g.lineTo(b.q[3][0], b.q[3][1]);
-		g.closePath();
-		g.fillStyle = spectrumColor(b.i, n, alpha);
-		g.fill();
-
-		if (isHov || b.x.vip) {
-			g.beginPath();
-			g.moveTo((b.pL0[0] + b.pL1[0]) / 2, (b.pL0[1] + b.pL1[1]) / 2);
-			g.lineTo(w, (b.yR0 + b.yR1) / 2);
-			g.strokeStyle = isHov ? "rgba(255,255,255,0.75)" : "rgba(255,235,160,0.45)";
-			g.lineWidth = isHov ? 1.5 : 0.9;
-			g.stroke();
+	if (!topo.reduce) {
+		topo.parts = topo.parts.filter((p) => p.x < 1 && (p.dev ? p.i < m : p.i < n));
+		st.forEach((x, i) => { if (!x.healthy) return; for (const [val, isUp] of [[x.now || 0, false], [x.up_now || 0, true]]) { const k = Math.min(1, val / sTop); if (Math.random() < (isUp ? 0 : .01) + k * .2) topo.parts.push({ i, x: 0, v: .005 + .012 * k + Math.random() * .003, up: isUp }); } });
+		devs.forEach((d, j) => { for (const [val, isUp] of [[d.down, false], [d.up, true]]) { const k = Math.min(1, val / dTop); if (Math.random() < k * .22) topo.parts.push({ dev: true, i: j, x: 0, v: .006 + .012 * k + Math.random() * .003, up: isUp }); } });
+		for (const p of topo.parts) {
+			p.x += p.v;
+			// Download runs strand -> hub -> device; upload runs the other way.
+			// Both parametrisations start at 0 on the side a download enters.
+			const t = Math.min(1, p.x), along = p.up ? 1 - t : t;
+			const [px, py] = p.dev ? devicePoint(p.i, m, h, cx, lx, along) : strandPoint(p.i, n, w, h, cx, along);
+			g.globalAlpha = .9 * Math.sin(Math.PI * t) + .1; g.fillStyle = p.up ? up : down; g.beginPath(); g.arc(px, py, 1.7, 0, 6.3); g.fill();
 		}
 	}
-	g.restore();
-
-	// Render left incident white rays
-	for (const r of devRays) {
-		const isHov = hovered?.type === "dev" && hovered.data === r.d;
-		const k = Math.min(1, Math.sqrt(((r.d.down || 0) + (r.d.up || 0)) / dTop));
-		g.save();
-		g.beginPath();
-		g.moveTo(r.x1, r.y1);
-		g.lineTo(r.x2, r.y2);
-		g.strokeStyle = isHov ? "#ffffff" : `rgba(255,255,255,${0.55 + 0.4 * k})`;
-		g.lineWidth = isHov ? 3.2 : (1.5 + 1.6 * k);
-		g.shadowColor = "rgba(255,255,255,0.75)";
-		g.shadowBlur = isHov ? 14 : 7;
-		g.stroke();
-		g.restore();
-	}
-
-	// Render central equilateral prism + internal optical dispersion wedge
-	g.save();
-	g.beginPath();
-	g.moveTo(vTop[0], vTop[1]);
-	g.lineTo(vBR[0], vBR[1]);
-	g.lineTo(vBL[0], vBL[1]);
-	g.closePath();
-	const pGrad = g.createLinearGradient(vTop[0], vTop[1], vBL[0], vBR[1]);
-	pGrad.addColorStop(0, "rgba(255,255,255,0.09)");
-	pGrad.addColorStop(0.5, "rgba(14,18,28,0.86)");
-	pGrad.addColorStop(1, "rgba(255,255,255,0.04)");
-	g.fillStyle = pGrad;
-	g.fill();
-
-	// Internal dispersion wedge
-	const inEntry = lerp2(vTop, vBL, 0.46);
-	const wGrad = g.createLinearGradient(inEntry[0], inEntry[1], (outTop[0] + outBot[0]) / 2, (outTop[1] + outBot[1]) / 2);
-	wGrad.addColorStop(0, "rgba(255,255,255,0.92)");
-	wGrad.addColorStop(0.45, "rgba(255,255,255,0.32)");
-	wGrad.addColorStop(1, "rgba(180,210,255,0.14)");
-	g.beginPath();
-	g.moveTo(inEntry[0], inEntry[1]);
-	g.lineTo(outTop[0], outTop[1]);
-	g.lineTo(outBot[0], outBot[1]);
-	g.closePath();
-	g.fillStyle = wGrad;
-	g.fill();
-
-	// Outer and inner crystal bevel edges
-	g.beginPath();
-	g.moveTo(vTop[0], vTop[1]);
-	g.lineTo(vBR[0], vBR[1]);
-	g.lineTo(vBL[0], vBL[1]);
-	g.closePath();
-	g.lineJoin = "round";
-	g.lineWidth = hovered?.type === "prism" ? 2.6 : 2.1;
-	g.strokeStyle = hovered?.type === "prism" ? "rgba(255,255,255,0.92)" : "rgba(225,236,255,0.72)";
-	g.shadowColor = "rgba(200,225,255,0.35)";
-	g.shadowBlur = 12;
-	g.stroke();
-
-	const inR = R * 0.88;
-	g.beginPath();
-	g.moveTo(px, py - inR);
-	g.lineTo(px + inR * 0.866, py + inR * 0.5);
-	g.lineTo(px - inR * 0.866, py + inR * 0.5);
-	g.closePath();
-	g.shadowBlur = 0;
-	g.lineWidth = 0.8;
-	g.strokeStyle = "rgba(255,255,255,0.22)";
-	g.stroke();
-	g.restore();
-
-	// Floating hover capsule (#topo-tip)
-	if (tip) {
-		if (hovered) {
-			const Swatch = (col) => { const i = el("i", "swatch"); i.style.background = col; return i; };
-			if (hovered.type === "strand") {
-				const x = hovered.data, pct = Math.round(Math.min(100, Math.max(0, (x.tokens ?? 1000000) / 10000)));
-				const tag = !x.healthy ? "离线" : x.vip ? "VIP 专线" : `令牌桶 ${pct}%`;
-				tip.replaceChildren(
-					Swatch(spectrumColor(hovered.idx, n)),
-					el("b", "", x.dev),
-					el("span", "meta", `${x.healthy ? Math.round((x.ttfb || 0) * 1000) + " ms" : "HTTP " + (x.http || "—")} · ↓ ${rateText(x.now || x.rate || 0)} · ↑ ${rateText(x.up_now || x.up || 0)} · ${tag}`)
-				);
-			} else if (hovered.type === "dev") {
-				const d = hovered.data;
-				tip.replaceChildren(
-					Swatch("#ffffff"),
-					el("b", "", d.name || d.host || d.ip || d.mac),
-					el("span", "meta", `↓ ${rateText(d.down || 0)} · ↑ ${rateText(d.up || 0)} · ${d.ip || d.mac || ""}`)
-				);
-			} else {
-				tip.replaceChildren(
-					Swatch("#e8c455"),
-					el("b", "", "Braid 棱镜核心"),
-					el("span", "meta", `${s.healthy_strands}/${n} 股在线 · VIP: ${s.weave?.vip || "—"} · 总下行 ${rateText(s.total_rate || 0)}`)
-				);
-			}
-			const tx = Math.max(130, Math.min(w - 130, topo.mx));
-			const ty = Math.max(36, topo.my);
-			tip.style.left = tx + "px";
-			tip.style.top = ty + "px";
-			tip.style.opacity = 1;
-		} else {
-			tip.style.opacity = 0;
-		}
-	}
-
+	g.globalAlpha = 1; g.beginPath(); g.arc(cx, cy, 13, 0, 6.3); g.fillStyle = css("--surface"); g.fill(); g.lineWidth = 2; g.strokeStyle = down; g.stroke();
+	g.beginPath(); g.arc(cx, cy, 4, 0, 6.3); g.fillStyle = down; g.fill();
 	$("#cap-dev").textContent = m ? `${S.devices.filter((d) => d.online).length} 台设备在线` : "没有在线设备";
-	$("#cap-str").textContent = n > 1 ? `上游 ${n} 股连续光谱 · VIP: ${s.weave?.vip || "—"}` : "上游单线路";
+	$("#cap-str").textContent = n > 1 ? `上游 ${n} 条线路` : "上游单线路";
 }
 function loop() { drawTopo(); if (!topo.reduce) requestAnimationFrame(loop); }
 
@@ -779,90 +590,21 @@ function renderChart() {
 
 // --- strands
 function sparkPath(row, max) { const pts = row.slice(-60), n = pts.length; if (n < 2) return ""; return pts.map((v, i) => (i ? "L" : "M") + (110 * i / (n - 1)).toFixed(1) + " " + (22 - 20 * Math.min(1, v / max)).toFixed(1)).join(""); }
-function bucketText(x) {
-	const pct = Math.round(Math.min(100, Math.max(0, (x.tokens ?? 1000000) / 10000)));
-	if (!x.healthy) return x.parked ? "已停靠" : "离线";
-	if (x.vip) return "⚡ VIP 专线";
-	if (x.bucket === "charged") return `满桶脉冲 ${pct}%`;
-	if (x.bucket === "draining") return `脉冲释放 ${pct}%`;
-	if (x.bucket === "depleted") return `限速压制 ${pct}%`;
-	if (x.bucket === "cooling") return `冷却回血 ${pct}%`;
-	return `健康 ${pct}%`;
-}
 function setHover(dev) {
-	S.hover = dev;
-	const st = S.status?.strands || [], x = st.find((s) => s.dev === dev), id = x?.id, p = $("#pattern"), eq = $("#eq-stage"), ro = $("#eq-readout");
-	if (p) {
-		p.classList.toggle("dim", id != null);
-		[...p.children].forEach((c) => c.classList.toggle("on", id != null && +c.dataset.id === id));
-	}
-	if (eq) {
-		[...eq.children].forEach((col) => col.classList.toggle("on", dev != null && col.dataset.dev === dev));
-	}
-	if (ro && S.status) {
-		if (x) {
-			ro.textContent = `${x.dev} (${x.ip || "无地址"}) · ${bucketText(x)} · 首包 ${x.healthy ? Math.round((x.ttfb || 0) * 1000) + " ms" : "—"} · ↓ ${rateText(x.rate || 0)} · ↑ ${rateText(x.up || 0)} · ${x.slots || 0} 槽位`;
-		} else {
-			const charged = st.filter((s) => s.healthy && s.bucket === "charged").length;
-			ro.textContent = `VIP 专线: ${S.status.weave?.vip || "—"} · 满桶待命: ${charged}/${st.length} 股 · 悬停色柱查看单线详情`;
-		}
-	}
+	S.hover = dev; const id = S.status?.strands.find((x) => x.dev === dev)?.id, p = $("#pattern");
+	p.classList.toggle("dim", id != null); [...p.children].forEach((c) => c.classList.toggle("on", id != null && +c.dataset.id === id));
 }
 function renderStrands() {
 	const s = S.status; if (!s || S.page !== "strands") return;
-	const w = s.weave || {}, pat = w.pattern || [], p = $("#pattern"), st = s.strands || [], n = st.length || 1;
-	const idToIdx = new Map(st.map((x, i) => [x.id, i]));
-	$("#weave-cap").textContent = pat.length ? `${pat.length} 个槽位，每 ${w.interval || 2} 秒按负载重排` : "只有一条线路，不需要编织";
-	if (p.children.length !== pat.length || pat.some((id, i) => +p.children[i].dataset.id !== id)) {
-		p.replaceChildren(...pat.map((id) => {
-			const c = el("i"), idx = idToIdx.get(id) ?? 0;
-			c.dataset.id = id;
-			c.style.background = spectrumColor(idx, n, 0.85);
-			return c;
-		}));
-	} else {
-		[...p.children].forEach((c) => {
-			const idx = idToIdx.get(+c.dataset.id) ?? 0;
-			c.style.background = spectrumColor(idx, n, 0.85);
-		});
-	}
-
-	// 21-channel vertical capacitor equalizer (#eq-stage)
-	const eq = $("#eq-stage");
-	if (eq) {
-		if (eq.children.length !== st.length) {
-			eq.replaceChildren(...st.map((x, i) => {
-				const col = el("div", "eq-col"), vip = el("i", "eq-vip"), trk = el("div", "eq-track"), fill = el("div", "eq-fill"), idx = el("span", "eq-idx", String(i));
-				col.dataset.dev = x.dev;
-				trk.append(fill);
-				col.append(vip, trk, idx);
-				col.onpointerenter = () => setHover(x.dev);
-				col.onpointerleave = () => setHover(null);
-				return col;
-			}));
-		}
-		st.forEach((x, i) => {
-			const col = eq.children[i]; if (!col) return;
-			col.dataset.dev = x.dev;
-			const pct = !x.healthy ? 0 : Math.max(4, Math.round(Math.min(100, Math.max(0, (x.tokens ?? 1000000) / 10000))));
-			const vip = col.querySelector(".eq-vip"), fill = col.querySelector(".eq-fill");
-			if (vip) vip.classList.toggle("on", !!x.vip);
-			if (fill) {
-				fill.style.height = pct + "%";
-				fill.style.background = spectrumColor(i, n, x.healthy ? 0.9 : 0.2);
-			}
-		});
-	}
-
-	const top = Math.max(QUIET, ...st.map((x) => Math.max(x.rate || 0, x.peak || 0))), topUp = Math.max(QUIET, ...st.map((x) => Math.max(x.up || 0, x.up_peak || 0)));
-	const sparkTop = Math.max(QUIET, ...st.map((x) => Math.max(...(S.series.strands[x.dev] || [0]).slice(-60))));
-	$("#strands").replaceChildren(...st.map((x, i) => {
-		const tr = el("tr", x.healthy ? "" : "off"), c1 = el("td");
-		const titleRow = el("div", "t1");
-		const sw = el("i", "dot"); sw.style.background = spectrumColor(i, n, 0.95); sw.style.marginRight = "7px";
-		titleRow.append(sw, document.createTextNode(x.dev));
-		c1.append(titleRow, el("div", "t2", x.ip || "无地址"));
-		const bLabel = bucketText(x);
+	const w = s.weave || {}, pat = w.pattern || [], p = $("#pattern");
+	$("#weave-cap").textContent = pat.length ? `${pat.length} 个槽位，每 ${w.interval || 5} 秒按负载重排` : "只有一条线路，不需要编织";
+	if (p.children.length !== pat.length || pat.some((id, i) => +p.children[i].dataset.id !== id)) p.replaceChildren(...pat.map((id) => { const c = el("i"); c.dataset.id = id; return c; }));
+	const top = Math.max(QUIET, ...s.strands.map((x) => Math.max(x.rate || 0, x.peak || 0))), topUp = Math.max(QUIET, ...s.strands.map((x) => Math.max(x.up || 0, x.up_peak || 0)));
+	const sparkTop = Math.max(QUIET, ...s.strands.map((x) => Math.max(...(S.series.strands[x.dev] || [0]).slice(-60))));
+	$("#strands").replaceChildren(...s.strands.map((x) => {
+		const tr = el("tr", x.healthy ? "" : "off"), c1 = el("td"); c1.append(el("div", "t1", x.dev), el("div", "t2", x.ip || "无地址"));
+		const pct = Math.round(Math.min(100, Math.max(0, (x.tokens ?? 1000000) / 10000)));
+		const bLabel = !x.healthy ? (x.parked ? "已停靠" : "离线") : x.vip ? "⚡ VIP 专线" : x.bucket === "charged" ? `满桶脉冲 ${pct}%` : x.bucket === "draining" ? `脉冲释放 ${pct}%` : x.bucket === "depleted" ? `限速压制 ${pct}%` : x.bucket === "cooling" ? `冷却回血 ${pct}%` : "健康";
 		const bKind = !x.healthy ? (x.parked ? "warning" : "critical") : (x.vip || x.bucket === "charged") ? "good" : (x.bucket === "draining" || x.bucket === "cooling") ? "warning" : "critical";
 		const c2 = el("td"); c2.append(stateEl(bKind, bLabel));
 		const c4 = el("td"); c4.append(barEl((x.rate || 0) / top), rateText(x.rate || 0));
@@ -871,7 +613,7 @@ function renderStrands() {
 		tr.append(c1, c2, el("td", "num", x.healthy ? Math.round((x.ttfb || 0) * 1000) + " ms" : "HTTP " + (x.http || "—")), c4, c5, el("td", "num muted", rate(x.peak || 0)[0] + " / " + rateText(x.up_peak || 0)), el("td", "num", String(x.slots || 0)), c8);
 		tr.onpointerenter = () => setHover(x.dev); tr.onpointerleave = () => setHover(null); return tr;
 	}));
-	setHover(S.hover);
+	if (S.hover) setHover(S.hover);
 }
 
 // --- devices

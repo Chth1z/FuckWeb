@@ -181,8 +181,8 @@ export function check(ctx) {
 			let h = state(s), r = res[s.dev] ?? { code: 0, ttfb: 0 };
 			h.code = r.code;
 			if (r.code == cfg.probe_expect && r.ttfb > 0) {
-				let sample = (h.ttfb > 0 && r.ttfb > h.ttfb * 1.8) ? (h.ttfb * 1.25) : r.ttfb;
-				h.ttfb = (h.ttfb > 0 && h.ttfb < 0.5) ? (0.35 * sample + 0.65 * h.ttfb) : min(0.25, sample);
+				let sample = (h.ttfb > 0 && h.ttfb < 0.45 && r.ttfb > h.ttfb * 1.8) ? (h.ttfb * 1.25) : r.ttfb;
+				h.ttfb = (h.ttfb > 0 && h.ttfb < 0.45) ? (0.35 * sample + 0.65 * h.ttfb) : sample;
 			}
 			else {
 				h.ttfb = max(0.45, (h.ttfb ?? 0.20) * 1.5);

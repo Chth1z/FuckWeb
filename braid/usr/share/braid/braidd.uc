@@ -99,7 +99,7 @@ function sample() {
 		return;
 	let dt = sampled ? now - sampled : 0, alpha = cfg.weave.smoothing;
 	sample_devices(dt);
-	let total = { down: 0, up: 0 }, per = {};
+	let total = { down: 0, up: 0 }, per = {}, per_up = {};
 	for (let dev in keys(counted.down)) {
 		let l = (load[dev] ??= {
 			down: { bytes: null, now: 0, rate: 0, peak: 0 },
@@ -117,13 +117,14 @@ function sample() {
 			total[dir] += d.now;
 		}
 		per[dev] = l.down.now;
+		per_up[dev] = l.up.now;
 	}
 	for (let dev in keys(load))
 		if (counted.down[dev] == null)
 			delete load[dev];
 	weave.update_buckets(load, dt, now);
 	sampled = now;
-	series.add(history, time(), total.down, total.up, per);
+	series.add(history, time(), total.down, total.up, per, per_up);
 	relay();
 }
 
@@ -181,6 +182,7 @@ let published = bus.publish("braid", api.methods({
 	history: () => history,
 	devices: device_view,
 	interval: () => cfg.weave.interval,
+	now: monotonic,
 	kick: () => kick(DEBOUNCE_MS / 4),
 	reload: () => (cfg = config.load()),
 }));

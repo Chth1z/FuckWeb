@@ -10,7 +10,22 @@ import * as fs from "fs";
 import * as core from "../lib/core.uc";
 import * as config from "../lib/config.uc";
 import * as series from "../lib/series.uc";
+import * as weave from "./weave.uc";
 import { save_selected } from "./tunnel.uc";
+
+let list_cache = {};
+
+function list_count(file) {
+	let st = fs.stat(file);
+	if (!st)
+		return 0;
+	let mark = sprintf("%d.%d", st.size, st.mtime);
+	if (list_cache[file]?.mark == mark)
+		return list_cache[file].count;
+	let count = length(core.lines(file));
+	list_cache[file] = { mark, count };
+	return count;
+}
 
 function controller(cfg, lan_ip, method, url, body) {
 	let cmd = sprintf("curl -4 -m 3 -sS -X %s -H %s", method,
@@ -57,7 +72,8 @@ function direct_flows(snap) {
 		push(out, {
 			key: m[1] + m[2] + ":" + m[4] + ">" + m[3] + ":" + m[5],
 			src: m[2], dst: m[3], port: int(m[5]), proto: m[1], route: "direct",
-			via: strand[mark & 0xff] ?? "", up: int(m[6]), down: int(m[7]),
+			via: strand[mark & 0xff] ?? "", vip: (mark & 0x100) != 0,
+			up: int(m[6]), down: int(m[7]),
 		});
 	}
 	f.close();
@@ -73,7 +89,8 @@ function tunnel_flows(cfg, lan_ip) {
 			continue;
 		push(out, {
 			key: c.id, src: m.sourceIP, dst: m.host || m.sniffHost || m.destinationIP, port: int(m.destinationPort),
-			proto: m.network, route: "tunnel", via: c.chains?.[0] ?? "", up: c.upload ?? 0, down: c.download ?? 0,
+			proto: m.network, route: "tunnel", via: c.chains?.[0] ?? "", vip: false,
+			up: c.upload ?? 0, down: c.download ?? 0,
 			start: c.start ?? "",
 		});
 	}
@@ -121,23 +138,43 @@ export function methods(d) {
 		status: {
 			call: function() {
 				let snap = d.snapshot() ?? {}, load = d.load(), pattern = d.pattern(), vip = d.vip?.() ?? [];
-				let vip_id = (vip[0] ?? 0) & 0xff;
-				let weight = {}, total = 0;
+				let mnow = d.now ? d.now() : 0;
+				let vip_id = (vip[0] ?? 0) & 0xff, vip_dev = "";
+				let weight = {};
 				for (let id in pattern)
 					weight[id] = (weight[id] ?? 0) + 1;
-				let total_up = 0;
+				let total = 0, total_up = 0, total_ewma = 0, total_up_ewma = 0, total_bytes = 0, total_up_bytes = 0;
+				let healthy_count = 0, b_counts = { charged: 0, draining: 0, depleted: 0, cooling: 0 };
 				let strands = map(snap.strands ?? [], (s) => {
 					let down = load[s.dev]?.down ?? {}, up = load[s.dev]?.up ?? {}, b = load[s.dev]?.bucket ?? {};
+					let is_vip = s.id == vip_id;
+					if (is_vip)
+						vip_dev = s.dev;
+					if (s.healthy)
+						healthy_count++;
+					let b_state = b.state ?? "charged";
+					if (s.healthy && b_counts[b_state] != null)
+						b_counts[b_state]++;
+					let tokens = int(b.tokens ?? weave.BURST_MAX);
+					let cd_rem = (b.cooldown_until && mnow > 0 && b.cooldown_until > mnow) ? +sprintf("%.1f", b.cooldown_until - mnow) : 0;
 					total += down.now ?? 0;
 					total_up += up.now ?? 0;
+					total_ewma += down.rate ?? 0;
+					total_up_ewma += up.rate ?? 0;
+					total_bytes += down.bytes ?? 0;
+					total_up_bytes += up.bytes ?? 0;
 					return {
 						...s,
-						rate: int(down.rate ?? 0), now: int(down.now ?? 0), peak: int(down.peak ?? 0),
-						up: int(up.rate ?? 0), up_now: int(up.now ?? 0), up_peak: int(up.peak ?? 0),
+						ttfb_ms: int((s.ttfb ?? 0) * 1000 + 0.5),
+						rate: int(down.rate ?? 0), now: int(down.now ?? 0), peak: int(down.peak ?? 0), down_bytes: down.bytes ?? 0,
+						up: int(up.rate ?? 0), up_now: int(up.now ?? 0), up_peak: int(up.peak ?? 0), up_bytes: up.bytes ?? 0,
 						slots: weight[s.id] ?? 0,
-						vip: s.id == vip_id,
-						bucket: b.state ?? "charged",
-						tokens: int(b.tokens ?? 1000000),
+						vip: is_vip,
+						bucket: b_state,
+						tokens,
+						tokens_max: weave.BURST_MAX,
+						tokens_pct: int(min(100, max(0, tokens * 100 / weave.BURST_MAX))),
+						cooldown_rem: cd_rem,
 					};
 				});
 				// The current choice for every tunable, so a viewer who is not
@@ -153,10 +190,27 @@ export function methods(d) {
 					version: core.VERSION,
 					ts: time(),
 					reconciled: snap.ts ?? 0,
+					strand_count: length(strands),
+					healthy_count,
 					rate: int(total),
 					rate_up: int(total_up),
+					rate_ewma: int(total_ewma),
+					rate_up_ewma: int(total_up_ewma),
+					down_bytes: total_bytes,
+					up_bytes: total_up_bytes,
 					strands,
-					weave: { ...(snap.weave ?? {}), pattern, vip, interval: d.interval() },
+					weave: {
+						...(snap.weave ?? {}),
+						pattern,
+						vip,
+						vip_id,
+						vip_dev,
+						interval: d.interval(),
+						charged_count: b_counts.charged,
+						draining_count: b_counts.draining,
+						depleted_count: b_counts.depleted,
+						cooling_count: b_counts.cooling,
+					},
 				};
 			},
 		},
@@ -230,9 +284,9 @@ export function methods(d) {
 					rules: rules(),
 					tunnel_on: !!d.snapshot()?.tunnel?.on,
 					sizes: {
-						domestic4: length(core.lines(config.path(c.classify.domestic4))),
-						tunnel4: length(core.lines(config.path(c.classify.tunnel4))),
-						tunnel_domains: length(core.lines(config.path(c.classify.tunnel_domains))),
+						domestic4: list_count(config.path(c.classify.domestic4)),
+						tunnel4: list_count(config.path(c.classify.tunnel4)),
+						tunnel_domains: list_count(config.path(c.classify.tunnel_domains)),
 						tunnel4_dns: set_size("tunnel4_dns"),
 						relay4: set_size("relay4"),
 					},

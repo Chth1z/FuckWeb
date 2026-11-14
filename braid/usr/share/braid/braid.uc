@@ -73,7 +73,8 @@ function snapshot(ctx, report, led_color) {
 		strands: map(ctx.strands, (s) => {
 			let h = st.strands[s.dev] ?? {};
 			return {
-				dev: s.dev, id: s.id, ip: s.ip ?? "", role: s.role,
+				dev: s.dev, id: s.id, ip: s.ip ?? "", gw: s.gw ?? "",
+				subnet: s.subnet ?? "", iface: s.iface ?? "", role: s.role,
 				healthy: s.dev in healthy,
 				http: h.code ?? 0, ttfb: h.ttfb ?? 0,
 				parked: (h.parked ?? 0) > 0,

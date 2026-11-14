@@ -1,0 +1,380 @@
+# Braid 5.0 — Frontend HTTP / ubus API Specification
+
+This document defines the complete backend API contract exposed by `braidd` (`usr/share/braid/mod/api.uc`) over OpenWrt `uhttpd-mod-ubus` (`POST /ubus`). It is designed as the authoritative reference for building or redesigning the `/www/braid/index.html` frontend.
+
+---
+
+## 1. Transport & Authentication Protocol
+
+All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/json` using JSON-RPC 2.0.
+
+### 1.1 Request Envelope
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "call",
+  "params": [
+    "<session_token>",
+    "braid",
+    "<method_name>",
+    { ...args }
+  ]
+}
+```
+- **Anonymous Session Token** (for public LAN read endpoints):
+  `"00000000000000000000000000000000"`
+- **Authenticated Session Token** (for `config`, `connections`, and all write methods):
+  Obtained via standard OpenWrt `session.login`:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "call",
+    "params": [
+      "00000000000000000000000000000000",
+      "session",
+      "login",
+      { "username": "root", "password": "<password>", "timeout": 3600 }
+    ]
+  }
+  ```
+  Successful login returns `result: [0, { "ubus_rpc_session": "<token>", ... }]`.
+
+### 1.2 Response Envelope
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": [
+    0,
+    { ...payload }
+  ]
+}
+```
+- `result[0] === 0` indicates ubus transport success; `result[1]` is the JSON payload returned by `braid`.
+- `result[0] === 6` (`UBUS_STATUS_PERMISSION_DENIED`) indicates the session token is missing or expired for a protected method.
+- JSON-RPC batching (sending an array of RPC objects in a single `POST /ubus`) is natively supported by `uhttpd-mod-ubus` and should be used when polling multiple endpoints simultaneously.
+
+---
+
+## 2. Permission Matrix (`/usr/share/rpcd/acl.d/braid.json`)
+
+| Category | Methods | Auth Required |
+|---|---|---|
+| **Public Read** | `status`, `series`, `devices`, `tunnel`, `doctor`, `rules`, `events` | No (`0000...0000`) |
+| **Private Read** | `config`, `connections` | Yes (`braid-admin`) |
+| **Write Actions** | `reconcile`, `configure`, `device`, `select`, `relogin`, `remember`, `forget` | Yes (`braid-admin`) |
+
+---
+
+## 3. Read Endpoints & TypeScript Schemas
+
+### 3.1 `status` — Global Snapshot, 21 Strands, Token Buckets & Weave State
+- **Args**: `{}`
+- **Cadence**: Updated in-memory every `2` seconds by `braidd` (`weave.interval`), and reconciled every `60` seconds by `braid reconcile`.
+
+```typescript
+interface BraidStatusResponse {
+  version: string;          // "5.0.0"
+  ts: number;               // Current Unix timestamp (seconds)
+  reconciled: number;       // Timestamp of last full `braid reconcile` pass
+  ok: boolean;              // True if all `fail`-level doctor checks pass
+  fail: string[];           // IDs of failing critical checks (empty when healthy)
+  warn: string[];           // IDs of warning checks
+  led: "green" | "yellow" | "orange" | "red";
+  lan_ip: string;           // Router LAN IPv4, e.g. "192.168.16.1"
+  role: "primary" | "backup" | "none";
+
+  // Aggregate strand counts & throughput
+  strand_count: number;     // Total discovered strands (typically 21: wan + vwan1..vwan20)
+  healthy_count: number;    // Number of healthy strands carrying traffic (e.g. 21)
+  rate: number;             // Total instantaneous download rate across all strands (bytes/s)
+  rate_up: number;          // Total instantaneous upload rate across all strands (bytes/s)
+  rate_ewma: number;        // Total EWMA-smoothed download rate (bytes/s)
+  rate_up_ewma: number;     // Total EWMA-smoothed upload rate (bytes/s)
+  down_bytes: number;       // Cumulative download bytes across all strands
+  up_bytes: number;         // Cumulative upload bytes across all strands
+
+  // Upstream site recognition (by gateway MAC)
+  site: {
+    known: boolean;         // True if upstream gateway MAC matches a saved `config site`
+    name: string;           // Site display name, e.g. "linkbroad"
+    gateway: string;        // Upstream gateway MAC address, e.g. "00:e0:fc:..."
+    aggregate: boolean;     // Whether multi-MAC aggregation is currently active
+    mode: "auto" | "on" | "off";
+    portal: string;         // Portal plugin name, e.g. "linkbroad" or ""
+  };
+
+  // Per-strand live state (ordered naturally: wan, vwan1, vwan2, ..., vwan20)
+  strands: StrandStatus[];
+
+  // Weave & Burst-Harvest 2.0 scheduler state
+  weave: {
+    policy: "harvest" | "headroom" | "even";
+    affinity: "flow" | "auto" | "dest";
+    slots: number;          // Pattern length, typically 126 (6 * 21)
+    interval: number;       // Sampling & re-weaving interval in seconds (2)
+    pattern: number[];      // Array of `slots` strand IDs (1..21) currently in `@pattern`
+    vip: number[];          // Raw `@vip_lane` kernel map values: `[vip_id | 0x100, vip_id | 0x100]`
+    vip_id: number;         // Strand ID (1..21) currently elected as the dedicated VIP gaming lane
+    vip_dev: string;        // Device name of current VIP strand, e.g. "vwan4"
+    charged_count: number;  // Count of healthy strands in "charged" state
+    draining_count: number; // Count of healthy strands in "draining" state
+    depleted_count: number; // Count of healthy strands in "depleted" state
+    cooling_count: number;  // Count of healthy strands in "cooling" state
+  };
+
+  // Mihomo tunnel summary
+  tunnel: {
+    enabled: boolean;       // Always true (locked)
+    running: boolean;       // True if mihomo process is alive and tproxy port is bound
+    on: boolean;            // True if nftables is diverting non-domestic traffic to mihomo
+    relays: number;         // Total number of loaded relay proxies (including synthesized chains)
+    fail_open: boolean;     // Always false (locked fail-closed privacy cage)
+    canary_ms: number;      // Last canary probe delay in ms
+    canary_fails: number;   // Consecutive canary failures
+  };
+
+  // SmartDNS summary
+  dns: {
+    smartdns: boolean;      // True if smartdns is running
+    port: number;           // Local SmartDNS port (6053)
+  };
+
+  // Host system resources
+  sys: {
+    conntrack: { count: number; max: number };
+    load1: number;          // 1-minute load average
+    mem_available_kb: number;
+    uptime: number;         // Router uptime in seconds
+  };
+
+  // Current effective values of all keys in TUNABLE (readable without login)
+  settings: Record<string, string | number>;
+}
+
+interface StrandStatus {
+  dev: string;              // L3 interface name: "wan", "vwan1" .. "vwan20"
+  id: number;               // Strand ID (1..21); matches fwmark low byte and routing table 1000+id
+  ip: string;               // Assigned IPv4 address from DHCP, e.g. "192.168.148.33"
+  gw: string;               // Gateway IPv4 address, e.g. "192.168.128.1"
+  subnet: string;           // CIDR subnet, e.g. "192.168.128.0/19"
+  iface: string;            // OpenWrt netifd logical interface name
+  role: "primary" | "backup";
+  healthy: boolean;         // True if HTTP 204 probe succeeded within fail_keep window
+  parked: boolean;          // True if temporarily parked after repeated portal auth failures
+  http: number;             // Last HTTP status code from probe (204 = healthy, 0 = timeout)
+  ttfb: number;             // Pure network RTT (`time_starttransfer - time_namelookup`) in seconds
+  ttfb_ms: number;          // Pure network RTT rounded to integer milliseconds (e.g. 16)
+
+  // Bandwidth metrics (all in bytes/second unless suffixed with `_bytes`)
+  rate: number;             // EWMA-smoothed download rate (bytes/s)
+  now: number;              // Instantaneous 2s download rate (bytes/s)
+  peak: number;             // Decayed peak download rate (bytes/s)
+  down_bytes: number;       // Cumulative download bytes on this strand
+  up: number;               // EWMA-smoothed upload rate (bytes/s)
+  up_now: number;           // Instantaneous 2s upload rate (bytes/s)
+  up_peak: number;          // Decayed peak upload rate (bytes/s)
+  up_bytes: number;         // Cumulative upload bytes on this strand
+
+  // Burst-Harvest 2.0 & VIP scheduling state
+  slots: number;            // Number of slots assigned to this strand in `@pattern` (0 for VIP or depleted)
+  vip: boolean;             // True if this strand is the dedicated `@vip_lane` low-latency gaming strand
+  bucket: "charged" | "draining" | "depleted" | "cooling";
+  tokens: number;           // Available burst tokens in bytes (0 .. 1,000,000)
+  tokens_max: number;       // Maximum burst bucket capacity in bytes (1,000,000)
+  tokens_pct: number;       // Available burst tokens as integer percentage (0 .. 100)
+  cooldown_rem: number;     // Remaining policer cooldown time in seconds (0 when not in cooldown)
+}
+```
+
+---
+
+### 3.2 `series` — Historical Time-Series (Total & Per-Strand)
+- **Args**: `{ "limit"?: number }` (default `0` = all available samples, up to `720` samples = 24 minutes at 2s interval)
+```typescript
+interface BraidSeriesResponse {
+  interval: number;                      // Seconds between samples (2)
+  ts: number[];                          // Unix timestamps (seconds) for each sample
+  total: number[];                       // Total download rate (bytes/s) at each sample
+  up: number[];                          // Total upload rate (bytes/s) at each sample
+  strands: Record<string, number[]>;     // dev -> download rate (bytes/s) array aligned with `ts`
+  strands_up: Record<string, number[]>;  // dev -> upload rate (bytes/s) array aligned with `ts`
+}
+```
+
+---
+
+### 3.3 `devices` — LAN Clients, Wi-Fi Signal, Traffic & Per-Device Policy
+- **Args**: `{}`
+```typescript
+interface BraidDevicesResponse {
+  devices: LanDevice[];
+}
+
+interface LanDevice {
+  mac: string;              // Lowercase MAC address, e.g. "aa:bb:cc:dd:ee:ff"
+  ip: string;               // Current IPv4 address or ""
+  host: string;             // DHCP hostname or ""
+  name: string;             // User-assigned name (falls back to DHCP hostname)
+  named: boolean;           // True if explicitly named by the user in UCI
+  link: "wired" | "5G" | "2.4G";
+  signal: number;           // Wi-Fi RSSI in dBm (e.g. -52), or 0 for wired/offline
+  online: boolean;          // True if currently associated on Wi-Fi or reachable in ARP table
+  policy: "auto" | "game" | "direct" | "tunnel" | "block";
+  down: number;             // Instantaneous download rate (bytes/s)
+  up: number;               // Instantaneous upload rate (bytes/s)
+  down_bytes: number;       // Cumulative download bytes
+  up_bytes: number;         // Cumulative upload bytes
+}
+```
+> **Device Policy Semantics**:
+> - `"auto"`: Standard classification (Domestic IP -> Direct, Overseas/Anthropic/Cloudflare -> Taiwan Home Tunnel; UDP gaming/realtime packets automatically use `@vip_lane`).
+> - `"game"`: Forces **all** new connections from this MAC onto `@vip_lane` (the lowest-RTT dedicated strand) and highest HTB priority (`1:10`), with automatic 50 MB bulk-flow eviction.
+> - `"direct"`: Forces all traffic from this MAC to go direct (bypasses `mihomo` tunnel).
+> - `"tunnel"`: Forces all traffic from this MAC into `mihomo` tunnel (even domestic IPs).
+> - `"block"`: Blocks internet access for this MAC while keeping the router LAN UI reachable.
+
+---
+
+### 3.4 `tunnel` — Mihomo Relay Groups & Taiwan Residential Cage Status
+- **Args**: `{}`
+```typescript
+interface BraidTunnelResponse {
+  reachable: boolean;       // True if mihomo external-controller answered
+  selected: string;         // Active selection in top-level `PROXY` group (default: "TW-HOME")
+  tw_home: string;          // Active relay inside `TW-HOME` fallback group (e.g. "🇹🇼【亚洲】台湾家宽01丨专线【3x】")
+  auto: string;             // Active relay inside `AUTO` group
+  dashboard: string;        // URL to Zashboard UI, e.g. "http://192.168.16.1:9090/ui/"
+  relays: Array<{
+    name: string;           // Group or proxy name
+    type: string;           // e.g. "Fallback", "Hysteria2", "Vless", "Trojan"
+    delay: number;          // Last measured latency in ms (0 if untested/timeout)
+  }>;
+}
+```
+
+---
+
+### 3.5 `doctor` — Live System Health Verification
+- **Args**: `{}`
+```typescript
+interface BraidDoctorResponse {
+  ts: number;
+  ok: boolean;
+  fail: string[];           // IDs of failed checks with level == "fail"
+  warn: string[];           // IDs of failed checks with level == "warn"
+  checks: Array<{
+    id: string;             // e.g. "ip_forward", "nft_table", "privacy_guard", "strands_healthy", ...
+    level: "fail" | "warn";
+    ok: boolean;
+    detail: string;         // Optional diagnostic context, e.g. "21 of 21"
+  }>;
+}
+```
+
+---
+
+### 3.6 `rules` — nftables Classification Counters & Set Sizes
+- **Args**: `{}`
+```typescript
+interface BraidRulesResponse {
+  tunnel_on: boolean;
+  rules: Array<{
+    tag: "device-block" | "relay" | "quic" | "device-direct" | "device-tunnel" | "tunnel-range" | "tunnel-domain" | "domestic" | "tunnel-port" | "rest-tunnel" | "rest-direct";
+    packets: number;
+    bytes: number;
+  }>;
+  sizes: {
+    domestic4: number;      // Number of CIDRs in domestic4.list (~6451)
+    tunnel4: number;        // Number of CIDRs in tunnel4.list (~26)
+    tunnel_domains: number; // Number of forced-tunnel domains (~42)
+    tunnel4_dns: number;    // Live SmartDNS-populated IPs in `@tunnel4_dns`
+    relay4: number;         // Live resolved relay server IPs in `@relay4`
+  };
+  ports: number[];
+}
+```
+
+---
+
+### 3.7 `events` — Recent State Transition Log
+- **Args**: `{ "limit"?: number }` (default `60`)
+```typescript
+interface BraidEventsResponse {
+  events: Array<{
+    ts: number;             // Unix timestamp (seconds)
+    msg: string;            // e.g. "STRANDS 21 of 21 healthy: 1 2 3 ..."
+  }>;
+}
+```
+
+---
+
+### 3.8 `config` — Tunable Settings & Lock Metadata *(Auth Required)*
+- **Args**: `{}`
+```typescript
+interface BraidConfigResponse {
+  values: Record<string, string | number>;
+  tunable: Record<string, {
+    choices?: string[];
+    min?: number;
+    max?: number;
+    locked: boolean;        // True if locked by architecture/security invariants
+  }>;
+}
+```
+> **Locked vs Editable Settings (`tunable[key].locked`)**:
+> - **Locked (`locked: true`)** — Must be displayed as locked/read-only in the UI (cannot be modified):
+>   - `weave.policy`: `"harvest"` (Burst-Harvest 2.0 token-bucket scheduler)
+>   - `weave.affinity`: `"flow"` (Per-flow spread across strands)
+>   - `classify.remainder`: `"tunnel"` (Overseas traffic always enters tunnel)
+>   - `classify.quic`: `"reject"` (Reject UDP/443 QUIC so browsers use TCP/TLS over multi-strand + BBR)
+>   - `tunnel.enabled`: `1` (Tunnel always enabled)
+>   - `tunnel.fail_open`: `0` (Strict fail-closed privacy guard; zero direct leak on outage)
+> - **Editable (`locked: false`)**:
+>   - `strands.aggregate`: `"auto" | "on" | "off"`
+>   - `strands.probe_interval`: `30 .. 3600` (seconds)
+>   - `weave.slots`: `0 .. 252` (`0` = auto `6` per healthy strand)
+>   - `weave.strand_kbit`: `0 .. 1000000` (`0` = auto learn from peaks)
+>   - `dns.ads`: `0 .. 1` (SmartDNS ad blocking)
+>   - `main.mss`: `0 .. 1460` (TCP MSS clamping, default `1440`)
+
+---
+
+### 3.9 `connections` — Active Direct & Tunnelled Flows *(Auth Required)*
+- **Args**: `{}`
+```typescript
+interface BraidConnectionsResponse {
+  connections: Array<{
+    key: string;            // Unique flow identifier
+    src: string;            // LAN client IPv4, e.g. "192.168.16.178"
+    dst: string;            // Destination hostname (if sniffed/tunnelled) or IPv4 address
+    port: number;           // Destination port
+    proto: string;          // "tcp" | "udp"
+    route: "direct" | "tunnel";
+    via: string;            // For direct: strand dev ("vwan4"); for tunnel: relay name ("🇹🇼【亚洲】台湾家宽01丨专线【3x】")
+    vip: boolean;           // True if this flow is riding the dedicated `@vip_lane`
+    up: number;             // Cumulative upload bytes for this flow
+    down: number;           // Cumulative download bytes for this flow
+    start?: string;         // ISO timestamp for tunnelled flows
+  }>;
+}
+```
+
+---
+
+## 4. Write Endpoints *(All Require Auth)*
+
+All write endpoints return `{ "ok": boolean, "error"?: string }` and automatically trigger a debounced reconcile/reload pass when `ok === true`.
+
+| Method | Args Schema | Description |
+|---|---|---|
+| `reconcile` | `{}` | Triggers an immediate `braid reconcile` pass. |
+| `configure` | `{ "set": Record<string, string \| number> }` | Validates and commits one or more `TUNABLE` settings to `/etc/config/braid`. Atomic: rejects the entire batch if any key is invalid or out of bounds. |
+| `device` | `{ "mac": string, "name": string, "policy": "auto" \| "game" \| "direct" \| "tunnel" \| "block" }` | Updates a LAN client's display name and/or routing policy. If reset to `name: ""` and `policy: "auto"`, removes the UCI entry cleanly. |
+| `select` | `{ "name": string }` | Switches the active proxy/group in `mihomo`'s `PROXY` selector (e.g. `"TW-HOME"`) and persists it across reboots in `/etc/braid/state/selected.json`. |
+| `relogin` | `{}` | Clears all portal park timers and forces an immediate probe + captive-portal re-authentication across all strands. |
+| `remember` | `{ "name": string, "aggregate": boolean, "portal"?: string }` | Saves the current upstream gateway MAC as a known site in `/etc/config/braid`. |
+| `forget` | `{}` | Removes the current upstream gateway MAC from saved sites in `/etc/config/braid`. |

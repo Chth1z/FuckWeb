@@ -35,7 +35,7 @@ export const BURST_MAX = 1000000;
 const IDLE_THRESH = 150000;             // < 1.2 Mbps: quiet, hardware bucket refills
 const CHARGED_THRESH = 750000;          // >= 750 KB: ready for full-speed 20 Mbps burst
 const EMPTY_THRESH = 150000;            // <= 150 KB: burst exhausted, entering policer clamp
-const COOLDOWN_SEC = 1.6;
+export const COOLDOWN_SEC = 2.5;
 
 // --- measurement & token bucket state machine ------------------------------
 
@@ -80,7 +80,7 @@ export function update_buckets(load, dt, now) {
 			let cap = int(BURST_MAX * max(0.0, 1.0 - (rate_now / (1.0 * EFF_CIR_BYTES_S))));
 			b.tokens = max(0, min(cap, b.tokens - drain));
 			if (rate_now >= 300000)
-				b.cooldown_until = now + 2.5;
+				b.cooldown_until = now + COOLDOWN_SEC;
 		}
 
 		if (rate_now >= EFF_CIR_BYTES_S * 0.72 || b.tokens <= EMPTY_THRESH) {
@@ -152,35 +152,56 @@ export function harvest_pool(healthy, vip) {
 
 // --- @pattern: strands + load -> weights -> interleaved slots ---------------
 
-// Largest-remainder apportionment with at least one slot per strand in pool.
+// Largest-remainder apportionment. Strands with share <= 0 receive 0 slots
+// when at least one strand has share > 0, completely shielding policed/depleted
+// strands from new TCP flows while they cool down.
 function apportion(shares, nslots) {
-	let n = length(shares), total = 0;
+	let n = length(shares), total = 0, active = 0;
 	if (n <= 0)
 		return [];
-	for (let s in shares)
-		total += s;
-	let weight = [], rest = [], used = 0;
+	for (let s in shares) {
+		if (s > 0) {
+			total += s;
+			active++;
+		}
+	}
+	if (active == 0) {
+		active = n;
+		shares = map(shares, () => 1);
+		total = n;
+	}
+	let weight = [], rest = [], used = 0, rem_slots = max(0, nslots - active);
 	for (let i = 0; i < n; i++) {
-		let exact = total > 0 ? shares[i] / total * (nslots - n) : (nslots - n) / n;
+		if (shares[i] <= 0) {
+			weight[i] = 0;
+			continue;
+		}
+		let exact = total > 0 ? shares[i] / total * rem_slots : rem_slots / active;
 		weight[i] = 1 + int(exact);
 		used += weight[i];
 		push(rest, { i, frac: exact - int(exact) });
 	}
 	rest = sort(rest, (a, b) => a.frac > b.frac ? -1 : (a.frac < b.frac ? 1 : a.i - b.i));
-	for (let k = 0; used < nslots; used++)
-		weight[rest[k++ % n].i]++;
+	let rlen = length(rest);
+	for (let k = 0; used < nslots && rlen > 0; used++)
+		weight[rest[k++ % rlen].i]++;
 	return weight;
 }
 
 const POLICIES = {
 	// Burst-Harvest 2.0: prioritize strands with a full 1.0 MB token bucket
-	// (18~70 Mbps first-second burst window), and put depleted strands into
-	// cooldown before the hotel gateway's drop-tail policer collapses TCP cwnd.
+	// (18~70 Mbps first-second burst window), and evict depleted strands (0 slots)
+	// into cooldown before the hotel gateway's drop-tail policer collapses TCP cwnd.
 	harvest: function(strands, load, nslots, cfg) {
-		let min_ttfb = 10.0;
-		for (let s in strands)
+		let min_ttfb = 10.0, non_depleted = 0;
+		for (let s in strands) {
 			if (s.ttfb && s.ttfb > 0 && s.ttfb < min_ttfb)
 				min_ttfb = s.ttfb;
+			let l = load[s.dev] ?? {}, b = l.bucket ?? { tokens: BURST_MAX, state: "charged" };
+			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, l.up?.now ?? 0);
+			if (b.state != "depleted" && rate < EFF_CIR_BYTES_S * 0.80)
+				non_depleted++;
+		}
 		if (min_ttfb >= 10.0)
 			min_ttfb = 0.15;
 
@@ -194,7 +215,7 @@ const POLICIES = {
 			let ratio = b.tokens / (1.0 * BURST_MAX);
 
 			if (b.state == "depleted" || rate >= EFF_CIR_BYTES_S * 0.80)
-				return 0.02;
+				return non_depleted > 0 ? 0 : max(FLOOR, 1.0 - rate / (1.5 * EFF_CIR_BYTES_S));
 			if (b.state == "cooling")
 				return max(FLOOR, 1.8 * ratio * q);
 			if (b.state == "charged")
@@ -317,13 +338,16 @@ export function plan(ctx) {
 		let vip = length(healthy) == 1 ? [ healthy[0].id | MARK_VIP, healthy[0].id | MARK_VIP ] : [];
 		return { slots: 0, pattern: [], vip, repair: length(current()) > 0, anchor: [] };
 	}
-	let vip = select_vip(healthy, ctx.load ?? {});
+	let have = current(), have_vip = current_vip();
+	let prev_vip_id = (have_vip[0] ?? 0) & 0xff;
+	let vip_alive = prev_vip_id > 0 && length(filter(healthy, (s) => s.id == prev_vip_id && (!s.http || s.http == 204))) > 0;
+	let vip = (!ctx.force && vip_alive && length(have_vip) == 2) ? have_vip : select_vip(healthy, ctx.load ?? {});
 	let pool = harvest_pool(healthy, vip);
-	let n = nslots(ctx.cfg.weave, healthy), have = current(), have_vip = current_vip();
+	let n = nslots(ctx.cfg.weave, healthy);
 	let pool_ids = {};
 	for (let s in pool)
 		pool_ids[s.id] = true;
-	let valid = length(have) == n && length(uniq(have)) == length(pool) &&
+	let valid = !ctx.force && length(have) == n && length(uniq(have)) > 0 &&
 		length(have_vip) == length(vip) && have_vip[0] == vip[0];
 	for (let id in have)
 		if (!pool_ids[id])
