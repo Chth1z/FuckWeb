@@ -68,7 +68,7 @@ flowchart TD
     subgraph WeaveEngine["weave 雙平面編織鏈"]
         ToWeave --> Existing{"已有 ct mark ?"}
         Existing -->|是| RestoreMark["沿用原線路標記<br/>(>50MB 的 VIP 流自動遷回 @pattern)"]
-        Existing -->|否 (新建連接)| IsVIP{"屬遊戲 / 短包UDP / SSH / 高DSCP ?"}
+        Existing -->|否 新建連接| IsVIP{"屬遊戲 / 短包UDP / SSH / 高DSCP ?"}
         IsVIP -->|是| PinVIP["查 @vip_lane 鎖定最低 RTT 專線<br/>(ct mark = id | 0x100)"]
         IsVIP -->|否| Spread["查 @pattern (126 槽位)<br/>分配至滿桶脈衝線路"]
     end
@@ -131,4 +131,4 @@ tools/deploy.sh --secrets        # 連同 relays.json 一起推送
 | 內核 `nftables` 骨架與分流規則 | `braid/usr/share/braid/tpl/braid.nft.ut`、`braid/usr/share/braid/mod/kernel.uc` |
 | Portal 認證插件 | `braid/usr/share/braid/portal/linkbroad.uc` |
 | 前端 ubus API 實現 | `braid/usr/share/braid/mod/api.uc`（規範見 [API.md](API.md)） |
-| 前端單頁控制台 | `braid/www/braid/index.html` |
+| 前端模組化控制台 | `braid/www/braid/`（`index.html`、`css/`、`js/` 原生 ES6 Modules） |
