@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtBytes, fmtClock } from '../state.js?v=5.6.1';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.1';
-import { write, call } from '../api.js?v=5.6.1';
+import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtBytes, fmtClock } from '../state.js?v=5.6.2';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.2';
+import { write, call } from '../api.js?v=5.6.2';
 
 let drawerOpen = false;
 let rafId = null;
@@ -40,11 +40,11 @@ const RULE_LABELS = {
 
 // Normalized 0..1 wave phase & energy: 0=vip, 1=tw-home, 2=harvest, 3=weave_out, 4=ingress/uplink
 const waveState = [
-  { phase: 0.08, vel: 0.22, targetVel: 0.22, glow: 0.42, targetGlow: 0.42, width: 2.3 },
-  { phase: 0.36, vel: 0.28, targetVel: 0.28, glow: 0.46, targetGlow: 0.46, width: 2.5 },
-  { phase: 0.64, vel: 0.34, targetVel: 0.34, glow: 0.52, targetGlow: 0.52, width: 2.6 },
-  { phase: 0.18, vel: 0.42, targetVel: 0.42, glow: 0.46, targetGlow: 0.46, width: 2.1 },
-  { phase: 0.52, vel: 0.30, targetVel: 0.30, glow: 0.46, targetGlow: 0.46, width: 2.3 }
+  { phase: 0.08, vel: 0.04, targetVel: 0.04, glow: 0.04, targetGlow: 0.04, width: 1.65, targetWidth: 1.65 },
+  { phase: 0.36, vel: 0.04, targetVel: 0.04, glow: 0.04, targetGlow: 0.04, width: 1.65, targetWidth: 1.65 },
+  { phase: 0.64, vel: 0.04, targetVel: 0.04, glow: 0.04, targetGlow: 0.04, width: 1.65, targetWidth: 1.65 },
+  { phase: 0.18, vel: 0.04, targetVel: 0.04, glow: 0.04, targetGlow: 0.04, width: 1.65, targetWidth: 1.65 },
+  { phase: 0.52, vel: 0.04, targetVel: 0.04, glow: 0.04, targetGlow: 0.04, width: 1.65, targetWidth: 1.65 }
 ];
 
 function relBox(elNode, rootRect) {
@@ -62,10 +62,22 @@ function relBox(elNode, rootRect) {
   };
 }
 
+function parseRgb(rgb) {
+  return String(rgb).split(',').map(v => Number(v.trim()) || 0);
+}
+
 function mixWhiteRgb(rgb, whiteMix = 0.60) {
-  const parts = String(rgb).split(',').map(v => Number(v.trim()) || 0);
+  const [r, g, b] = parseRgb(rgb);
   const mix = (c) => Math.round(c + (255 - c) * whiteMix);
-  return `${mix(parts[0])}, ${mix(parts[1])}, ${mix(parts[2])}`;
+  return `${mix(r)}, ${mix(g)}, ${mix(b)}`;
+}
+
+// Blend chromatic hue down toward dark obsidian slate when flow is idle/low (mirrors 03 光譜)
+function desatObsidianRgb(rgb, sat = 1) {
+  const [r, g, b] = parseRgb(rgb);
+  const s = Math.max(0, Math.min(1, sat));
+  const mix = (c, base) => Math.round(base + (c - base) * s);
+  return `${mix(r, 52)}, ${mix(g, 58)}, ${mix(b, 72)}`;
 }
 
 function clipHalfPlane(ctx, ax, ay, bx, by, sideSign, W, H) {
@@ -119,19 +131,6 @@ function drawLinkTag(ctx, x, y, text, rgb) {
   ctx.restore();
 }
 
-function orthoStepPts(x0, y0, xTurn, y1, x1) {
-  if (Math.abs(y1 - y0) < 2) {
-    const ym = (y0 + y1) * 0.5;
-    return [{ x: x0, y: ym }, { x: x1, y: ym }];
-  }
-  return [
-    { x: x0, y: y0 },
-    { x: xTurn, y: y0 },
-    { x: xTurn, y: y1 },
-    { x: x1, y: y1 },
-  ];
-}
-
 function makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, rgb, maxAlpha) {
   const p = (st.phase + phaseOffset) % 1.0;
   const grad = ctx.createLinearGradient(x0, y0, x1, y1);
@@ -155,7 +154,7 @@ function fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, halfW, fillStyle) {
   ctx.fill();
 }
 
-// Smooth Fig-5 continuous perpendicular Gaussian glow + solid optical core (zero contour layering)
+// Traffic-reactive Fig-5 smooth Gaussian glow + obsidian-weighted saturation (mirrors 03 光譜)
 function drawSmoothStraightBeam(ctx, x0, y0, x1, y1, rgb, st, phaseOffset = 0, auraScale = 1) {
   const dx = x1 - x0;
   const dy = y1 - y0;
@@ -168,8 +167,9 @@ function drawSmoothStraightBeam(ctx, x0, y0, x1, y1, rgb, st, phaseOffset = 0, a
   const ny = ux;
   const mx = (x0 + x1) * 0.5;
   const my = (y0 + y1) * 0.5;
-  const g = st.glow;
-  const active = st.vel > 0.01;
+  const g = Math.max(0, Math.min(1, st.glow));
+  const sat = 0.20 + 0.80 * Math.min(1, g * 1.25);
+  const active = st.vel > 0.05 && g > 0.12;
   const makePerpGrad = (halfW) => ctx.createLinearGradient(
     mx - nx * halfW, my - ny * halfW,
     mx + nx * halfW, my + ny * halfW
@@ -177,84 +177,89 @@ function drawSmoothStraightBeam(ctx, x0, y0, x1, y1, rgb, st, phaseOffset = 0, a
 
   ctx.save();
   if (rgb === 'spectrum') {
-    const totalHalf = Math.max(3.6, st.width * 1.45);
-    const auraHalf = totalHalf + (10.5 + g * 6.0) * auraScale;
-    const redRgb = spectralColor(0, 7).rgb;
-    const midRgb = spectralColor(3, 7).rgb;
-    const vioRgb = spectralColor(6, 7).rgb;
-    const auraA = 0.12 + g * 0.08;
+    const totalHalf = Math.max(2.6, st.width * 1.40);
+    const auraHalf = totalHalf + (9.5 + g * 6.5) * auraScale;
+    const redRgb = desatObsidianRgb(spectralColor(0, 7).rgb, sat);
+    const midRgb = desatObsidianRgb(spectralColor(3, 7).rgb, sat);
+    const vioRgb = desatObsidianRgb(spectralColor(6, 7).rgb, sat);
+    const auraA = g > 0.04 ? g * 0.20 * auraScale : 0;
 
-    const uTopIn = 0.5 - (totalHalf * 0.72) / auraHalf;
-    const uTopOut = 0.5 - (totalHalf * 1.32) / auraHalf;
-    const uBotIn = 0.5 + (totalHalf * 0.72) / auraHalf;
-    const uBotOut = 0.5 + (totalHalf * 1.32) / auraHalf;
-    const haloGrad = makePerpGrad(auraHalf);
-    haloGrad.addColorStop(0.00, `rgba(${redRgb}, 0)`);
-    haloGrad.addColorStop(uTopOut, `rgba(${redRgb}, ${(auraA * 0.34).toFixed(3)})`);
-    haloGrad.addColorStop(uTopIn, `rgba(${redRgb}, ${auraA.toFixed(3)})`);
-    haloGrad.addColorStop(0.50, `rgba(${midRgb}, ${(auraA * 0.52).toFixed(3)})`);
-    haloGrad.addColorStop(uBotIn, `rgba(${vioRgb}, ${auraA.toFixed(3)})`);
-    haloGrad.addColorStop(uBotOut, `rgba(${vioRgb}, ${(auraA * 0.34).toFixed(3)})`);
-    haloGrad.addColorStop(1.00, `rgba(${vioRgb}, 0)`);
+    if (auraA > 0.004) {
+      const uTopIn = 0.5 - (totalHalf * 0.72) / auraHalf;
+      const uTopOut = 0.5 - (totalHalf * 1.32) / auraHalf;
+      const uBotIn = 0.5 + (totalHalf * 0.72) / auraHalf;
+      const uBotOut = 0.5 + (totalHalf * 1.32) / auraHalf;
+      const haloGrad = makePerpGrad(auraHalf);
+      haloGrad.addColorStop(0.00, `rgba(${redRgb}, 0)`);
+      haloGrad.addColorStop(uTopOut, `rgba(${redRgb}, ${(auraA * 0.34).toFixed(3)})`);
+      haloGrad.addColorStop(uTopIn, `rgba(${redRgb}, ${auraA.toFixed(3)})`);
+      haloGrad.addColorStop(0.50, `rgba(${midRgb}, ${(auraA * 0.52).toFixed(3)})`);
+      haloGrad.addColorStop(uBotIn, `rgba(${vioRgb}, ${auraA.toFixed(3)})`);
+      haloGrad.addColorStop(uBotOut, `rgba(${vioRgb}, ${(auraA * 0.34).toFixed(3)})`);
+      haloGrad.addColorStop(1.00, `rgba(${vioRgb}, 0)`);
 
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, auraHalf, haloGrad);
-    ctx.restore();
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, auraHalf, haloGrad);
+      ctx.restore();
+    }
 
-    const bodyHalf = totalHalf + 0.9;
-    const bandA = (0.76 + g * 0.18).toFixed(3);
+    const bodyHalf = totalHalf + 0.8;
+    const bandA = (0.26 + g * 0.68).toFixed(3);
     const specGrad = makePerpGrad(bodyHalf);
     specGrad.addColorStop(0.00, `rgba(${redRgb}, 0)`);
     for (let i = 0; i < 7; i++) {
-      specGrad.addColorStop(0.10 + (i / 6) * 0.80, `rgba(${spectralColor(i, 7).rgb}, ${bandA})`);
+      specGrad.addColorStop(0.10 + (i / 6) * 0.80, `rgba(${desatObsidianRgb(spectralColor(i, 7).rgb, sat)}, ${bandA})`);
     }
     specGrad.addColorStop(1.00, `rgba(${vioRgb}, 0)`);
     fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, bodyHalf, specGrad);
 
-    if (active && g > 0.10) {
+    if (active) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      const shim = makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, '255, 255, 255', 0.16);
-      fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, totalHalf * 0.85, shim);
+      const shim = makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, '255, 255, 255', 0.15);
+      fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, totalHalf * 0.84, shim);
       ctx.restore();
     }
   } else {
-    const coreHalf = 1.65 + g * 0.88;
-    const glowHalf = (11.0 + g * 7.2) * auraScale;
-    const peakA = (0.14 + g * 0.10) * (0.72 + 0.28 * auraScale);
+    const bodyRgb = desatObsidianRgb(rgb, sat);
+    const crestRgb = mixWhiteRgb(bodyRgb, 0.42 * g);
+    const coreHalf = 1.35 + g * 1.20;
+    const glowHalf = (10.5 + g * 7.5) * auraScale;
+    const peakA = g > 0.04 ? (g * 0.22 * (0.72 + 0.28 * auraScale)) : 0;
 
-    const haloGrad = makePerpGrad(glowHalf);
-    for (let k = 0; k <= 8; k++) {
-      const u = k / 8;
-      const t = (u - 0.5) * 2;
-      const a = (k === 0 || k === 8) ? 0 : peakA * Math.exp(-(t * t) / 0.18);
-      haloGrad.addColorStop(u, `rgba(${rgb}, ${a.toFixed(4)})`);
+    if (peakA > 0.004) {
+      const haloGrad = makePerpGrad(glowHalf);
+      for (let k = 0; k <= 8; k++) {
+        const u = k / 8;
+        const t = (u - 0.5) * 2;
+        const a = (k === 0 || k === 8) ? 0 : peakA * Math.exp(-(t * t) / 0.18);
+        haloGrad.addColorStop(u, `rgba(${bodyRgb}, ${a.toFixed(4)})`);
+      }
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, glowHalf, haloGrad);
+      ctx.restore();
     }
 
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, glowHalf, haloGrad);
-    ctx.restore();
-
-    const bodyHalf = coreHalf + 0.9;
-    const edgeA = (0.76 + g * 0.20).toFixed(3);
-    const centerA = (0.94 + g * 0.05).toFixed(3);
+    const bodyHalf = coreHalf + 0.85;
+    const edgeA = (0.22 + g * 0.68).toFixed(3);
+    const centerA = (0.28 + g * 0.70).toFixed(3);
     const bodyGrad = makePerpGrad(bodyHalf);
-    bodyGrad.addColorStop(0.00, `rgba(${rgb}, 0)`);
-    bodyGrad.addColorStop(0.24, `rgba(${rgb}, ${edgeA})`);
-    bodyGrad.addColorStop(0.50, `rgba(${mixWhiteRgb(rgb, 0.40)}, ${centerA})`);
-    bodyGrad.addColorStop(0.76, `rgba(${rgb}, ${edgeA})`);
-    bodyGrad.addColorStop(1.00, `rgba(${rgb}, 0)`);
+    bodyGrad.addColorStop(0.00, `rgba(${bodyRgb}, 0)`);
+    bodyGrad.addColorStop(0.24, `rgba(${bodyRgb}, ${edgeA})`);
+    bodyGrad.addColorStop(0.50, `rgba(${crestRgb}, ${centerA})`);
+    bodyGrad.addColorStop(0.76, `rgba(${bodyRgb}, ${edgeA})`);
+    bodyGrad.addColorStop(1.00, `rgba(${bodyRgb}, 0)`);
     fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, bodyHalf, bodyGrad);
 
-    if (active && g > 0.10) {
+    if (active) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const shim = makeFlowShimmerGradient(
-        ctx, x0, y0, x1, y1, st, phaseOffset, mixWhiteRgb(rgb, 0.45), 0.22
+        ctx, x0, y0, x1, y1, st, phaseOffset, mixWhiteRgb(bodyRgb, 0.45), 0.20
       );
-      fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, coreHalf * 0.90, shim);
+      fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, coreHalf * 0.88, shim);
       ctx.restore();
     }
   }
@@ -264,6 +269,10 @@ function drawSmoothStraightBeam(ctx, x0, y0, x1, y1, rgb, st, phaseOffset = 0, a
 // 45-45-90 Total Internal Reflection Crystal Prism placed at each 90-degree beam bend
 function drawRightAngleTurningPrism(ctx, prism) {
   const { x, y, inDir, outDir, rgb, glow, r } = prism;
+  const g = Math.max(0, Math.min(1, glow));
+  const sat = 0.22 + 0.78 * Math.min(1, g * 1.25);
+  const tintRgb = desatObsidianRgb(rgb, sat);
+
   const cX = x + r * (-inDir.x + outDir.x);
   const cY = y + r * (-inDir.y + outDir.y);
   const aX = x + r * (inDir.x + outDir.x);
@@ -284,14 +293,14 @@ function drawRightAngleTurningPrism(ctx, prism) {
   ctx.clip();
   const sheeR = r * 1.18;
   const sheen = ctx.createRadialGradient(x, y, 0, x, y, sheeR);
-  sheen.addColorStop(0.00, `rgba(${mixWhiteRgb(rgb, 0.55)}, ${(0.28 + glow * 0.26).toFixed(3)})`);
-  sheen.addColorStop(0.65, `rgba(${rgb}, ${(0.08 + glow * 0.08).toFixed(3)})`);
-  sheen.addColorStop(1.00, `rgba(${rgb}, 0)`);
+  sheen.addColorStop(0.00, `rgba(${mixWhiteRgb(tintRgb, 0.50 * g)}, ${(0.06 + g * 0.42).toFixed(3)})`);
+  sheen.addColorStop(0.65, `rgba(${tintRgb}, ${(0.02 + g * 0.14).toFixed(3)})`);
+  sheen.addColorStop(1.00, `rgba(${tintRgb}, 0)`);
   ctx.fillStyle = sheen;
   ctx.fillRect(x - r - 2, y - r - 2, r * 2 + 4, r * 2 + 4);
   ctx.restore();
 
-  ctx.strokeStyle = 'rgba(210, 228, 252, 0.56)';
+  ctx.strokeStyle = `rgba(180, 198, 224, ${(0.34 + g * 0.30).toFixed(3)})`;
   ctx.lineWidth = 1.0;
   ctx.beginPath();
   ctx.moveTo(cX, cY);
@@ -300,15 +309,24 @@ function drawRightAngleTurningPrism(ctx, prism) {
   ctx.closePath();
   ctx.stroke();
 
-  ctx.shadowColor = `rgba(${rgb}, 0.50)`;
-  ctx.shadowBlur = 4;
-  ctx.strokeStyle = `rgba(${mixWhiteRgb(rgb, 0.65)}, ${(0.72 + glow * 0.22).toFixed(3)})`;
-  ctx.lineWidth = 1.25;
+  if (g > 0.08) {
+    ctx.shadowColor = `rgba(${tintRgb}, ${(g * 0.48).toFixed(3)})`;
+    ctx.shadowBlur = g * 4;
+  }
+  ctx.strokeStyle = `rgba(${mixWhiteRgb(tintRgb, 0.55 * g)}, ${(0.32 + g * 0.62).toFixed(3)})`;
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.moveTo(aX, aY);
   ctx.lineTo(bX, bY);
   ctx.stroke();
   ctx.restore();
+}
+
+function clipHalfRectY(ctx, yEdge, sideSign, W, H) {
+  ctx.beginPath();
+  if (sideSign < 0) ctx.rect(-40, -40, W + 80, yEdge + 40);
+  else ctx.rect(-40, yEdge, W + 80, H - yEdge + 40);
+  ctx.clip();
 }
 
 function drawOrthoStepWithPrisms(ctx, rawPts, rgb, st, phaseOffset, prismsQueue, opts = {}) {
@@ -367,9 +385,12 @@ function drawOrthoStepWithPrisms(ctx, rawPts, rgb, st, phaseOffset, prismsQueue,
     const ey = pts[i + 1].y - s.uy * trimB;
     const segPhase = phaseOffset + (s.cumStart + trimA) / Math.max(80, totalLen);
 
-    if (i === 0 && opts.clipFirst) {
+    const clipFn = (i === 0 && opts.clipFirst) ? opts.clipFirst
+      : ((i === segs.length - 1 && opts.clipLast) ? opts.clipLast : null);
+
+    if (clipFn) {
       ctx.save();
-      opts.clipFirst(ctx);
+      clipFn(ctx);
       drawSmoothStraightBeam(ctx, sx, sy, ex, ey, rgb, st, segPhase, opts.auraScale ?? 1);
       ctx.restore();
     } else {
@@ -383,59 +404,16 @@ function drawOrthoStepWithPrisms(ctx, rawPts, rgb, st, phaseOffset, prismsQueue,
   }
 }
 
-function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom, prismsQueue) {
-  const rightEdgeEnd = Math.min(vip.x, tun.x, dom.x);
-  const gapW = rightEdgeEnd - ing.right;
-  if (gapW < 30) return;
+function drawCrystalPrism(ctx, g, mode) {
+  const { cx, cy, topX, topY, leftX, leftY, rightX, rightY, entryX, exitX } = g;
+  const gSpec = waveState[4].glow;
+  const avgG = Math.max(waveState[0].glow, waveState[1].glow, waveState[2].glow, gSpec);
+  const raySts = [
+    { x: topX,   y: topY,   rgb: '100, 174, 245', g: waveState[0].glow },
+    { x: exitX,  y: cy,     rgb: '170, 142, 240', g: waveState[1].glow },
+    { x: cx,     y: leftY,  rgb: '87, 209, 146',  g: waveState[2].glow },
+  ];
 
-  const focalX = ing.right + gapW * 0.34;
-  const focalY = Math.max(ing.y + 28, Math.min(ing.bottom - 28, tun.cy));
-  const side = Math.max(28, Math.min(40, gapW * 0.35));
-  const triH = (side * Math.sqrt(3)) / 2;
-
-  const topX = focalX;
-  const topY = focalY - triH * 0.56;
-  const leftX = focalX - side * 0.5;
-  const leftY = topY + triH;
-  const rightX = focalX + side * 0.5;
-  const rightY = topY + triH;
-
-  const tMid = (focalY - topY) / triH;
-  const entryX = topX + (leftX - topX) * tMid;
-  const entryY = focalY;
-
-  const splitDy = Math.min(7.5, triH * 0.18);
-  const splitBaseX = Math.max(rightX + 18, rightX + (rightEdgeEnd - rightX) * 0.48);
-
-  const exits = [
-    { dy: -splitDy, xTurn: splitBaseX - 6, tx: vip.x + 1, ty: vip.cy, rgb: '100, 174, 245', st: waveState[0], phase: 0.00 },
-    { dy: 0,        xTurn: splitBaseX,     tx: tun.x + 1, ty: tun.cy, rgb: '170, 142, 240', st: waveState[1], phase: 0.16 },
-    { dy: splitDy,  xTurn: splitBaseX + 6, tx: dom.x + 1, ty: dom.cy, rgb: '87, 209, 146',  st: waveState[2], phase: 0.32 },
-  ].map((e) => {
-    const ey = focalY + e.dy;
-    const tOut = (ey - topY) / triH;
-    const ex = topX + (rightX - topX) * tOut;
-    return { ...e, ex, ey };
-  });
-
-  // 1. Strictly Straight Rainbow Ingress -> Focal Prism Left Bevel (locally clipped to left of bevel)
-  const inPts = orthoStepPts(ing.right - 1, focalY, ing.right + (leftX - ing.right) * 0.42, focalY, entryX + 14);
-  drawOrthoStepWithPrisms(ctx, inPts, 'spectrum', waveState[4], 0.05, prismsQueue, {
-    clipFirst: (c) => clipHalfPlane(c, topX, topY, leftX, leftY, -1, W, H),
-    prismRadius: 6
-  });
-
-  // 2. Strictly Horizontal/Vertical 1 -> 3 Dispersed Branches (clipFirst ONLY on horizontal prism stub!)
-  for (const e of exits) {
-    const branchPts = orthoStepPts(e.ex - 14, e.ey, e.xTurn, e.ty, e.tx);
-    drawOrthoStepWithPrisms(ctx, branchPts, e.rgb, e.st, e.phase, prismsQueue, {
-      clipFirst: (c) => clipHalfPlane(c, topX, topY, rightX, rightY, 1, W, H),
-      auraScale: 0.78,
-      prismRadius: 6
-    });
-  }
-
-  // 3. Main Dispersion Crystal Prism (drawn crisp above ingress/exit beam stubs)
   ctx.fillStyle = '#04060a';
   ctx.beginPath();
   ctx.moveTo(topX, topY);
@@ -452,27 +430,40 @@ function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom, prismsQueue) {
   ctx.closePath();
   ctx.clip();
 
-  const innerR = Math.max(12, Math.hypot(exits[1].ex - entryX, exits[1].ey - entryY) * 1.15);
-  const wGrad = ctx.createRadialGradient(entryX, entryY, 0, entryX + innerR * 0.25, entryY, innerR);
-  wGrad.addColorStop(0.00, 'rgba(244, 249, 255, 0.72)');
-  wGrad.addColorStop(0.32, 'rgba(204, 226, 252, 0.28)');
-  wGrad.addColorStop(0.68, 'rgba(165, 198, 238, 0.08)');
-  wGrad.addColorStop(1.00, 'rgba(140, 175, 220, 0)');
-  ctx.fillStyle = wGrad;
-  ctx.beginPath();
-  ctx.moveTo(entryX, entryY - 3);
-  ctx.lineTo(exits[0].ex, exits[0].ey);
-  ctx.lineTo(exits[2].ex, exits[2].ey);
-  ctx.lineTo(entryX, entryY + 3);
-  ctx.closePath();
-  ctx.fill();
+  // Internal optical refraction rays & soft focus flare scaled strictly by live traffic
+  const focusX = mode === 'split' ? entryX : exitX;
+  const rad = Math.max(10, Math.hypot(exitX - entryX, 0) * 1.15);
+  const focusGrad = ctx.createRadialGradient(focusX, cy, 0, cx, cy, rad);
+  focusGrad.addColorStop(0.00, `rgba(232, 242, 255, ${(0.08 + gSpec * 0.56).toFixed(3)})`);
+  focusGrad.addColorStop(0.42, `rgba(186, 214, 248, ${(0.03 + gSpec * 0.22).toFixed(3)})`);
+  focusGrad.addColorStop(1.00, 'rgba(140, 175, 220, 0)');
+  ctx.fillStyle = focusGrad;
+  ctx.fillRect(leftX - 2, topY - 2, (rightX - leftX) + 4, (leftY - topY) + 4);
+
+  const midTargetX = mode === 'split' ? entryX : exitX;
+  for (let i = 0; i < raySts.length; i++) {
+    const tgt = raySts[i];
+    const rx = (mode === 'merge' && i === 1) ? entryX : tgt.x;
+    const lg = ctx.createLinearGradient(midTargetX, cy, rx, tgt.y);
+    const a = 0.04 + tgt.g * 0.34;
+    lg.addColorStop(0.0, `rgba(225, 238, 255, ${(a * 0.7).toFixed(3)})`);
+    lg.addColorStop(1.0, `rgba(${desatObsidianRgb(tgt.rgb, 0.22 + 0.78 * tgt.g)}, ${a.toFixed(3)})`);
+    ctx.strokeStyle = lg;
+    ctx.lineWidth = 1.6 + tgt.g * 1.6;
+    ctx.beginPath();
+    ctx.moveTo(midTargetX, cy);
+    ctx.lineTo(rx, tgt.y);
+    ctx.stroke();
+  }
   ctx.restore();
 
   ctx.save();
-  ctx.shadowColor = 'rgba(180, 214, 250, 0.28)';
-  ctx.shadowBlur = 6;
-  ctx.strokeStyle = 'rgba(232, 242, 255, 0.88)';
-  ctx.lineWidth = 1.5;
+  if (avgG > 0.08) {
+    ctx.shadowColor = `rgba(186, 216, 250, ${(avgG * 0.30).toFixed(3)})`;
+    ctx.shadowBlur = avgG * 6;
+  }
+  ctx.strokeStyle = `rgba(220, 234, 252, ${(0.44 + avgG * 0.44).toFixed(3)})`;
+  ctx.lineWidth = 1.45;
   ctx.beginPath();
   ctx.moveTo(topX, topY);
   ctx.lineTo(rightX, rightY);
@@ -480,6 +471,108 @@ function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom, prismsQueue) {
   ctx.closePath();
   ctx.stroke();
   ctx.restore();
+}
+
+function makePrismGeom(cx, cy, side) {
+  const triH = (side * Math.sqrt(3)) / 2;
+  const topX = cx;
+  const topY = cy - triH * 0.52;
+  const leftX = cx - side * 0.5;
+  const leftY = topY + triH;
+  const rightX = cx + side * 0.5;
+  const rightY = topY + triH;
+  const tMid = (cy - topY) / triH;
+  const entryX = topX + (leftX - topX) * tMid;
+  const exitX = topX + (rightX - topX) * tMid;
+  return { cx, cy, side, triH, topX, topY, leftX, leftY, rightX, rightY, entryX, exitX };
+}
+
+function drawDualPrismPipeline(ctx, W, H, ing, vip, tun, dom, qos, prismsQueue) {
+  const s2Left = Math.min(vip.x, tun.x, dom.x);
+  const s2Right = Math.max(vip.right, tun.right, dom.right);
+  const gap1W = s2Left - ing.right;
+  const gap2W = qos.x - s2Right;
+  if (gap1W < 30 || gap2W < 30) return;
+
+  // Center optical axis horizontally centered along the pipeline within safe intersection of ing, tun & qos
+  const safeTop = Math.max(ing.y, tun.y, qos.y, vip.cy + 28) + 22;
+  const safeBot = Math.min(ing.bottom, tun.bottom, qos.bottom, dom.cy - 28) - 22;
+  const midY = safeTop <= safeBot
+    ? Math.max(safeTop, Math.min(safeBot, H * 0.50))
+    : Math.max(ing.y + 20, Math.min(tun.bottom - 20, qos.bottom - 20, tun.cy));
+
+  // === GAP 1: Symmetric 1 -> 3 Main Dispersion Prism on Gap 1 Midline ===
+  const g1 = makePrismGeom(ing.right + gap1W * 0.50, midY, Math.max(28, Math.min(42, gap1W * 0.34)));
+
+  drawOrthoStepWithPrisms(
+    ctx,
+    [{ x: ing.right - 1, y: midY }, { x: g1.entryX + 12, y: midY }],
+    'spectrum', waveState[4], 0.04, prismsQueue,
+    { clipFirst: (c) => clipHalfPlane(c, g1.topX, g1.topY, g1.leftX, g1.leftY, -1, W, H) }
+  );
+
+  // Branch 0 (Blue @vip_lane): exits apex UP -> SINGLE 45-deg prism -> RIGHT (1 bend)
+  drawOrthoStepWithPrisms(
+    ctx,
+    [{ x: g1.cx, y: g1.topY + 2 }, { x: g1.cx, y: vip.cy }, { x: vip.x + 1, y: vip.cy }],
+    '100, 174, 245', waveState[0], 0.00, prismsQueue,
+    { clipFirst: (c) => clipHalfRectY(c, g1.topY + 1, -1, W, H), prismRadius: 6.5 }
+  );
+
+  // Branch 1 (Violet TW-HOME): exits right bevel STRAIGHT RIGHT (0 bends)
+  drawOrthoStepWithPrisms(
+    ctx,
+    [{ x: g1.exitX - 12, y: midY }, { x: tun.x + 1, y: midY }],
+    '170, 142, 240', waveState[1], 0.16, prismsQueue,
+    { clipFirst: (c) => clipHalfPlane(c, g1.topX, g1.topY, g1.rightX, g1.rightY, 1, W, H) }
+  );
+
+  // Branch 2 (Green Burst-Harvest): exits flat base DOWN -> SINGLE 45-deg prism -> RIGHT (1 bend)
+  drawOrthoStepWithPrisms(
+    ctx,
+    [{ x: g1.cx, y: g1.leftY - 2 }, { x: g1.cx, y: dom.cy }, { x: dom.x + 1, y: dom.cy }],
+    '87, 209, 146', waveState[2], 0.32, prismsQueue,
+    { clipFirst: (c) => clipHalfRectY(c, g1.leftY - 1, 1, W, H), prismRadius: 6.5 }
+  );
+
+  drawCrystalPrism(ctx, g1, 'split');
+
+  // === GAP 2: Symmetric 3 -> 1 Recombination Merge Prism on Gap 2 Midline ===
+  const g2 = makePrismGeom(s2Right + gap2W * 0.50, midY, Math.max(26, Math.min(38, gap2W * 0.36)));
+
+  // Branch 0 (Blue @vip_lane): RIGHT -> SINGLE 45-deg prism -> straight DOWN into apex (1 bend)
+  drawOrthoStepWithPrisms(
+    ctx,
+    [{ x: vip.right - 1, y: vip.cy }, { x: g2.cx, y: vip.cy }, { x: g2.cx, y: g2.topY + 2 }],
+    '100, 174, 245', waveState[0], 0.24, prismsQueue,
+    { clipLast: (c) => clipHalfRectY(c, g2.topY + 1, -1, W, H), prismRadius: 6.5 }
+  );
+
+  // Branch 1 (Violet TW-HOME): STRAIGHT RIGHT into left bevel (0 bends)
+  drawOrthoStepWithPrisms(
+    ctx,
+    [{ x: tun.right - 1, y: midY }, { x: g2.entryX + 12, y: midY }],
+    '170, 142, 240', waveState[1], 0.38, prismsQueue,
+    { clipFirst: (c) => clipHalfPlane(c, g2.topX, g2.topY, g2.leftX, g2.leftY, -1, W, H) }
+  );
+
+  // Branch 2 (Green Burst-Harvest): RIGHT -> SINGLE 45-deg prism -> straight UP into flat base (1 bend)
+  drawOrthoStepWithPrisms(
+    ctx,
+    [{ x: dom.right - 1, y: dom.cy }, { x: g2.cx, y: dom.cy }, { x: g2.cx, y: g2.leftY - 2 }],
+    '87, 209, 146', waveState[2], 0.52, prismsQueue,
+    { clipLast: (c) => clipHalfRectY(c, g2.leftY - 1, 1, W, H), prismRadius: 6.5 }
+  );
+
+  // Unified Merged Spectrum Egress -> 3-BAND HTB + FQ_CODEL (0 bends)
+  drawOrthoStepWithPrisms(
+    ctx,
+    [{ x: g2.exitX - 12, y: midY }, { x: qos.x + 1, y: midY }],
+    'spectrum', waveState[4], 0.44, prismsQueue,
+    { clipFirst: (c) => clipHalfPlane(c, g2.topX, g2.topY, g2.rightX, g2.rightY, 1, W, H) }
+  );
+
+  drawCrystalPrism(ctx, g2, 'merge');
 }
 
 function renderWaveguidesCanvas() {
@@ -504,9 +597,6 @@ function renderWaveguidesCanvas() {
   const tun = relBox($('#bp-card-tun'), rect);
   const dom = relBox($('#bp-card-dom'), rect);
   const qos = relBox($('#bp-card-qos'), rect);
-  const q10 = relBox($('#bp-qos-10'), rect);
-  const q20 = relBox($('#bp-qos-20'), rect);
-  const q30 = relBox($('#bp-qos-30'), rect);
   const up  = relBox($('#bp-card-uplink'), rect);
   if (!pre || !ing || !vip || !tun || !dom || !qos || !up) return;
 
@@ -544,28 +634,10 @@ function renderWaveguidesCanvas() {
     );
   }
 
-  // Horizontal/Vertical Optical Bus + Main Focal Prism + 45-45-90 TIR Turning Prisms
-  if (Math.min(vip.x, tun.x, dom.x) - ing.right > 30) {
-    drawFocalPrismAndFan(ctx, rect.width, rect.height, ing, vip, tun, dom, prismsQueue);
+  // Symmetric Center-Axis Dual Prisms + Single-Bend 45-deg TIR Mirrors
+  drawDualPrismPipeline(ctx, rect.width, rect.height, ing, vip, tun, dom, qos, prismsQueue);
 
-    const rightS2 = Math.max(vip.right, tun.right, dom.right);
-    const gap2W = qos.x - rightS2;
-    if (gap2W > 18) {
-      const y10 = q10 ? q10.cy : (qos.y + qos.h * 0.30);
-      const y20 = q20 ? q20.cy : (qos.y + qos.h * 0.55);
-      const y30 = q30 ? q30.cy : (qos.y + qos.h * 0.80);
-
-      const xLane0 = vip.right + (qos.x - vip.right) * 0.28;
-      const xLane1 = tun.right + (qos.x - tun.right) * 0.50;
-      const xLane2 = dom.right + (qos.x - dom.right) * 0.72;
-
-      drawOrthoStepWithPrisms(ctx, orthoStepPts(vip.right - 1, vip.cy, xLane0, y10, qos.x + 1), '100, 174, 245', waveState[0], 0.24, prismsQueue);
-      drawOrthoStepWithPrisms(ctx, orthoStepPts(tun.right - 1, tun.cy, xLane1, y20, qos.x + 1), '170, 142, 240', waveState[1], 0.38, prismsQueue);
-      drawOrthoStepWithPrisms(ctx, orthoStepPts(dom.right - 1, dom.cy, xLane2, y30, qos.x + 1), '87, 209, 146',  waveState[2], 0.52, prismsQueue);
-    }
-  }
-
-  // Render all 45-degree crystal turning prisms crisply above all straight beam spans
+  // Render all 45-degree crystal turning prisms crisply above straight beam spans
   for (const p of prismsQueue) drawRightAngleTurningPrism(ctx, p);
 
   ctx.restore();
@@ -585,6 +657,7 @@ function stepAnimation(now) {
     const b = waveState[k];
     b.vel += (b.targetVel - b.vel) * 0.1;
     b.glow += (b.targetGlow - b.glow) * 0.1;
+    b.width += (b.targetWidth - b.width) * 0.1;
     b.phase = (b.phase + b.vel * dt) % 1.0;
   }
 
@@ -657,7 +730,8 @@ function updateFlowPhysics(st) {
   liveFlow.domPkts = domPkts;
   liveFlow.tunShare = totPkts > 0 ? tunPkts / totPkts : 0;
 
-  const weaveBps = Math.max(liveFlow.domBps, Math.max(0, totalRate - vipBps));
+  const directResidual = Math.max(0, totalRate - vipBps - liveFlow.tunBps);
+  const weaveBps = prevRuleSample ? liveFlow.domBps : Math.max(liveFlow.domBps, directResidual);
   const rates = [
     vipS && vipS.healthy ? vipBps : -1,
     st.tunnel?.on && st.tunnel?.running ? liveFlow.tunBps : -1,
@@ -666,25 +740,22 @@ function updateFlowPhysics(st) {
     totalRate
   ];
 
+  const maxBps = Math.max(2048, vipBps, liveFlow.tunBps, weaveBps, totalRate);
   for (let k = 0; k < waveState.length; k++) {
     const bps = rates[k];
     const b = waveState[k];
-    if (bps < 0) {
-      b.targetVel = 0;
-      b.targetGlow = 0.08;
-      b.width = 1.6;
+    if (bps < 0 || bps <= 32) {
+      b.targetVel = bps < 0 ? 0 : 0.04;
+      b.targetGlow = 0;
+      b.targetWidth = 1.65;
     } else {
       const mbps = (bps * 8) / 1e6;
-      if (mbps < 0.01) {
-        b.targetVel = 0.24;
-        b.targetGlow = 0.42;
-        b.width = 2.1;
-      } else {
-        const logF = Math.log10(1 + mbps * 6);
-        b.targetVel = Math.min(1.25, 0.30 + logF * 0.42);
-        b.targetGlow = Math.min(1.0, 0.56 + logF * 0.28);
-        b.width = Math.min(3.5, 2.2 + logF * 0.65);
-      }
+      const absPulse = Math.min(1, Math.log10(1 + mbps * 7) / 1.55);
+      const relPulse = bps / maxBps;
+      const level = Math.min(1, Math.max(absPulse, relPulse * 0.42));
+      b.targetVel = 0.14 + level * 1.10;
+      b.targetGlow = level;
+      b.targetWidth = 1.75 + level * 1.65;
     }
   }
 }

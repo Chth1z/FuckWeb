@@ -625,10 +625,10 @@
 #bp-card-pregate { flex: 0 0 auto; }
 #bp-card-ingress { flex: 1 1 0; }
 #bp-card-vip     { flex: 0 0 auto; }
-#bp-card-tun     { flex: 1 1 0; justify-content: space-between; }
-#bp-card-dom     { flex: 1 1 0; justify-content: space-between; }
-#bp-card-qos     { flex: 1.08 1 0; justify-content: space-between; }
-#bp-card-uplink  { flex: 0.96 1 0; justify-content: space-between; }
+#bp-card-tun     { flex: 1.18 1 0; justify-content: space-between; }
+#bp-card-dom     { flex: 0.86 1 0; justify-content: space-between; }
+#bp-card-qos     { flex: 1.24 1 0; justify-content: space-between; }
+#bp-card-uplink  { flex: 0.84 1 0; justify-content: space-between; }
 
 .qos-band-col {
   display: flex;

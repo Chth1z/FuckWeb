@@ -2,9 +2,9 @@
  * PRISM — View 04: Merged Wide Device Policy Matrix & Live Flows Explorer
  * ============================================================================ */
 
-import { S, fmtRate, fmtBytes } from '../state.js?v=5.6.1';
-import { $, $$, el } from '../dom.js?v=5.6.1';
-import { write, openLoginModal } from '../api.js?v=5.6.1';
+import { S, fmtRate, fmtBytes } from '../state.js?v=5.6.2';
+import { $, $$, el } from '../dom.js?v=5.6.2';
+import { write, openLoginModal } from '../api.js?v=5.6.2';
 
 const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
 const POLICY_META = {
