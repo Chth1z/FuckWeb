@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate } from '../state.js?v=5.4.0';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.4.0';
-import { write, call } from '../api.js?v=5.4.0';
+import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate } from '../state.js?v=5.4.1';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.4.1';
+import { write, call } from '../api.js?v=5.4.1';
 
 let drawerOpen = false;
 let rafId = null;
@@ -86,10 +86,32 @@ function traceBezier(ctx, g) {
   ctx.bezierCurveTo(g.cx1, g.cy1, g.cx2, g.cy2, g.x1, g.y1);
 }
 
+const SPECTRUM_STOPS = [
+  [0.00, [232, 93, 80]],
+  [0.18, [235, 154, 94]],
+  [0.36, [240, 202, 104]],
+  [0.56, [87, 209, 146]],
+  [0.78, [100, 174, 245]],
+  [1.00, [170, 142, 240]],
+];
+
+function makeSpectrumGradient(ctx, x0, y0, x1, y1, alpha, whiteMix = 0) {
+  const grad = ctx.createLinearGradient(x0, y0, x1, y1);
+  const a = alpha.toFixed(3);
+  for (const [offset, c] of SPECTRUM_STOPS) {
+    const r = Math.round(c[0] + (255 - c[0]) * whiteMix);
+    const g = Math.round(c[1] + (255 - c[1]) * whiteMix);
+    const b = Math.round(c[2] + (255 - c[2]) * whiteMix);
+    grad.addColorStop(offset, `rgba(${r}, ${g}, ${b}, ${a})`);
+  }
+  return grad;
+}
+
 function drawPortAnchor(ctx, x, y, rgb, glow) {
+  const anchorRgb = rgb === 'spectrum' ? '216, 232, 255' : rgb;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = `rgba(${rgb}, ${(0.28 + glow * 0.36).toFixed(3)})`;
+  ctx.fillStyle = `rgba(${anchorRgb}, ${(0.28 + glow * 0.36).toFixed(3)})`;
   ctx.fillRect(x - 4, y - 4, 8, 8);
   ctx.fillStyle = `rgba(255, 255, 255, ${(0.55 + glow * 0.38).toFixed(3)})`;
   ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
@@ -100,12 +122,18 @@ function drawLinkTag(ctx, x, y, text, rgb) {
   ctx.save();
   ctx.font = '600 9.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
   const tw = ctx.measureText(text).width;
+  const bx = x - tw * 0.5 - 5;
+  const bw = tw + 10;
   ctx.fillStyle = 'rgba(4, 6, 12, 0.88)';
-  ctx.fillRect(x - tw * 0.5 - 5, y - 8, tw + 10, 15);
-  ctx.strokeStyle = `rgba(${rgb}, 0.42)`;
+  ctx.fillRect(bx, y - 8, bw, 15);
+  ctx.strokeStyle = rgb === 'spectrum'
+    ? makeSpectrumGradient(ctx, bx, y, bx + bw, y, 0.72)
+    : `rgba(${rgb}, 0.42)`;
   ctx.lineWidth = 1;
-  ctx.strokeRect(x - tw * 0.5 - 5, y - 8, tw + 10, 15);
-  ctx.fillStyle = `rgba(${mixWhiteRgb(rgb, 0.45)}, 0.92)`;
+  ctx.strokeRect(bx, y - 8, bw, 15);
+  ctx.fillStyle = rgb === 'spectrum'
+    ? 'rgba(244, 247, 252, 0.96)'
+    : `rgba(${mixWhiteRgb(rgb, 0.45)}, 0.92)`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y);
@@ -117,7 +145,12 @@ function drawContinuousLightRibbon(ctx, geom, rgb, st, phaseOffset = 0, tag = ''
   const active = st.vel > 0.01;
   const g = st.glow;
   const w = st.width;
-  const hotCoreRgb = mixWhiteRgb(rgb, 0.62);
+  const isSpec = rgb === 'spectrum';
+  const strokePaint = (a, whiteMix = 0) => (
+    isSpec
+      ? makeSpectrumGradient(ctx, geom.x0, geom.y0, geom.x1, geom.y1, a, whiteMix)
+      : `rgba(${whiteMix > 0 ? mixWhiteRgb(rgb, whiteMix) : rgb}, ${a.toFixed(3)})`
+  );
 
   ctx.save();
   ctx.lineCap = 'round';
@@ -127,19 +160,19 @@ function drawContinuousLightRibbon(ctx, geom, rgb, st, phaseOffset = 0, tag = ''
   // 1. Wide Outer Optical Bloom (100% full length from port to port, never dim at ends)
   traceBezier(ctx, geom);
   ctx.lineWidth = w * 5.0;
-  ctx.strokeStyle = `rgba(${rgb}, ${(0.08 + g * 0.16).toFixed(3)})`;
+  ctx.strokeStyle = strokePaint(0.08 + g * 0.16);
   ctx.stroke();
 
   // 2. Solid Saturated Color Beam Body (100% full length continuous ribbon matching Figure 3)
   traceBezier(ctx, geom);
   ctx.lineWidth = w * 2.05;
-  ctx.strokeStyle = `rgba(${rgb}, ${(0.38 + g * 0.44).toFixed(3)})`;
+  ctx.strokeStyle = strokePaint(0.38 + g * 0.44);
   ctx.stroke();
 
   // 3. Continuous Bright Luminous Inner Core Filament (100% full length solid light streak)
   traceBezier(ctx, geom);
   ctx.lineWidth = Math.max(1.25, w * 0.78);
-  ctx.strokeStyle = `rgba(${hotCoreRgb}, ${(0.56 + g * 0.36).toFixed(3)})`;
+  ctx.strokeStyle = strokePaint(0.56 + g * 0.36, 0.62);
   ctx.stroke();
 
   // 4. Subtle Periodic Flowing Optical Surge (adds +luminance crests over already-solid beam — never hollow!)
@@ -210,7 +243,7 @@ function renderWaveguidesCanvas() {
   // Stage 1 Vertical Conduit: Pre-Gate -> Nftables Classify Engine
   if (ing.y - pre.bottom > 6) {
     const gPre = makeBezier(pre.cx, pre.bottom, ing.cx, ing.y, false);
-    drawContinuousLightRibbon(ctx, gPre, '235, 154, 94', waveState[4], 0.00, 'QUIC→TCP');
+    drawContinuousLightRibbon(ctx, gPre, 'spectrum', waveState[4], 0.00, 'QUIC→TCP');
   }
 
   // Inter-Engine Cross-Feed: TW-HOME (TProxy weave_out) -> Burst-Harvest Pool
@@ -562,7 +595,7 @@ export function renderBlueprint() {
   $('#bp-dns-st').textContent = `SmartDNS :${st.dns?.port || 6053} · dom ${sz.domestic4 ?? 0} · cn ${sz.domestic4_dns ?? 0} · tun ${sz.tunnel4_dns ?? 0}`;
 
   const chargedRatio = (w.charged_count || 0) / nH;
-  renderSegMeter($('#bp-harvest-meter'), chargedRatio, 10, 'amber');
+  renderSegMeter($('#bp-harvest-meter'), chargedRatio, 10, 'spectrum');
   $('#bp-harvest-txt').textContent = `${w.policy || 'harvest'} ${Math.round(chargedRatio * 100)}%`;
 
   const curMode = st.settings?.['strands.aggregate'] || st.site?.mode || 'auto';

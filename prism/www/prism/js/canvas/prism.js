@@ -5,8 +5,8 @@
  * bands (no curves, no core lines, no particles), zero shadowBlur lag.
  * ============================================================================ */
 
-import { S, spectralColor, fmtRate } from '../state.js?v=5.4.0';
-import { $ } from '../dom.js?v=5.4.0';
+import { S, spectralColor, fmtRate } from '../state.js?v=5.4.1';
+import { $ } from '../dom.js?v=5.4.1';
 
 let rafId = null;
 let needsRedraw = true;
@@ -124,7 +124,10 @@ function handlePrismHover(rect) {
       depleted: '🛑 觸頂退避 (DEPLETED)'
     };
     const stateTxt = !s.healthy ? '離線 / 待認證' : (s.vip ? '💎 VIP 電競零丟包專線' : (bucketNames[s.bucket] || s.bucket));
+    tip.classList.remove('spectrum');
+    tip.style.borderImage = '';
     tip.style.borderColor = col.css;
+    tip.style.boxShadow = `0 0 18px rgba(${col.rgb}, 0.34), 0 0 38px rgba(${col.rgb}, 0.14), inset 0 0 12px rgba(${col.rgb}, 0.10), 0 14px 36px rgba(0, 0, 0, 0.90)`;
     tip.innerHTML = `
       <div class="tt-head">
         <span style="color:${col.css}">${s.dev} (#${s.id})</span>
@@ -144,11 +147,14 @@ function handlePrismHover(rect) {
   } else {
     const st = S.status || {};
     const devs = S.devices?.devices || [];
-    tip.style.borderColor = 'var(--c-amber)';
+    tip.classList.add('spectrum');
+    tip.style.borderColor = '';
+    tip.style.borderImage = '';
+    tip.style.boxShadow = '';
     tip.innerHTML = `
       <div class="tt-head">
         <span class="c-bright">INCIDENT BEAM · 聚合入射白光</span>
-        <span class="c-amber">${devs.length} 終端</span>
+        <span class="c-spectrum">${devs.length} 終端</span>
       </div>
       <div class="tt-grid">
         <span class="tt-k">總下行吞吐</span><span class="tt-v">${fmtRate(st.rate).full}</span>

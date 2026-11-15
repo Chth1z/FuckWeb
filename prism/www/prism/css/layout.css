@@ -110,12 +110,21 @@
 
 .nav-tab.active {
   color: var(--text-bright);
-  border-bottom-color: var(--c-amber);
-  background: linear-gradient(180deg, transparent, rgba(235, 154, 94, 0.08));
+  border-bottom-color: transparent;
+  border-image: var(--prism-spectrum) 1;
+  background: linear-gradient(90deg,
+    rgba(232, 93, 80, 0.06) 0%,
+    rgba(240, 202, 104, 0.05) 35%,
+    rgba(87, 209, 146, 0.06) 60%,
+    rgba(100, 174, 245, 0.07) 82%,
+    rgba(170, 142, 240, 0.07) 100%);
 }
 
 .nav-tab.active .tab-idx {
-  color: var(--c-amber);
+  background: var(--prism-spectrum);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .topbar-right {

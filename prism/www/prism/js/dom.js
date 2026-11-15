@@ -2,7 +2,7 @@
  * PRISM 5.0 — DOM Builders, Segmented Block Meters & Log Renderers
  * ============================================================================ */
 
-import { fmtClock } from './state.js?v=5.4.0';
+import { fmtClock } from './state.js?v=5.4.1';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -39,6 +39,28 @@ export function svgEl(tag, attrs = {}, ...children) {
   return node;
 }
 
+const SEG_SPECTRUM_STOPS = [
+  [232, 93, 80],
+  [235, 154, 94],
+  [240, 202, 104],
+  [87, 209, 146],
+  [100, 174, 245],
+  [170, 142, 240],
+];
+
+function sampleSpectrumRgb(t) {
+  const scaled = Math.max(0, Math.min(1, t)) * (SEG_SPECTRUM_STOPS.length - 1);
+  const idx = Math.min(SEG_SPECTRUM_STOPS.length - 2, Math.floor(scaled));
+  const frac = scaled - idx;
+  const a = SEG_SPECTRUM_STOPS[idx];
+  const b = SEG_SPECTRUM_STOPS[idx + 1];
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * frac),
+    Math.round(a[1] + (b[1] - a[1]) * frac),
+    Math.round(a[2] + (b[2] - a[2]) * frac),
+  ].join(', ');
+}
+
 export function renderSegMeter(container, ratio, count = 12, colorClass = 'mint') {
   if (!container) return;
   const active = Math.round(Math.max(0, Math.min(1, ratio)) * count);
@@ -47,7 +69,19 @@ export function renderSegMeter(container, ratio, count = 12, colorClass = 'mint'
   container.dataset.sig = sig;
   container.innerHTML = '';
   for (let i = 0; i < count; i++) {
-    container.appendChild(el('span', { class: `seg-cell ${i < active ? 'on ' + colorClass : ''}` }));
+    const isOn = i < active;
+    if (isOn && colorClass === 'spectrum') {
+      const rgb = sampleSpectrumRgb(count > 1 ? i / (count - 1) : 0);
+      container.appendChild(el('span', {
+        class: 'seg-cell on',
+        style: {
+          background: `rgb(${rgb})`,
+          boxShadow: `0 0 8px rgba(${rgb}, 0.65), 0 0 14px rgba(${rgb}, 0.25)`,
+        },
+      }));
+    } else {
+      container.appendChild(el('span', { class: `seg-cell ${isOn ? 'on ' + colorClass : ''}` }));
+    }
   }
 }
 
@@ -86,7 +120,7 @@ export function renderSessionLog(container, events, limit = 6) {
       colorClass = 'c-violet';
       meta = 'guard -> verified';
     } else if (tag.includes('config') || tag.includes('device') || tag.includes('tunnel')) {
-      colorClass = 'c-amber';
+      colorClass = 'c-gold';
       meta = 'uci -> committed';
     }
     container.appendChild(el('div', { class: 'log-row' },

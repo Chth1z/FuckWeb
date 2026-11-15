@@ -6,10 +6,10 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>PRISM v5.4.0 · Optical Spectrum &amp; Privacy Router</title>
-  <link rel="stylesheet" href="css/tokens.css?v=5.4.0">
-  <link rel="stylesheet" href="css/layout.css?v=5.4.0">
-  <link rel="stylesheet" href="css/components.css?v=5.4.0">
+  <title>PRISM v5.4.1 · Optical Spectrum &amp; Privacy Router</title>
+  <link rel="stylesheet" href="css/tokens.css?v=5.4.1">
+  <link rel="stylesheet" href="css/layout.css?v=5.4.1">
+  <link rel="stylesheet" href="css/components.css?v=5.4.1">
 </head>
 <body>
   <div class="app-shell">
@@ -27,7 +27,7 @@
           </svg>
         </span>
         <span class="brand-name">PRISM</span>
-        <span class="brand-sub"><span id="hdr-ver">v5.4.0</span> · <span id="hdr-ip">192.168.16.1</span></span>
+        <span class="brand-sub"><span id="hdr-ver">v5.4.1</span> · <span id="hdr-ip">192.168.16.1</span></span>
       </div>
 
       <nav class="nav-tabs" aria-label="Primary">
@@ -96,7 +96,7 @@
             <div class="corner-sub">
               <span>在線終端 <strong id="ov-devs" class="c-bright">0 台</strong></span>
               <span>·</span>
-              <span id="ov-site-name" class="c-amber">—</span>
+              <span id="ov-site-name" class="c-spectrum">—</span>
             </div>
             <div class="corner-sub c-muted">
               <span>累計 ↓ <span id="ov-total-down">0 B</span></span>
@@ -128,7 +128,7 @@
 
         <div class="bp-compact-legend">
           <div class="legend-group">
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-amber);box-shadow:0 0 8px var(--c-amber)"></span><span>ingress · classify</span></span>
+            <span class="legend-item"><span class="legend-sq" style="background:var(--prism-spectrum);box-shadow:0 0 8px rgba(100,174,245,0.55)"></span><span>ingress · classify</span></span>
             <span class="legend-item"><span class="legend-sq" style="background:var(--c-blue);box-shadow:0 0 8px var(--c-blue)"></span><span>@vip_lane · 遊戲專線</span></span>
             <span class="legend-item"><span class="legend-sq" style="background:var(--c-violet);box-shadow:0 0 8px var(--c-violet)"></span><span>TW-HOME · Mihomo &amp; weave_out</span></span>
             <span class="legend-item"><span class="legend-sq" style="background:var(--c-mint);box-shadow:0 0 8px var(--c-mint)"></span><span>burst-harvest · 21 光譜織網</span></span>
@@ -179,19 +179,19 @@
 
             <!-- Stage 1 (Left Col): Ingress Pre-Gate + Nftables Classify Engine -->
             <div class="bp-stage-col bp-col-ingress">
-              <div id="bp-card-pregate" class="s-box amber bp-stage-card">
+              <div id="bp-card-pregate" class="s-box spectrum bp-stage-card">
                 <div class="bp-node-head" style="margin-bottom:4px">
                   <div>
-                    <div style="font-weight:700;color:var(--c-amber);font-size:12px">PRE-GATE · QUIC / DNS</div>
+                    <div style="font-weight:700;font-size:12px"><span class="c-spectrum">PRE-GATE · QUIC / DNS</span></div>
                     <div class="c-sec" style="font-size:10px">@dev_block · UDP:443 1ms 回退</div>
                   </div>
-                  <span id="bp-quic-pkts" class="bp-live-rate c-amber" style="font-size:12px">0 pkts</span>
+                  <span id="bp-quic-pkts" class="bp-live-rate c-spectrum" style="font-size:12px">0 pkts</span>
                 </div>
                 <div id="bp-dns-st" class="c-sec" style="font-size:10px;margin-top:2px">SmartDNS :6053 · cn: 0 · tun: 0</div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;flex-wrap:wrap">
                   <div style="display:flex;align-items:center;gap:5px">
                     <span id="bp-harvest-meter" class="seg-meter"></span>
-                    <span id="bp-harvest-txt" class="c-gold" style="font-size:10px">harvest</span>
+                    <span id="bp-harvest-txt" class="c-spectrum" style="font-size:10px">harvest</span>
                   </div>
                   <div style="display:flex;align-items:center;gap:5px">
                     <div id="site-mode-seg" class="seg-group" aria-label="站點聚匯模式">
@@ -204,10 +204,10 @@
                 </div>
               </div>
 
-              <div id="bp-card-ingress" class="s-box amber bp-stage-card">
+              <div id="bp-card-ingress" class="s-box spectrum bp-stage-card">
                 <div class="bp-node-head" style="margin-bottom:4px">
                   <div>
-                    <div style="font-weight:700;color:var(--c-amber);font-size:12px">NFTABLES CLASSIFY</div>
+                    <div style="font-weight:700;font-size:12px"><span class="c-spectrum">NFTABLES CLASSIFY</span></div>
                     <div class="c-sec" style="font-size:10px">prerouting → @dev_policy → 分流決策</div>
                   </div>
                   <div style="text-align:right">
@@ -336,10 +336,10 @@
 
           <!-- Left Column: Top Pure Square Heatmap + Bottom Optical Flux Oscilloscope -->
           <div class="spectrum-left-col">
-            <div class="s-box amber spec-heat-panel">
+            <div class="s-box spectrum spec-heat-panel">
               <div class="panel-head" style="margin-bottom:2px;padding-bottom:5px">
                 <div>
-                  <span class="panel-title c-amber">21-WAVELENGTH EMISSION MATRIX</span>
+                  <span class="panel-title c-spectrum">21-WAVELENGTH EMISSION MATRIX</span>
                   <span id="weave-cap" class="c-sec" style="font-size:10.5px;margin-left:8px">126 slots</span>
                 </div>
                 <span class="c-muted" style="font-size:10px">點擊鎖定 · 發光強度=負載</span>
@@ -490,7 +490,7 @@
         <span>vip <strong id="cli-vip" class="c-blue">—</strong></span>
       </div>
       <div class="footer-right">
-        <span>spectrum <span id="ft-strands" class="c-amber">[21/21]</span></span>
+        <span>spectrum <span id="ft-strands" class="c-spectrum">[21/21]</span></span>
         <span>vip <span id="ft-vip" class="c-blue">[—]</span></span>
         <span>tunnel <span id="ft-tunnel" class="c-violet">[tw-home]</span></span>
         <span>guard <span id="ft-guard" class="c-mint">[fail_closed]</span></span>
@@ -513,8 +513,8 @@
       <div class="sys-modal-body">
         <div id="doctor-list" class="doctor-grid"></div>
         <div class="bp-split-2">
-          <div class="s-box amber">
-            <div class="c-amber" style="font-weight:700;margin-bottom:6px;font-size:12px">核心架構鎖定項 (IMMUTABLE)</div>
+          <div class="s-box spectrum">
+            <div style="font-weight:700;margin-bottom:6px;font-size:12px"><span class="c-spectrum">核心架構鎖定項 (IMMUTABLE)</span></div>
             <div id="locked-panel"></div>
           </div>
           <div class="s-box mint">
@@ -529,7 +529,7 @@
   <!-- Admin Auth Modal -->
   <div id="scrim" class="modal-scrim" role="dialog" aria-modal="true" aria-labelledby="modal-ver">
     <div class="modal-box">
-      <div id="modal-ver" class="c-amber" style="font-weight:700;margin-bottom:4px">PRISM v5.1.0 · 路由器管理驗證</div>
+      <div id="modal-ver" class="c-spectrum" style="font-weight:700;margin-bottom:4px;width:fit-content">PRISM v5.4.1 · 路由器管理驗證</div>
       <div class="c-sec" style="font-size:11.5px;margin-bottom:12px">通過 OpenWrt ubus /rpcd 建立加密管理會話</div>
       <form id="login-form" style="display:flex;flex-direction:column;gap:10px">
         <div>
@@ -551,6 +551,6 @@
 
   <div id="toast" class="toast-bar"></div>
 
-  <script type="module" src="js/main.js?v=5.4.0"></script>
+  <script type="module" src="js/main.js?v=5.4.1"></script>
 </body>
 </html>

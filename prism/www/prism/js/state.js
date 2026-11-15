@@ -2,7 +2,7 @@
  * PRISM 5.0 — Central State Store, DSOTM Spectral Color Math & Formatters
  * ============================================================================ */
 
-export const UI_VERSION = '5.4.0';
+export const UI_VERSION = '5.4.1';
 
 export const S = {
   tab: 'overview',
