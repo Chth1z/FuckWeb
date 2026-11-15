@@ -40,6 +40,13 @@
     #57d192 56%,
     #64aef5 78%,
     #aa8ef0 100%);
+  --prism-spectrum-diag: linear-gradient(135deg,
+    #e85d50 0%,
+    #eb9a5e 18%,
+    #f0ca68 36%,
+    #57d192 56%,
+    #64aef5 78%,
+    #aa8ef0 100%);
   --prism-rainbow-shadow:
     -8px 0 22px rgba(232, 93, 80, 0.16),
     0 0 22px rgba(87, 209, 146, 0.15),

@@ -5,8 +5,8 @@
  * bands (no curves, no core lines, no particles), zero shadowBlur lag.
  * ============================================================================ */
 
-import { S, spectralColor, fmtRate } from '../state.js?v=5.4.1';
-import { $ } from '../dom.js?v=5.4.1';
+import { S, spectralColor, fmtRate } from '../state.js?v=5.5.0';
+import { $ } from '../dom.js?v=5.5.0';
 
 let rafId = null;
 let needsRedraw = true;
@@ -176,6 +176,31 @@ function handlePrismHover(rect) {
   tip.classList.add('show');
 }
 
+function clipSlopeHalfPlane(ctx, ax, ay, bx, by, sideSign, W, H) {
+  const dx = bx - ax;
+  const dy = (by - ay) || 1;
+  const yTop = -120;
+  const yBot = H + 120;
+  const xTop = ax + dx * ((yTop - ay) / dy);
+  const xBot = ax + dx * ((yBot - ay) / dy);
+  ctx.beginPath();
+  if (sideSign < 0) {
+    const xFar = Math.min(-120, xTop - 200, xBot - 200);
+    ctx.moveTo(xFar, yTop);
+    ctx.lineTo(xTop, yTop);
+    ctx.lineTo(xBot, yBot);
+    ctx.lineTo(xFar, yBot);
+  } else {
+    const xFar = Math.max(W + 120, xTop + 200, xBot + 200);
+    ctx.moveTo(xTop, yTop);
+    ctx.lineTo(xFar, yTop);
+    ctx.lineTo(xFar, yBot);
+    ctx.lineTo(xBot, yBot);
+  }
+  ctx.closePath();
+  ctx.clip();
+}
+
 function drawFeatheredEdge(ctx, x0, y0, x1, y1, nx, ny, dist, rgb, alpha) {
   if (alpha <= 0.004 || dist <= 0.5) return;
   const mx = (x0 + x1) * 0.5;
@@ -262,33 +287,40 @@ function drawPrismFrame() {
   const beamHalf = Math.min(4.8, 1.5 + Math.sqrt(Math.max(0, totalMbps)) * 0.32);
   const beamGlowHalf = beamHalf * (4.2 + Math.min(2.6, totalMbps * 0.05));
 
-  // Normal vector to incident beam
+  // Normal vector & unit direction to incident beam
   const bLen = Math.hypot(entryX - startX, entryY - startY) || 1;
-  const nx = -(entryY - startY) / bLen;
-  const ny = (entryX - startX) / bLen;
+  const ux = (entryX - startX) / bLen;
+  const uy = (entryY - startY) / bLen;
+  const nx = -uy;
+  const ny = ux;
+  const beamEndX = entryX + ux * 90;
+  const beamEndY = entryY + uy * 90;
 
-  // Dual-tier feathered optical luminance halo around the incident beam (resting glow + surge bloom)
+  // Dual-tier feathered optical luminance halo clipped flush to prism's left crystal face
   const outerGlowAlpha = Math.min(0.46, 0.22 + Math.sqrt(Math.max(0, totalMbps)) * 0.036);
   const innerGlowAlpha = Math.min(0.62, 0.34 + Math.sqrt(Math.max(0, totalMbps)) * 0.042);
   ctx.save();
+  clipSlopeHalfPlane(ctx, topX, topY, leftX, leftY, -1, W, H);
+  ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   // Wide soft outer feather
-  drawFeatheredEdge(ctx, startX, startY, entryX, entryY, nx, ny, beamGlowHalf, '215, 236, 255', outerGlowAlpha);
-  drawFeatheredEdge(ctx, startX, startY, entryX, entryY, -nx, -ny, beamGlowHalf, '215, 236, 255', outerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, nx, ny, beamGlowHalf, '215, 236, 255', outerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamGlowHalf, '215, 236, 255', outerGlowAlpha);
   // Tight core bloom
-  drawFeatheredEdge(ctx, startX, startY, entryX, entryY, nx, ny, beamHalf * 2.1, '255, 255, 255', innerGlowAlpha);
-  drawFeatheredEdge(ctx, startX, startY, entryX, entryY, -nx, -ny, beamHalf * 2.1, '255, 255, 255', innerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, nx, ny, beamHalf * 2.1, '255, 255, 255', innerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamHalf * 2.1, '255, 255, 255', innerGlowAlpha);
   ctx.restore();
 
-  // Solid crisp white incident beam
+  // Solid crisp white incident beam (also flush-clipped to left glass bevel)
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.moveTo(startX + nx * beamHalf, startY + ny * beamHalf);
-  ctx.lineTo(entryX + nx * (beamHalf * 0.85), entryY + ny * (beamHalf * 0.85));
-  ctx.lineTo(entryX - nx * (beamHalf * 0.85), entryY - ny * (beamHalf * 0.85));
+  ctx.lineTo(beamEndX + nx * (beamHalf * 0.85), beamEndY + ny * (beamHalf * 0.85));
+  ctx.lineTo(beamEndX - nx * (beamHalf * 0.85), beamEndY - ny * (beamHalf * 0.85));
   ctx.lineTo(startX - nx * beamHalf, startY - ny * beamHalf);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
 
   S.hitBoxes.push({
     kind: 'beam',
@@ -305,7 +337,7 @@ function drawPrismFrame() {
 
   let stillMoving = false;
   if (S.bandSmooth.length !== nStrands) {
-    S.bandSmooth = new Array(nStrands).fill(null).map(() => ({ w: 1, alpha: 0.84 }));
+    S.bandSmooth = new Array(nStrands).fill(null).map(() => ({ w: 1, alpha: 0.84, glow: 0.40 }));
   }
 
   const weights = [];
@@ -316,49 +348,71 @@ function drawPrismFrame() {
     const mbps = (rateBps * 8) / 1e6;
     const tokRatio = (s.tokens_pct ?? 100) / 100;
 
-    // Target thickness weight & luminance alpha based on traffic speed & bucket state
+    // Target thickness, alpha & continuous phosphor glow (zero binary threshold flicker)
     let targetW = 1.0;
     let targetAlpha = 0.84;
+    let targetGlow = 0.42;
     if (!s.healthy) {
       targetW = 0.38;
       targetAlpha = 0.22;
+      targetGlow = 0.0;
     } else if (s.bucket === 'depleted') {
-      targetW = 0.52;
-      targetAlpha = 0.45;
+      targetW = 0.56;
+      targetAlpha = 0.48;
+      targetGlow = 0.16;
     } else {
-      targetW = 0.85 + 0.30 * tokRatio + Math.min(2.4, Math.sqrt(Math.max(0, mbps)) * 0.48);
+      targetW = 0.88 + 0.28 * tokRatio + Math.min(2.2, Math.sqrt(Math.max(0, mbps)) * 0.44);
       targetAlpha = Math.min(0.98, 0.78 + 0.10 * tokRatio + Math.min(0.18, Math.sqrt(Math.max(0, mbps)) * 0.05));
+      targetGlow = Math.min(1.0, 0.36 + 0.10 * tokRatio + Math.log10(1 + Math.max(0, mbps) * 4.5) * 0.40);
     }
 
     const sm = S.bandSmooth[i];
+    if (sm.glow == null) sm.glow = targetGlow;
     const dw = targetW - sm.w;
     const da = targetAlpha - sm.alpha;
-    if (Math.abs(dw) > 0.003 || Math.abs(da) > 0.003) {
+    const dg = targetGlow - sm.glow;
+    if (Math.abs(dw) > 0.003 || Math.abs(da) > 0.003 || Math.abs(dg) > 0.002) {
       sm.w += dw * 0.18;
       sm.alpha += da * 0.18;
+      // Fast optical attack, slow phosphor decay prevents intermittent flash/blinking on burst shifts
+      sm.glow += dg * (dg > 0 ? 0.24 : 0.055);
       stillMoving = true;
     } else {
       sm.w = targetW;
       sm.alpha = targetAlpha;
+      sm.glow = targetGlow;
     }
     weights.push(sm.w);
     weightSum += sm.w;
   }
 
-  // Soft atmospheric outer glow along Red (top) & Violet (bottom) fading cleanly to 0 (self-luminous at rest)
+  // Clip all right-side dispersed bands + outer halos flush to the prism's sloped right face
+  ctx.save();
+  clipSlopeHalfPlane(ctx, topX, topY, rightX, rightY, 1, W, H);
+
+  const topDx = W - exitTopX;
+  const topDy = farTopY - exitTopY;
+  const topLen = Math.hypot(topDx, topDy) || 1;
+  const rxTop = exitTopX - (topDx / topLen) * 65;
+  const ryTop = exitTopY - (topDy / topLen) * 65;
+
+  const botDx = W - exitBotX;
+  const botDy = farBotY - exitBotY;
+  const botLen = Math.hypot(botDx, botDy) || 1;
+  const rxBot = exitBotX - (botDx / botLen) * 65;
+  const ryBot = exitBotY - (botDy / botLen) * 65;
+
+  // Soft atmospheric outer glow along Red (top) & Violet (bottom) fading cleanly to 0
   const anyHover = S.hoverStrand !== null;
   if (!anyHover) {
     const outerReach = Math.min(34, 18 + Math.sqrt(Math.max(0, totalMbps)) * 2.6);
-    const outerAlpha = Math.min(0.32, 0.15 + Math.sqrt(Math.max(0, totalMbps)) * 0.026);
-    const topDx = W - exitTopX;
-    const topDy = farTopY - exitTopY;
-    const topLen = Math.hypot(topDx, topDy) || 1;
+    const outerAlpha = Math.min(0.32, 0.16 + Math.sqrt(Math.max(0, totalMbps)) * 0.026);
     const colTop = spectralColor(0, nStrands);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     drawFeatheredEdge(
       ctx,
-      exitTopX, exitTopY,
+      rxTop, ryTop,
       W, farTopY,
       topDy / topLen, -topDx / topLen,
       outerReach,
@@ -366,13 +420,10 @@ function drawPrismFrame() {
       outerAlpha
     );
 
-    const botDx = W - exitBotX;
-    const botDy = farBotY - exitBotY;
-    const botLen = Math.hypot(botDx, botDy) || 1;
     const colBot = spectralColor(nStrands - 1, nStrands);
     drawFeatheredEdge(
       ctx,
-      exitBotX, exitBotY,
+      rxBot, ryBot,
       W, farBotY,
       -botDy / botLen, botDx / botLen,
       outerReach,
@@ -391,11 +442,17 @@ function drawPrismFrame() {
     cum += weights[i];
     const t1 = cum / weightSum;
 
-    // Near segment along the prism's right slope
+    // Exact exit points along prism slope (for hit testing)
     const x0Top = exitTopX + (exitBotX - exitTopX) * t0;
     const y0Top = exitTopY + (exitBotY - exitTopY) * t0;
     const x0Bot = exitTopX + (exitBotX - exitTopX) * t1;
     const y0Bot = exitTopY + (exitBotY - exitTopY) * t1;
+
+    // Clipped backward-extended start points (eliminate oblique cutoff notches at bevel)
+    const bx0Top = rxTop + (rxBot - rxTop) * t0;
+    const by0Top = ryTop + (ryBot - ryTop) * t0;
+    const bx0Bot = rxTop + (rxBot - rxTop) * t1;
+    const by0Bot = ryTop + (ryBot - ryTop) * t1;
 
     // Far segment at right canvas edge (x = W)
     const y1Top = farTopY + (farBotY - farTopY) * t0;
@@ -403,8 +460,7 @@ function drawPrismFrame() {
 
     const col = spectralColor(i, nStrands);
     const isHover = S.hoverStrand === s.id;
-    const rateBps = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
-    const mbps = (rateBps * 8) / 1e6;
+    const smoothGlow = S.bandSmooth[i].glow;
 
     let alpha = S.bandSmooth[i].alpha;
     if (anyHover) {
@@ -413,16 +469,15 @@ function drawPrismFrame() {
 
     ctx.fillStyle = `rgba(${col.rgb}, ${alpha.toFixed(3)})`;
     ctx.beginPath();
-    // Slight 0.35px overlap prevents subpixel anti-aliasing seams between contiguous bands
-    ctx.moveTo(x0Top, y0Top - 0.25);
+    ctx.moveTo(bx0Top, by0Top - 0.35);
     ctx.lineTo(W, y1Top - 0.35);
     ctx.lineTo(W, y1Bot + 0.35);
-    ctx.lineTo(x0Bot, y0Bot + 0.25);
+    ctx.lineTo(bx0Bot, by0Bot + 0.35);
     ctx.closePath();
     ctx.fill();
 
     bandGeoms.push({
-      x0Top, y0Top, x0Bot, y0Bot, y1Top, y1Bot, col, isHover, mbps, healthy: !!s.healthy
+      bx0Top, by0Top, bx0Bot, by0Bot, y1Top, y1Bot, col, isHover, smoothGlow, healthy: !!s.healthy
     });
 
     S.hitBoxes.push({
@@ -433,51 +488,50 @@ function drawPrismFrame() {
     });
   }
 
-  // Second pass: Subtle resting optical aura on all healthy bands + intense 圖1 bloom on active/hovered
+  // Second pass: Steady smoothed optical aura + phosphor glow (all healthy bands remain gently luminous)
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   for (let i = 0; i < bandGeoms.length; i++) {
     const b = bandGeoms[i];
     if (!b.isHover && (anyHover || !b.healthy)) continue;
 
-    const isActive = b.mbps > 0.15;
-    const bandMidThick = ((b.y0Bot - b.y0Top) + (b.y1Bot - b.y1Top)) * 0.5;
+    const gVal = b.smoothGlow;
+    const bandMidThick = ((b.by0Bot - b.by0Top) + (b.y1Bot - b.y1Top)) * 0.5;
     const bloomPad = b.isHover
-      ? Math.max(14, bandMidThick * 1.7)
-      : (isActive ? Math.min(14, 6 + Math.sqrt(b.mbps) * 1.5) : 5.5);
+      ? Math.max(14, bandMidThick * 1.75)
+      : (8.0 + gVal * 8.5);
     const edgePeak = b.isHover
       ? 0.48
-      : (isActive ? Math.min(0.26, 0.08 + Math.sqrt(b.mbps) * 0.036) : 0.055);
-    const coreBoost = b.isHover ? 0.36 : (isActive ? edgePeak * 0.65 : 0.05);
+      : (0.09 + gVal * 0.20);
+    const coreBoost = b.isHover ? 0.36 : (0.07 + gVal * 0.18);
 
-    // Chromatic interior boost in its own wavelength color
     ctx.fillStyle = `rgba(${b.col.rgb}, ${coreBoost.toFixed(3)})`;
     ctx.beginPath();
-    ctx.moveTo(b.x0Top, b.y0Top - 0.2);
+    ctx.moveTo(b.bx0Top, b.by0Top - 0.2);
     ctx.lineTo(W, b.y1Top - 0.2);
     ctx.lineTo(W, b.y1Bot + 0.2);
-    ctx.lineTo(b.x0Bot, b.y0Bot + 0.2);
+    ctx.lineTo(b.bx0Bot, b.by0Bot + 0.2);
     ctx.closePath();
     ctx.fill();
 
-    // Feathered chromatic aura radiating outward from upper and lower band edges
-    const tDx = W - b.x0Top;
-    const tDy = b.y1Top - b.y0Top;
+    const tDx = W - b.bx0Top;
+    const tDy = b.y1Top - b.by0Top;
     const tLen = Math.hypot(tDx, tDy) || 1;
     drawFeatheredEdge(
-      ctx, b.x0Top, b.y0Top, W, b.y1Top,
+      ctx, b.bx0Top, b.by0Top, W, b.y1Top,
       tDy / tLen, -tDx / tLen, bloomPad, b.col.rgb, edgePeak
     );
 
-    const bDx = W - b.x0Bot;
-    const bDy = b.y1Bot - b.y0Bot;
+    const bDx = W - b.bx0Bot;
+    const bDy = b.y1Bot - b.by0Bot;
     const bLen = Math.hypot(bDx, bDy) || 1;
     drawFeatheredEdge(
-      ctx, b.x0Bot, b.y0Bot, W, b.y1Bot,
+      ctx, b.bx0Bot, b.by0Bot, W, b.y1Bot,
       -bDy / bLen, bDx / bLen, bloomPad, b.col.rgb, edgePeak
     );
   }
   ctx.restore();
+  ctx.restore(); // End right-bevel half-plane clip
 
   // 5. Equilateral Prism Body & Internal Dispersion Wedge (Iconic Album Cover Look)
   // Fill dark glass interior

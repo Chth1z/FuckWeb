@@ -164,7 +164,7 @@
 
 .s-box.spectrum {
   border-color: transparent;
-  border-image: var(--prism-spectrum) 1;
+  border-image: var(--prism-spectrum-diag) 1;
   box-shadow:
     var(--prism-rainbow-shadow),
     inset 0 0 14px rgba(255, 255, 255, 0.03),
@@ -512,23 +512,109 @@
   color: var(--text-muted);
 }
 
-/* --- 02. DiffServ 3-Band HTB Vertical Priority Stack (Aligned With Stage 2) --- */
+/* --- 02. DiffServ 3-Band HTB + 21-Uplink Egress Telemetry (Full Right Column) --- */
+#bp-card-qos,
+#bp-card-uplink {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+#bp-card-qos {
+  flex: 1.14 1 0;
+}
+
+#bp-card-uplink {
+  flex: 0.96 1 0;
+}
+
 .qos-band-col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 8px;
+  margin: 8px 0;
+  flex: 1;
+  justify-content: space-evenly;
 }
 
 .qos-band-chip {
   background: rgba(5, 7, 13, 0.92);
-  border: 1px solid rgba(var(--qb-rgb, 240, 202, 104), 0.36);
-  padding: 5px 8px;
+  border: 1px solid rgba(var(--qb-rgb, 240, 202, 104), 0.38);
+  padding: 6px 9px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  box-shadow: 0 0 12px rgba(var(--qb-rgb, 240, 202, 104), 0.11);
+}
+
+.qos-band-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 0 12px rgba(var(--qb-rgb, 240, 202, 104), 0.10);
+}
+
+.qos-band-track,
+.uplink-meter-track {
+  position: relative;
+  height: 5px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.055);
+  overflow: hidden;
+}
+
+.qos-band-fill,
+.uplink-meter-fill {
+  position: relative;
+  height: 100%;
+  width: 0%;
+  transition: width 0.35s ease;
+}
+
+.qos-band-fill.active::after,
+.uplink-meter-fill.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.38) 50%, transparent 100%);
+  animation: prism-flow-sheen 2.1s linear infinite;
+}
+
+@keyframes prism-flow-sheen {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.uplink-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 8px 0;
+  flex: 1;
+  justify-content: space-evenly;
+}
+
+.uplink-meter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.uplink-meter-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+}
+
+.uplink-foot-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-subtle);
+  font-size: 10px;
 }
 
 .relay-mini-list {

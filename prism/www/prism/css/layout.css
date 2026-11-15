@@ -200,11 +200,11 @@
   position: relative;
   display: grid;
   grid-template-columns:
-    minmax(230px, 0.92fr)
-    minmax(52px, 0.24fr)
-    minmax(285px, 1.15fr)
-    minmax(52px, 0.24fr)
-    minmax(225px, 0.88fr);
+    minmax(228px, 0.88fr)
+    minmax(88px, 0.34fr)
+    minmax(275px, 1.08fr)
+    minmax(58px, 0.22fr)
+    minmax(265px, 1.04fr);
   align-items: stretch;
   height: 100%;
   min-width: 0;
@@ -233,17 +233,18 @@
 
 .bp-col-ingress {
   grid-column: 1;
-  gap: 36px;
+  gap: 26px;
 }
 
 .bp-col-engines {
   grid-column: 3;
-  gap: 28px;
+  gap: 24px;
 }
 
 .bp-col-egress {
   grid-column: 5;
-  gap: 36px;
+  gap: 26px;
+  justify-content: space-between;
 }
 
 .bp-stage-card {
@@ -365,6 +366,10 @@
   .bp-col-egress {
     grid-column: 1;
     gap: 12px;
+  }
+  #bp-card-qos,
+  #bp-card-uplink {
+    flex: 0 0 auto;
   }
   .topbar {
     flex-wrap: wrap;
