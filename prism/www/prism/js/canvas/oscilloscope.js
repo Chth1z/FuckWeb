@@ -2,8 +2,8 @@
  * PRISM 5.0 — Dual-Channel SVG Throughput Oscilloscope
  * ============================================================================ */
 
-import { S, fmtRate, fmtClock } from '../state.js?v=5.3.0';
-import { $, svgEl } from '../dom.js?v=5.3.0';
+import { S, fmtRate, fmtClock } from '../state.js?v=5.4.0';
+import { $, svgEl } from '../dom.js?v=5.4.0';
 
 let lastSig = '';
 let chartLimit = 360;

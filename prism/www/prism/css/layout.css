@@ -167,10 +167,10 @@
   gap: 10px;
 }
 
-/* View 02: Left Rail [PRISM_GUARD + Session Log] + Right Canvas-Connected Architecture Flow */
+/* View 02: Left Rail [PRISM_GUARD + Session Log] + Right Fluid 3-Stage Optical Pipeline */
 .blueprint-stage {
   display: grid;
-  grid-template-columns: clamp(270px, 23vw, 330px) minmax(0, 1fr);
+  grid-template-columns: clamp(235px, 18.5vw, 275px) minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
   flex: 1;
@@ -189,12 +189,18 @@
 
 .blueprint-pipeline {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns:
+    minmax(230px, 0.92fr)
+    minmax(52px, 0.24fr)
+    minmax(285px, 1.15fr)
+    minmax(52px, 0.24fr)
+    minmax(225px, 0.88fr);
+  align-items: stretch;
   height: 100%;
   min-width: 0;
   min-height: 0;
+  padding: 4px 2px;
 }
 
 .bp-flow-canvas {
@@ -206,53 +212,41 @@
   z-index: 1;
 }
 
+.bp-stage-col {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.bp-col-ingress {
+  grid-column: 1;
+  gap: 36px;
+}
+
+.bp-col-engines {
+  grid-column: 3;
+  gap: 28px;
+}
+
+.bp-col-egress {
+  grid-column: 5;
+  gap: 36px;
+}
+
 .bp-stage-card {
   position: relative;
   z-index: 2;
 }
 
-.bp-gap-spacer {
-  flex: 1;
-  min-height: 22px;
-  max-height: 46px;
-  pointer-events: none;
-}
-
-.bp-tier1-row {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 0.66fr);
-  gap: 20px;
-  width: 100%;
-  align-items: stretch;
-}
-
-.blueprint-subnodes {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
-  width: 100%;
-  align-items: stretch;
-}
-
-.bp-tier3-row {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: minmax(0, 0.62fr) minmax(240px, 0.38fr);
-  gap: 20px;
-  width: 100%;
-  align-items: stretch;
-}
-
-/* View 03: Left Pure Borderless Square Heatmap Studio + Right Full-Height Oscilloscope */
+/* View 03: Left [Borderless Square Heatmap + Oscilloscope] + Right Full-Height 21-Ch Telemetry */
 .spectrum-stage {
   display: grid;
-  grid-template-columns: clamp(430px, 41vw, 560px) minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: clamp(395px, 39vw, 495px) minmax(0, 1fr);
+  gap: 12px;
   align-items: stretch;
   flex: 1;
   min-height: 0;
@@ -352,13 +346,16 @@
     height: auto;
     overflow: visible;
   }
-  .bp-tier1-row,
-  .blueprint-subnodes,
-  .bp-tier3-row {
+  .blueprint-pipeline {
     grid-template-columns: 1fr;
+    gap: 14px;
+    height: auto;
   }
-  .bp-gap-spacer {
-    min-height: 22px;
+  .bp-col-ingress,
+  .bp-col-engines,
+  .bp-col-egress {
+    grid-column: 1;
+    gap: 12px;
   }
   .topbar {
     flex-wrap: wrap;

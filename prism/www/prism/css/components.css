@@ -344,13 +344,13 @@
   height: 8px;
 }
 
-/* Integrated Nftables Classify Strip — Glowing Intensity Progress Bars (圖4 + 圖1) */
+/* Integrated Nftables Classify Strip — Compact 2-Column Progress Matrix */
 .classify-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 6px;
-  margin-top: 7px;
-  padding-top: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 6px;
+  padding-top: 6px;
   border-top: 1px solid var(--line-subtle);
 }
 
@@ -485,21 +485,22 @@
   color: var(--text-muted);
 }
 
-/* --- 02. Tier-3 3-Band HTB QoS Mini Chips -------------------------------- */
-.qos-band-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+/* --- 02. DiffServ 3-Band HTB Vertical Priority Stack (Aligned With Stage 2) --- */
+.qos-band-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin-top: 6px;
 }
 
 .qos-band-chip {
-  background: rgba(5, 7, 13, 0.9);
-  border: 1px solid rgba(var(--qb-rgb, 240, 202, 104), 0.38);
+  background: rgba(5, 7, 13, 0.92);
+  border: 1px solid rgba(var(--qb-rgb, 240, 202, 104), 0.36);
   padding: 5px 8px;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   box-shadow: 0 0 12px rgba(var(--qb-rgb, 240, 202, 104), 0.10);
 }
 
@@ -514,21 +515,19 @@
   font-size: 10px;
 }
 
-/* --- 03. Pure Borderless Square Solid Color-Block + Glow Optical Heatmap --- */
-.spectrum-left-panel {
-  flex: 1;
-  min-height: 0;
+/* --- 03. Pure Borderless Square Heatmap + Left Oscilloscope + Right 21-Ch List --- */
+.spec-heat-panel {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 7px;
 }
 
 .heatmap-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 12px;
-  padding: 6px 2px;
+  gap: 7px;
+  padding: 2px 0;
   align-content: center;
 }
 
@@ -610,37 +609,6 @@
   pointer-events: none;
 }
 
-/* Single Focused / Hovered Channel Inspector Bar Below Square Matrix */
-.spec-inspector-bar {
-  background: rgba(5, 7, 13, 0.94);
-  border: 1px solid var(--line-window);
-  padding: 9px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.spec-inspector-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-}
-
-.spec-inspector-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.spec-m-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.spec-m-cell .k { font-size: 9.5px; color: var(--text-muted); text-transform: uppercase; }
-.spec-m-cell .v { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
-
 .heatmap-legend {
   display: flex;
   justify-content: space-between;
@@ -675,14 +643,41 @@
   z-index: 2;
 }
 
-/* Full-Height Right Oscilloscope Studio on Tab 03 */
+/* Left-Bottom Oscilloscope Panel on Tab 03 */
 .spec-scope-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+
+/* Full-Height Right 21-Strand Telemetry Module on Tab 03 */
+.spec-right-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  gap: 10px;
+  gap: 6px;
+}
+
+.spec-right-panel .seg-cell {
+  width: 6px;
+  height: 9px;
+}
+
+.spec-right-panel .bp-table.compact th,
+.spec-right-panel .bp-table.compact td {
+  padding: 5px 6px;
+  font-size: 11px;
+}
+
+.spec-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .bucket-summary-strip {
@@ -882,8 +877,9 @@
 }
 
 .bp-table tbody tr:hover,
-.bp-table tbody tr.hi {
-  background: rgba(100, 174, 245, 0.10);
+.bp-table tbody tr.hi,
+.bp-table tbody tr.pinned {
+  background: rgba(100, 174, 245, 0.13);
 }
 
 .bp-table.compact th,
@@ -1118,12 +1114,11 @@
 .cfg-row:last-child { border-bottom: none; }
 
 @media (max-width: 900px) {
-  .bp-split-2,
-  .qos-band-row { grid-template-columns: 1fr; }
+  .bp-split-2 { grid-template-columns: 1fr; }
   .heatmap-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .bucket-summary-strip,
-  .spec-inspector-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .scope-box { min-height: 260px; }
+  .bucket-summary-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scope-box { min-height: 240px; }
+  .spec-table-scroll { max-height: 440px; }
   .conn-scroll-wrap { max-height: 440px; }
 }
 

@@ -1,33 +1,33 @@
 /* ============================================================================
- * PRISM — View 03: Borderless Square Heatmap, Focused Inspector & Oscilloscope
+ * PRISM — View 03: Pure Square Emission Matrix, Oscilloscope & 21-Ch Telemetry
  * ============================================================================ */
 
-import { S, spectralColor } from '../state.js?v=5.3.0';
-import { $, $$, el } from '../dom.js?v=5.3.0';
-import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.3.0';
+import { S, spectralColor } from '../state.js?v=5.4.0';
+import { $, $$, el, renderSegMeter } from '../dom.js?v=5.4.0';
+import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.4.0';
 
 let hoverStrandId = null;
 
-function fmtBitrate(bytesPerSec) {
-  const b = (bytesPerSec || 0) * 8;
-  if (b <= 50) return '0 bps';
-  if (b >= 1e9) return `${(b / 1e9).toFixed(2)} Gbps`;
-  if (b >= 1e6) return `${(b / 1e6).toFixed(b >= 100e6 ? 0 : 1)} Mbps`;
-  if (b >= 1e3) return `${Math.round(b / 1e3)} Kbps`;
-  return `${Math.round(b)} bps`;
+function fmtShortRate(bps) {
+  const b = (bps || 0) * 8;
+  if (b <= 50) return '0';
+  if (b >= 1e9) return `${(b / 1e9).toFixed(1)}G`;
+  if (b >= 1e6) return `${(b / 1e6).toFixed(b >= 10e6 ? 0 : 1)}M`;
+  if (b >= 1e3) return `${Math.round(b / 1e3)}K`;
+  return `${Math.round(b)}b`;
 }
 
 function getActiveStrandId() {
   return hoverStrandId != null ? hoverStrandId : S.pinnedStrandId;
 }
 
-function syncTileAndTickHighlight() {
+function syncStrandHighlight() {
   const activeId = getActiveStrandId();
+
   const tiles = $('#spectrum-heatmap')?.children || [];
   for (const tile of tiles) {
     const id = Number(tile.dataset.sid);
-    const isPinned = S.pinnedStrandId != null && id === S.pinnedStrandId;
-    tile.classList.toggle('pinned', isPinned);
+    tile.classList.toggle('pinned', S.pinnedStrandId != null && id === S.pinnedStrandId);
     if (activeId == null) {
       tile.classList.remove('dim', 'hi');
     } else {
@@ -46,112 +46,23 @@ function syncTileAndTickHighlight() {
       t.classList.toggle('dim', id !== activeId);
     }
   }
-}
 
-function renderInspector(st) {
-  const strands = st?.strands || [];
-  const w = st?.weave || {};
-  const pat = w.pattern || [];
-  const totalSlots = pat.length || w.slots || 126;
-  const targetId = getActiveStrandId();
-
-  const swatch = $('#insp-swatch');
-  const titleEl = $('#insp-title');
-  const badgeEl = $('#insp-badge');
-  const ipEl = $('#insp-ip');
-  const unpinBtn = $('#insp-unpin');
-  const rateEl = $('#insp-rate');
-  const peakEl = $('#insp-peak');
-  const rttEl = $('#insp-rtt');
-  const tokEl = $('#insp-tok');
-  if (!titleEl) return;
-
-  if (unpinBtn) {
-    unpinBtn.style.display = S.pinnedStrandId != null ? '' : 'none';
+  const rows = $('#strands-tbody')?.children || [];
+  for (const tr of rows) {
+    const id = Number(tr.dataset.sid);
+    tr.classList.toggle('pinned', S.pinnedStrandId != null && id === S.pinnedStrandId);
+    tr.classList.toggle('hi', activeId != null && id === activeId);
   }
-
-  const idx = targetId != null ? strands.findIndex(s => s.id === targetId) : -1;
-  if (idx >= 0) {
-    const s = strands[idx];
-    const col = spectralColor(idx, Math.max(1, strands.length));
-    const bucketMap = {
-      charged: ['CHARGED', 'charged'],
-      draining: ['DRAINING', 'draining'],
-      cooling: ['COOLING', 'cooling'],
-      depleted: ['DEPLETED', 'depleted']
-    };
-    const [bText, bClass] = !s.healthy
-      ? [s.parked ? 'PARK' : 'DOWN', 'depleted']
-      : (s.vip ? ['VIP*', 'vip'] : (bucketMap[s.bucket] || ['CHARGED', 'charged']));
-
-    const pct = s.healthy ? Math.round(s.tokens_pct ?? 100) : 0;
-    const cd = s.cooldown_rem > 0 ? ` (${s.cooldown_rem}s)` : '';
-    const slotTxt = s.vip ? 'VIP 專線' : `${s.slots ?? 0}/${totalSlots} 槽`;
-
-    if (swatch) {
-      swatch.style.background = col.css;
-      swatch.style.boxShadow = `0 0 12px ${col.css}`;
-    }
-    titleEl.textContent = `${s.dev} · λ=${col.lambda}nm${S.pinnedStrandId === s.id ? ' [已鎖定]' : ''}`;
-    if (badgeEl) {
-      badgeEl.className = `st-badge ${bClass}`;
-      badgeEl.textContent = bText;
-    }
-    if (ipEl) ipEl.textContent = s.ip || '無租約';
-    if (rateEl) rateEl.textContent = `↓ ${fmtBitrate(s.now ?? s.rate)} / ↑ ${fmtBitrate(s.up_now ?? s.up)}`;
-    if (peakEl) peakEl.textContent = fmtBitrate(s.peak);
-    if (rttEl) rttEl.textContent = `${s.ttfb_ms > 0 ? s.ttfb_ms + ' ms' : '—'} · 丟包 ${s.loss_pct ?? 0}%`;
-    if (tokEl) tokEl.textContent = `${pct}%${cd} · ${slotTxt}`;
-    return;
-  }
-
-  // Aggregate mode when no tile is hovered or pinned
-  let downSum = 0;
-  let upSum = 0;
-  let peakSum = 0;
-  let rttSum = 0;
-  let rttCnt = 0;
-  let healthy = 0;
-  strands.forEach(s => {
-    downSum += (s.now ?? s.rate ?? 0);
-    upSum += (s.up_now ?? s.up ?? 0);
-    peakSum += (s.peak ?? 0);
-    if (s.healthy) {
-      healthy++;
-      if ((s.ttfb_ms || 0) > 0) {
-        rttSum += s.ttfb_ms;
-        rttCnt++;
-      }
-    }
-  });
-  const activeHot = (w.draining_count || 0) > 0 || (downSum + upSum) * 8 > 50000;
-
-  if (swatch) {
-    swatch.style.background = activeHot ? 'var(--c-amber)' : 'var(--c-mint)';
-    swatch.style.boxShadow = `0 0 10px ${activeHot ? 'var(--c-amber)' : 'var(--c-mint)'}`;
-  }
-  titleEl.textContent = `全光譜 ${healthy}/${strands.length} 鏈路聚合`;
-  if (badgeEl) {
-    badgeEl.className = `st-badge ${activeHot ? 'draining' : 'charged'}`;
-    badgeEl.textContent = activeHot ? 'ACTIVE' : 'READY';
-  }
-  if (ipEl) ipEl.textContent = '懸停或點擊色塊查看單路細節';
-  if (rateEl) rateEl.textContent = `↓ ${fmtBitrate(downSum)} / ↑ ${fmtBitrate(upSum)}`;
-  if (peakEl) peakEl.textContent = fmtBitrate(peakSum);
-  if (rttEl) rttEl.textContent = rttCnt > 0 ? `均值 ${Math.round(rttSum / rttCnt)} ms` : '—';
-  if (tokEl) tokEl.textContent = `${w.charged_count ?? 0}/${healthy} 滿桶 · ${totalSlots} 槽`;
 }
 
 function setHoverStrand(strandId) {
   hoverStrandId = strandId;
-  syncTileAndTickHighlight();
-  renderInspector(S.status);
+  syncStrandHighlight();
 }
 
 function togglePinStrand(strandId) {
   S.pinnedStrandId = (S.pinnedStrandId === strandId) ? null : strandId;
-  syncTileAndTickHighlight();
-  renderInspector(S.status);
+  syncStrandHighlight();
 }
 
 export function bindSpectrumEvents() {
@@ -161,12 +72,6 @@ export function bindSpectrumEvents() {
       $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === lim));
       setChartLimit(lim);
     });
-  });
-
-  $('#insp-unpin')?.addEventListener('click', () => {
-    S.pinnedStrandId = null;
-    syncTileAndTickHighlight();
-    renderInspector(S.status);
   });
 }
 
@@ -232,7 +137,7 @@ function updateHeatmap(strands) {
     const absPulse = Math.min(1, Math.log10(1 + mbps * 6) / 1.45);
     const activeIntensity = Math.max(absPulse, rel * 0.90);
 
-    // Pure solid contrast: clean dark base when idle/cooling, bright pure color & halo when active
+    // Pure solid contrast: clean obsidian low-wash at rest/cool, bright pure color & halo under pulse
     const baseContrast = !s.healthy ? 0.06
       : (s.bucket === 'depleted' ? 0.07
         : (s.bucket === 'cooling' ? 0.09 : (0.11 + (pct / 100) * 0.05)));
@@ -250,7 +155,7 @@ function updateHeatmap(strands) {
     tile.style.setProperty('--heat-bloom', `${Math.round(18 + heat * 28)}px`);
     tile.style.setProperty('--heat-label-op', (!s.healthy ? 0.34 : (0.48 + heat * 0.50)).toFixed(2));
 
-    tile.title = `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ${rateTotal > 50 ? fmtBitrate(rateTotal) : 'idle'} · τ=${s.ttfb_ms || '—'}ms · tokens ${Math.round(pct)}%`;
+    tile.title = `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ${rateTotal > 50 ? fmtShortRate(rateTotal) + 'bps' : 'idle'} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}% · slots ${s.slots ?? 0}`;
 
     const subFlag = tile.children[1];
     if (subFlag) {
@@ -258,8 +163,7 @@ function updateHeatmap(strands) {
         subFlag.textContent = s.parked ? 'PARK' : 'OFF';
         subFlag.style.color = 'var(--c-crimson)';
       } else if (rateTotal * 8 > 500) {
-        const b = rateTotal * 8;
-        subFlag.textContent = b >= 1e6 ? `${(b / 1e6).toFixed(1)}M` : `${Math.round(b / 1e3)}K`;
+        subFlag.textContent = fmtShortRate(rateTotal);
         subFlag.style.color = 'rgba(255, 255, 255, 0.94)';
       } else if (s.cooldown_rem > 0) {
         subFlag.textContent = `${s.cooldown_rem}s`;
@@ -287,13 +191,12 @@ export function renderSpectrum() {
     S.pinnedStrandId = null;
   }
 
-  // 1. Borderless Square Emission Matrix + Live Focused Inspector
+  // 1. Borderless Square Emission Matrix
   const capEl = $('#weave-cap');
   if (capEl) capEl.textContent = `${w.slots || pat.length || 126} slots · VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`;
   updateHeatmap(strands);
-  renderInspector(st);
 
-  // 2. Slim 126-Slot Kernel Timeline Ribbon
+  // 2. Slim Single-Row 126-Slot Kernel Timeline Ribbon
   const mat = $('#pattern');
   if (mat) {
     const sig = pat.join(',');
@@ -318,9 +221,8 @@ export function renderSpectrum() {
       mat.appendChild(frag);
     }
   }
-  syncTileAndTickHighlight();
 
-  // 3. Full-Height Dual-Channel Oscilloscope + Bucket State Footer Strip
+  // 3. Left-Bottom Dual-Channel Optical Flux Oscilloscope + Bucket State Strip
   renderOscilloscope();
   $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === getChartLimit()));
 
@@ -347,4 +249,59 @@ export function renderSpectrum() {
       )
     );
   }
+
+  // 4. Right Full-Height 21-Strand Telemetry Module (Redundant Status Badge Column Removed)
+  const tbody = $('#strands-tbody');
+  if (!tbody) return;
+
+  const frag = document.createDocumentFragment();
+  strands.forEach((s, idx) => {
+    const col = spectralColor(idx, Math.max(1, strands.length));
+    const meterColor = s.vip ? 'blue' : (s.bucket === 'charged' ? 'mint' : (s.bucket === 'cooling' ? 'violet' : 'amber'));
+    const meterWrap = el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } });
+    const seg = el('span', { class: 'seg-meter' });
+    renderSegMeter(seg, (s.tokens_pct ?? 100) / 100, 6, meterColor);
+    const kbTxt = s.cooldown_rem > 0
+      ? `${s.tokens_pct ?? 100}%(${s.cooldown_rem}s)`
+      : `${s.tokens_pct ?? 100}%`;
+    meterWrap.append(seg, el('span', { class: 'c-sec', style: { fontSize: '10.5px' } }, kbTxt));
+
+    const rttNode = s.loss_pct > 0
+      ? el('span', { class: s.loss_pct >= 15 ? 'c-amber' : 'c-sec', title: `packet loss ${s.loss_pct}%` }, `${s.ttfb_ms > 0 ? s.ttfb_ms + 'm' : '—'}·${s.loss_pct}%`)
+      : el('span', {}, s.ttfb_ms > 0 ? `${s.ttfb_ms}m` : '—');
+
+    const flagEl = !s.healthy
+      ? el('span', { class: 'c-crimson', style: { fontSize: '9.5px', fontWeight: '700' } }, s.parked ? 'PARK' : 'OFF')
+      : (s.vip ? el('span', { class: 'c-blue', style: { fontSize: '9.5px', fontWeight: '700' } }, 'VIP') : null);
+
+    const tr = el('tr', {
+      'data-sid': s.id,
+      style: { cursor: 'pointer' },
+      onMouseenter: () => setHoverStrand(s.id),
+      onMouseleave: () => setHoverStrand(null),
+      onClick: () => togglePinStrand(s.id)
+    },
+      el('td', {},
+        el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
+          el('span', { style: { display: 'inline-block', width: '7px', height: '7px', background: col.css, boxShadow: `0 0 6px ${col.css}` } }),
+          el('strong', { class: !s.healthy ? 'c-muted' : 'c-bright' }, `${s.dev}`),
+          el('span', { class: 'c-muted', style: { fontSize: '10px' } }, `${col.lambda}`),
+          flagEl
+        )
+      ),
+      el('td', { class: 'num' }, rttNode),
+      el('td', { class: 'num c-mint' }, fmtShortRate(s.now ?? s.rate)),
+      el('td', { class: 'num c-blue' }, fmtShortRate(s.up_now ?? s.up)),
+      el('td', { class: 'num c-sec' }, fmtShortRate(s.peak)),
+      el('td', {}, meterWrap),
+      el('td', { class: 'num' }, s.vip
+        ? el('span', { class: 'c-blue', style: { fontWeight: '700' } }, 'VIP')
+        : el('span', { class: 'c-bright' }, `${s.slots ?? 0}`))
+    );
+    frag.appendChild(tr);
+  });
+
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+  syncStrandHighlight();
 }

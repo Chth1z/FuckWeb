@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate } from '../state.js?v=5.3.0';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.3.0';
-import { write, call } from '../api.js?v=5.3.0';
+import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate } from '../state.js?v=5.4.0';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.4.0';
+import { write, call } from '../api.js?v=5.4.0';
 
 let drawerOpen = false;
 let rafId = null;
@@ -62,161 +62,116 @@ function relBox(elNode, rootRect) {
   };
 }
 
-function buildPathMetrics(pts) {
-  const segs = [];
-  let total = 0;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const a = pts[i];
-    const b = pts[i + 1];
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    if (len > 0.5) {
-      segs.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, len, acc: total });
-      total += len;
-    }
-  }
-  return { pts, segs, total: Math.max(1, total) };
+function mixWhiteRgb(rgb, whiteMix = 0.60) {
+  const parts = String(rgb).split(',').map(v => Number(v.trim()) || 0);
+  const mix = (c) => Math.round(c + (255 - c) * whiteMix);
+  return `${mix(parts[0])}, ${mix(parts[1])}, ${mix(parts[2])}`;
 }
 
-function samplePointAt(metrics, dist) {
-  const d = Math.max(0, Math.min(metrics.total, dist));
-  for (const s of metrics.segs) {
-    if (d <= s.acc + s.len + 0.01) {
-      const t = (d - s.acc) / Math.max(0.001, s.len);
-      return {
-        x: s.x1 + (s.x2 - s.x1) * t,
-        y: s.y1 + (s.y2 - s.y1) * t
-      };
-    }
+function makeBezier(x0, y0, x1, y1, horizontal = true) {
+  if (horizontal) {
+    const dx = Math.abs(x1 - x0);
+    const pull = Math.max(24, dx * 0.54);
+    return { x0, y0, cx1: x0 + pull, cy1: y0, cx2: x1 - pull, cy2: y1, x1, y1 };
   }
-  const last = metrics.pts[metrics.pts.length - 1];
-  return { x: last.x, y: last.y };
+  const dy = Math.abs(y1 - y0);
+  const pull = Math.max(12, dy * 0.45);
+  const dir = y1 >= y0 ? 1 : -1;
+  return { x0, y0, cx1: x0, cy1: y0 + dir * pull, cx2: x1, cy2: y1 - dir * pull, x1, y1 };
 }
 
-// Trace rounded polyline with clamped arcTo so tight corners never fold or clip
-function traceRoundedPolyline(ctx, pts, radius = 9) {
-  if (pts.length < 2) return;
+function traceBezier(ctx, g) {
   ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length - 1; i++) {
-    const prev = pts[i - 1];
-    const cur = pts[i];
-    const next = pts[i + 1];
-    const d1 = Math.hypot(cur.x - prev.x, cur.y - prev.y);
-    const d2 = Math.hypot(next.x - cur.x, next.y - cur.y);
-    const r = Math.min(radius, d1 * 0.42, d2 * 0.42);
-    if (r >= 1.5) ctx.arcTo(cur.x, cur.y, next.x, next.y, r);
-    else ctx.lineTo(cur.x, cur.y);
-  }
-  const last = pts[pts.length - 1];
-  ctx.lineTo(last.x, last.y);
+  ctx.moveTo(g.x0, g.y0);
+  ctx.bezierCurveTo(g.cx1, g.cy1, g.cx2, g.cy2, g.x1, g.y1);
 }
 
-// Extract one unbroken contiguous polyline for [dStart, dEnd] so ONE stroke renders ZERO beads
-function extractSubpathPoints(metrics, dStart, dEnd) {
-  const a = Math.max(0, dStart);
-  const b = Math.min(metrics.total, dEnd);
-  if (b - a < 2) return null;
-
-  const out = [samplePointAt(metrics, a)];
-  for (let i = 0; i < metrics.segs.length - 1; i++) {
-    const vDist = metrics.segs[i].acc + metrics.segs[i].len;
-    if (vDist > a + 0.8 && vDist < b - 0.8) {
-      out.push({ x: metrics.segs[i].x2, y: metrics.segs[i].y2 });
-    }
-  }
-  out.push(samplePointAt(metrics, b));
-  return out;
+function drawPortAnchor(ctx, x, y, rgb, glow) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = `rgba(${rgb}, ${(0.28 + glow * 0.36).toFixed(3)})`;
+  ctx.fillRect(x - 4, y - 4, 8, 8);
+  ctx.fillStyle = `rgba(255, 255, 255, ${(0.55 + glow * 0.38).toFixed(3)})`;
+  ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+  ctx.restore();
 }
 
-// True Seamless Gradient Light-Ribbon (Single Continuous Stroke per Pass = Zero Dots!)
-function drawContinuousLightRibbon(ctx, pts, rgb, st, phaseOffset = 0, withArrow = false) {
-  if (!pts || pts.length < 2) return;
-  const metrics = buildPathMetrics(pts);
+function drawLinkTag(ctx, x, y, text, rgb) {
+  ctx.save();
+  ctx.font = '600 9.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  const tw = ctx.measureText(text).width;
+  ctx.fillStyle = 'rgba(4, 6, 12, 0.88)';
+  ctx.fillRect(x - tw * 0.5 - 5, y - 8, tw + 10, 15);
+  ctx.strokeStyle = `rgba(${rgb}, 0.42)`;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - tw * 0.5 - 5, y - 8, tw + 10, 15);
+  ctx.fillStyle = `rgba(${mixWhiteRgb(rgb, 0.45)}, 0.92)`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+// Figure-3 Reference Continuous Light-Band: full-length solid core + outer bloom + smooth periodic flow surge (Zero Dark Ends!)
+function drawContinuousLightRibbon(ctx, geom, rgb, st, phaseOffset = 0, tag = '') {
+  const active = st.vel > 0.01;
+  const g = st.glow;
+  const w = st.width;
+  const hotCoreRgb = mixWhiteRgb(rgb, 0.62);
 
   ctx.save();
-  ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-
-  // 1. Subtle structural conduit guide + soft resting luminance
-  traceRoundedPolyline(ctx, pts, 9);
-  ctx.strokeStyle = 'rgba(18, 25, 42, 0.90)';
-  ctx.lineWidth = 2.4;
-  ctx.stroke();
-
+  ctx.lineJoin = 'round';
   ctx.globalCompositeOperation = 'lighter';
-  traceRoundedPolyline(ctx, pts, 9);
-  ctx.strokeStyle = `rgba(${rgb}, ${(0.12 + st.glow * 0.14).toFixed(3)})`;
-  ctx.lineWidth = st.width * 2.4;
+
+  // 1. Wide Outer Optical Bloom (100% full length from port to port, never dim at ends)
+  traceBezier(ctx, geom);
+  ctx.lineWidth = w * 5.0;
+  ctx.strokeStyle = `rgba(${rgb}, ${(0.08 + g * 0.16).toFixed(3)})`;
   ctx.stroke();
 
-  traceRoundedPolyline(ctx, pts, 9);
-  ctx.strokeStyle = `rgba(${rgb}, ${(0.28 + st.glow * 0.24).toFixed(3)})`;
-  ctx.lineWidth = 1.4;
+  // 2. Solid Saturated Color Beam Body (100% full length continuous ribbon matching Figure 3)
+  traceBezier(ctx, geom);
+  ctx.lineWidth = w * 2.05;
+  ctx.strokeStyle = `rgba(${rgb}, ${(0.38 + g * 0.44).toFixed(3)})`;
   ctx.stroke();
 
-  // 2. Continuous Traveling Gradient Light-Bands (Bright Luminous Center -> Smooth Taper)
-  if (st.vel > 0.01 && st.glow > 0.05) {
-    const ribbonSpan = metrics.total * 0.44;
-    for (let k = 0; k < 2; k++) {
-      const norm = (st.phase + phaseOffset + k * 0.50) % 1.0;
-      const centerDist = norm * (metrics.total + ribbonSpan) - ribbonSpan * 0.5;
-      const subPts = extractSubpathPoints(metrics, centerDist - ribbonSpan * 0.5, centerDist + ribbonSpan * 0.5);
-      if (!subPts || subPts.length < 2) continue;
+  // 3. Continuous Bright Luminous Inner Core Filament (100% full length solid light streak)
+  traceBezier(ctx, geom);
+  ctx.lineWidth = Math.max(1.25, w * 0.78);
+  ctx.strokeStyle = `rgba(${hotCoreRgb}, ${(0.56 + g * 0.36).toFixed(3)})`;
+  ctx.stroke();
 
-      const pA = subPts[0];
-      const pB = subPts[subPts.length - 1];
-      if (Math.hypot(pB.x - pA.x, pB.y - pA.y) < 2) continue;
-
-      // Single continuous Halo pass (broad feathered aura)
-      const haloGrad = ctx.createLinearGradient(pA.x, pA.y, pB.x, pB.y);
-      haloGrad.addColorStop(0.00, `rgba(${rgb}, 0)`);
-      haloGrad.addColorStop(0.28, `rgba(${rgb}, ${(st.glow * 0.28).toFixed(3)})`);
-      haloGrad.addColorStop(0.50, `rgba(${rgb}, ${(st.glow * 0.42).toFixed(3)})`);
-      haloGrad.addColorStop(0.72, `rgba(${rgb}, ${(st.glow * 0.28).toFixed(3)})`);
-      haloGrad.addColorStop(1.00, `rgba(${rgb}, 0)`);
-
-      traceRoundedPolyline(ctx, subPts, 9);
-      ctx.strokeStyle = haloGrad;
-      ctx.lineWidth = st.width * 4.4;
-      ctx.stroke();
-
-      // Single continuous Core + White Optical Crest pass (seamless bright center)
-      const coreGrad = ctx.createLinearGradient(pA.x, pA.y, pB.x, pB.y);
-      coreGrad.addColorStop(0.00, `rgba(${rgb}, 0)`);
-      coreGrad.addColorStop(0.24, `rgba(${rgb}, ${(st.glow * 0.72).toFixed(3)})`);
-      coreGrad.addColorStop(0.50, `rgba(255, 255, 255, ${Math.min(0.96, 0.45 + st.glow * 0.55).toFixed(3)})`);
-      coreGrad.addColorStop(0.76, `rgba(${rgb}, ${(st.glow * 0.72).toFixed(3)})`);
-      coreGrad.addColorStop(1.00, `rgba(${rgb}, 0)`);
-
-      traceRoundedPolyline(ctx, subPts, 9);
-      ctx.shadowColor = `rgba(${rgb}, 0.75)`;
-      ctx.shadowBlur = 9;
-      ctx.strokeStyle = coreGrad;
-      ctx.lineWidth = st.width * 1.4;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+  // 4. Subtle Periodic Flowing Optical Surge (adds +luminance crests over already-solid beam — never hollow!)
+  if (active && g > 0.08) {
+    const p = (st.phase + phaseOffset) % 1.0;
+    const surgeGrad = ctx.createLinearGradient(geom.x0, geom.y0, geom.x1, geom.y1);
+    const stops = 20;
+    for (let i = 0; i <= stops; i++) {
+      const u = i / stops;
+      const d1 = Math.abs((((u - p) % 1 + 1.5) % 1) - 0.5);
+      const d2 = Math.abs((((u - p - 0.5) % 1 + 1.5) % 1) - 0.5);
+      const wave = Math.exp(-Math.pow(d1 / 0.15, 2)) + Math.exp(-Math.pow(d2 / 0.15, 2));
+      const crestA = Math.min(0.42, wave * g * 0.36);
+      surgeGrad.addColorStop(u, `rgba(255, 255, 255, ${crestA.toFixed(3)})`);
     }
-  }
-
-  // Optional directional arrowhead chevron at endpoint
-  if (withArrow && pts.length >= 2) {
-    const pPrev = pts[pts.length - 2];
-    const pEnd = pts[pts.length - 1];
-    const dx = pEnd.x - pPrev.x;
-    const dy = pEnd.y - pPrev.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const ux = dx / len, uy = dy / len;
-    const px = -uy, py = ux;
-    ctx.fillStyle = `rgba(${rgb}, ${Math.min(0.95, 0.48 + st.glow * 0.48).toFixed(2)})`;
-    ctx.beginPath();
-    ctx.moveTo(pEnd.x, pEnd.y);
-    ctx.lineTo(pEnd.x - ux * 6 + px * 3.5, pEnd.y - uy * 6 + py * 3.5);
-    ctx.lineTo(pEnd.x - ux * 6 - px * 3.5, pEnd.y - uy * 6 - py * 3.5);
-    ctx.closePath();
-    ctx.fill();
+    traceBezier(ctx, geom);
+    ctx.lineWidth = Math.max(1.6, w * 1.15);
+    ctx.strokeStyle = surgeGrad;
+    ctx.stroke();
   }
 
   ctx.restore();
+
+  // Dock crisp glowing emitter/receiver nodes at both module boundaries
+  drawPortAnchor(ctx, geom.x0, geom.y0, rgb, g);
+  drawPortAnchor(ctx, geom.x1, geom.y1, rgb, g);
+
+  if (tag && Math.hypot(geom.x1 - geom.x0, geom.y1 - geom.y0) >= 24) {
+    const mx = (geom.x0 + geom.x1) * 0.5;
+    const my = (geom.y0 + geom.y1) * 0.5;
+    drawLinkTag(ctx, mx, my, tag, rgb);
+  }
 }
 
 function renderWaveguidesCanvas() {
@@ -241,6 +196,9 @@ function renderWaveguidesCanvas() {
   const tun = relBox($('#bp-card-tun'), rect);
   const dom = relBox($('#bp-card-dom'), rect);
   const qos = relBox($('#bp-card-qos'), rect);
+  const q10 = relBox($('#bp-qos-10'), rect);
+  const q20 = relBox($('#bp-qos-20'), rect);
+  const q30 = relBox($('#bp-qos-30'), rect);
   const up  = relBox($('#bp-card-uplink'), rect);
   if (!pre || !ing || !vip || !tun || !dom || !qos || !up) return;
 
@@ -249,44 +207,43 @@ function renderWaveguidesCanvas() {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, rect.width, rect.height);
 
-  // Tier 1 Horizontal Bridge: Pre-Gate -> Nftables Classify Engine
-  if (ing.x - pre.right > 4) {
-    const y1 = Math.round(pre.cy);
-    drawContinuousLightRibbon(ctx, [{ x: pre.right, y: y1 }, { x: ing.x - 1, y: y1 }], '235, 154, 94', waveState[4], 0.00, true);
+  // Stage 1 Vertical Conduit: Pre-Gate -> Nftables Classify Engine
+  if (ing.y - pre.bottom > 6) {
+    const gPre = makeBezier(pre.cx, pre.bottom, ing.cx, ing.y, false);
+    drawContinuousLightRibbon(ctx, gPre, '235, 154, 94', waveState[4], 0.00, 'QUIC→TCP');
   }
 
-  // Fork Tier 1 (Ingress Classify Engine) -> Tier 2 (3 Engines)
-  const yFork = Math.round((ing.bottom + vip.y) * 0.5);
-  const forkX = Math.round(ing.cx - ing.w * 0.08);
-  const pVipTop = [{ x: forkX - 32, y: ing.bottom }, { x: forkX - 32, y: yFork }, { x: vip.cx, y: yFork }, { x: vip.cx, y: vip.y }];
-  const pTunTop = [{ x: forkX,      y: ing.bottom }, { x: forkX,      y: yFork }, { x: tun.cx, y: yFork }, { x: tun.cx, y: tun.y }];
-  const pDomTop = [{ x: forkX + 32, y: ing.bottom }, { x: forkX + 32, y: yFork }, { x: dom.cx, y: yFork }, { x: dom.cx, y: dom.y }];
-
-  drawContinuousLightRibbon(ctx, pVipTop, '100, 174, 245', waveState[0], 0.00);
-  drawContinuousLightRibbon(ctx, pTunTop, '170, 142, 240', waveState[1], 0.14);
-  drawContinuousLightRibbon(ctx, pDomTop, '87, 209, 146',  waveState[2], 0.28);
-
-  // Tier 2 Cross-Bridge: TW-HOME -> weave_out -> Burst-Harvest 2.0
-  if (dom.x - tun.right > 4) {
-    const yBridge = Math.round(tun.cy);
-    drawContinuousLightRibbon(ctx, [{ x: tun.right, y: yBridge }, { x: dom.x - 1, y: yBridge }], '170, 142, 240', waveState[3], 0.08, true);
+  // Inter-Engine Cross-Feed: TW-HOME (TProxy weave_out) -> Burst-Harvest Pool
+  if (dom.y - tun.bottom > 6) {
+    const gWeave = makeBezier(tun.cx, tun.bottom, dom.cx, dom.y, false);
+    drawContinuousLightRibbon(ctx, gWeave, '170, 142, 240', waveState[3], 0.12, 'weave_out');
   }
 
-  // Merge Tier 2 -> Tier 3 (3-Band HTB + fq_codel QoS Engine)
-  const yMerge = Math.round((vip.bottom + qos.y) * 0.5);
-  const qosAnchorX = Math.round(qos.cx + qos.w * 0.08);
-  const pVipBot = [{ x: vip.cx, y: vip.bottom }, { x: vip.cx, y: yMerge }, { x: qosAnchorX - 34, y: yMerge }, { x: qosAnchorX - 34, y: qos.y }];
-  const pTunBot = [{ x: tun.cx, y: tun.bottom }, { x: tun.cx, y: yMerge }, { x: qosAnchorX,      y: yMerge }, { x: qosAnchorX,      y: qos.y }];
-  const pDomBot = [{ x: dom.cx, y: dom.bottom }, { x: dom.cx, y: yMerge }, { x: qosAnchorX + 34, y: yMerge }, { x: qosAnchorX + 34, y: qos.y }];
+  // Stage 3 Vertical Convergence: 3-Band HTB QoS -> 21-Uplink NAT & Egress
+  if (up.y - qos.bottom > 6) {
+    const gOut = makeBezier(qos.cx, qos.bottom, up.cx, up.y, false);
+    drawContinuousLightRibbon(ctx, gOut, '240, 202, 104', waveState[4], 0.30, '21 WAN NAT');
+  }
 
-  drawContinuousLightRibbon(ctx, pVipBot, '100, 174, 245', waveState[0], 0.22);
-  drawContinuousLightRibbon(ctx, pTunBot, '170, 142, 240', waveState[1], 0.36);
-  drawContinuousLightRibbon(ctx, pDomBot, '87, 209, 146',  waveState[2], 0.50);
+  // Horizontal Organic Optical Channels (Desktop / Multi-Column Mode)
+  if (vip.x - ing.right > 16) {
+    const fanTopY = ing.y + ing.h * 0.24;
+    const fanMidY = ing.y + ing.h * 0.50;
+    const fanBotY = ing.y + ing.h * 0.76;
 
-  // Tier 3 Horizontal Bridge: 3-Band HTB QoS -> Physical 21-Uplink NAT Dispatch
-  if (up.x - qos.right > 4) {
-    const y3 = Math.round(qos.cy);
-    drawContinuousLightRibbon(ctx, [{ x: qos.right, y: y3 }, { x: up.x - 1, y: y3 }], '240, 202, 104', waveState[4], 0.30, true);
+    drawContinuousLightRibbon(ctx, makeBezier(ing.right, fanTopY, vip.x, vip.cy, true), '100, 174, 245', waveState[0], 0.00);
+    drawContinuousLightRibbon(ctx, makeBezier(ing.right, fanMidY, tun.x, tun.cy, true), '170, 142, 240', waveState[1], 0.16);
+    drawContinuousLightRibbon(ctx, makeBezier(ing.right, fanBotY, dom.x, dom.cy, true), '87, 209, 146',  waveState[2], 0.32);
+
+    if (qos.x - tun.right > 16) {
+      const y10 = q10 ? q10.cy : (qos.y + qos.h * 0.30);
+      const y20 = q20 ? q20.cy : (qos.y + qos.h * 0.55);
+      const y30 = q30 ? q30.cy : (qos.y + qos.h * 0.80);
+
+      drawContinuousLightRibbon(ctx, makeBezier(vip.right, vip.cy, qos.x, y10, true), '100, 174, 245', waveState[0], 0.24);
+      drawContinuousLightRibbon(ctx, makeBezier(tun.right, tun.cy, qos.x, y20, true), '170, 142, 240', waveState[1], 0.38);
+      drawContinuousLightRibbon(ctx, makeBezier(dom.right, dom.cy, qos.x, y30, true), '87, 209, 146',  waveState[2], 0.52);
+    }
   }
 
   ctx.restore();
@@ -470,8 +427,8 @@ function renderClassifyStrip() {
       style: { '--cb-rgb': colorRgb }
     },
       el('div', { class: 'classify-bar-head' },
-        el('span', { class: pkts > 0 ? 'c-bright' : 'c-muted', style: { fontWeight: pkts > 0 ? '600' : '400' } }, label),
-        el('span', { class: pkts > 0 ? textCls : 'c-muted', style: { fontVariantNumeric: 'tabular-nums', fontWeight: '600' } }, `${pktTxt} · ${pctTxt}`)
+        el('span', { class: pkts > 0 ? 'c-bright' : 'c-muted', style: { fontWeight: pkts > 0 ? '600' : '400', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label),
+        el('span', { class: pkts > 0 ? textCls : 'c-muted', style: { fontVariantNumeric: 'tabular-nums', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '9.5px' } }, `${pktTxt}·${pctTxt}`)
       ),
       el('div', { class: 'classify-bar-track' }, fillEl)
     ));
