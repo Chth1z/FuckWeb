@@ -383,14 +383,14 @@
 
             <!-- Stage 3 (Right Col): Expanded 3-Band DiffServ QoS + Rich 21-Uplink Egress -->
             <div class="bp-stage-col bp-col-egress">
-              <div id="bp-card-qos" class="s-box gold bp-stage-card">
+              <div id="bp-card-qos" class="s-box spectrum bp-stage-card">
                 <div class="bp-node-head">
                   <div>
-                    <div class="bp-card-title c-gold">3-BAND HTB + FQ_CODEL</div>
-                    <div class="bp-card-sub">postrouting 整形 · SYN/ACK/UDP ≤256B 零延遲</div>
+                    <div class="bp-card-title"><span class="c-spectrum">3-BAND HTB + FQ_CODEL</span></div>
+                    <div class="bp-card-sub">postrouting · SYN/ACK/UDP ≤256B 零延遲</div>
                   </div>
                   <div class="bp-head-kpi">
-                    <span id="bp-qos-rate" class="bp-live-rate c-gold">0 bps</span>
+                    <span id="bp-qos-rate" class="bp-live-rate c-bright">0 bps</span>
                     <span id="bp-qos-meta" class="bp-head-sub c-sec">MSS 1440</span>
                   </div>
                 </div>
@@ -403,7 +403,7 @@
                     </div>
                     <span id="bp-qos-10-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
-                      <span class="c-sec">遊戲 UDP / SYN·ACK / DNS / ICMP</span>
+                      <span class="c-sec">遊戲 UDP / SYN·ACK / DNS</span>
                       <span id="bp-qos-10-sub" class="c-muted">fq_codel target 2ms</span>
                     </div>
                   </div>
@@ -434,7 +434,7 @@
                 </div>
 
                 <div class="bp-kv-strip cols-2">
-                  <div class="bp-kv-cell"><span class="k">整形演算法</span><span class="v c-gold">htb + fq_codel</span></div>
+                  <div class="bp-kv-cell"><span class="k">整形演算法</span><span class="v c-bright">htb + fq_codel</span></div>
                   <div class="bp-kv-cell"><span class="k">小包/大流</span><span class="v">≤256B / ≥8MB</span></div>
                   <div class="bp-kv-cell"><span class="k">ICMP/DNS</span><span class="v c-blue">→ 1:10 優先</span></div>
                   <div class="bp-kv-cell"><span class="k">SYN鉗制</span><span id="bp-qos-mss-kv" class="v">MSS 1440</span></div>
@@ -449,7 +449,7 @@
                 </div>
 
                 <div class="bp-node-foot bp-node-foot-rule">
-                  <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0"><span class="run-dot" style="background:var(--c-gold);box-shadow:0 0 8px var(--c-gold)"></span><span id="bp-qos-st" class="c-gold">3-band active</span></span>
+                  <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0"><span class="run-dot mint"></span><span id="bp-qos-st" class="c-mint">3-band active</span></span>
                   <span id="bp-qos-foot" class="c-sec">SYN MSS clamp · 8MB 分界</span>
                 </div>
               </div>

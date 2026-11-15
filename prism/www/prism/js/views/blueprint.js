@@ -45,7 +45,7 @@ const moduleHeat = {
   vip:     { id: '#bp-card-vip',     kind: 'mono', rgb: '100, 174, 245', cur: 0.04, target: 0.04 },
   tun:     { id: '#bp-card-tun',     kind: 'mono', rgb: '170, 142, 240', cur: 0.08, target: 0.08 },
   dom:     { id: '#bp-card-dom',     kind: 'mono', rgb: '87, 209, 146',  cur: 0.16, target: 0.16 },
-  qos:     { id: '#bp-card-qos',     kind: 'mono', rgb: '240, 202, 104', cur: 0.14, target: 0.14 },
+  qos:     { id: '#bp-card-qos',     kind: 'spectrum', cur: 0.14, target: 0.14 },
   uplink:  { id: '#bp-card-uplink',  kind: 'spectrum', cur: 0.18, target: 0.18 }
 };
 
