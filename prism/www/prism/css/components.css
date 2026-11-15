@@ -254,13 +254,13 @@
 .guard-invariants-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px 4px;
+  gap: 5px;
 }
 
 .guard-inv-cell {
   background: rgba(5, 7, 13, 0.92);
   border: 1px solid var(--line-window);
-  padding: 3px 6px;
+  padding: 4px 7px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -291,7 +291,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   font-size: 10.5px;
   padding-right: 3px;
 }
@@ -299,9 +299,10 @@
 .log-row {
   display: grid;
   grid-template-columns: 52px 54px 1fr;
-  gap: 5px;
+  gap: 6px;
   align-items: baseline;
-  padding: 3px 0;
+  padding: 4.5px 0;
+  line-height: 1.35;
   border-bottom: 1px solid rgba(255, 255, 255, 0.035);
 }
 .log-row:last-child { border-bottom: none; }
@@ -346,25 +347,26 @@
 
 /* Integrated Nftables Classify Strip — Vertical Full-Width Block Stack */
 .classify-strip {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 5px;
+  gap: 6px;
   margin-top: 0;
-  padding-top: 6px;
+  padding-top: 7px;
   border-top: 1px solid var(--line-subtle);
   min-height: 0;
+  overflow-y: auto;
 }
 
 .classify-bar-card {
   background: rgba(5, 7, 13, 0.92);
   border: 1px solid var(--line-window);
-  padding: 5px 8px;
+  padding: 5.5px 9px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 4px;
+  gap: 5px;
   flex: 0 0 auto;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -385,8 +387,8 @@
 .bp-kv-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px 10px;
-  padding: 5px 8px;
+  gap: 5px 12px;
+  padding: 6px 9px;
   background: rgba(5, 7, 13, 0.90);
   border: 1px solid var(--line-window);
   font-size: 10px;
@@ -394,7 +396,7 @@
 
 .bp-kv-strip.cols-3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2px 6px;
+  gap: 4px 8px;
 }
 
 .bp-kv-cell {
@@ -417,6 +419,9 @@
 }
 
 .bp-node-head > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -424,7 +429,7 @@
 .bp-card-title {
   font-weight: 700;
   font-size: 12px;
-  line-height: 1.25;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -433,7 +438,7 @@
 .bp-card-sub {
   font-size: 9.5px;
   color: var(--text-secondary);
-  line-height: 1.3;
+  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -446,7 +451,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 1px;
+  gap: 2px;
 }
 
 .bp-head-sub {
@@ -592,8 +597,8 @@
 #bp-card-uplink {
   display: flex;
   flex-direction: column;
-  padding: 9px 11px;
-  gap: 6px;
+  padding: 9.5px 12px;
+  gap: 7px;
   min-height: 0;
   --bp-card-border: rgba(100, 174, 245, 0.32);
   --bp-card-shadow:
@@ -609,8 +614,8 @@
   flex-direction: column;
   flex: 1 1 0;
   min-height: 112px;
-  padding: 9px 11px;
-  gap: 5px;
+  padding: 9.5px 12px;
+  gap: 7px;
 }
 
 .bp-stage-card.spectrum {
@@ -619,20 +624,20 @@
   box-shadow: var(--bp-card-shadow);
 }
 
-#bp-card-guard   { flex: 0 0 auto; gap: 5px; padding: 8px 11px; }
+#bp-card-guard,
 #bp-card-pregate,
-#bp-card-ingress,
 #bp-card-vip,
 #bp-card-tun,
 #bp-card-dom,
 #bp-card-qos,
 #bp-card-uplink  { flex: 0 0 auto; }
+#bp-card-ingress { flex: 0 1 auto; }
 
 .bp-card-body {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 7px;
   flex: 0 0 auto;
   min-height: 0;
 }
@@ -642,7 +647,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 7px;
+  padding: 5px 8px;
   background: rgba(5, 7, 13, 0.88);
   border: 1px solid var(--line-window);
   font-size: 9.5px;
@@ -685,7 +690,7 @@
 }
 
 .bp-node-foot-rule {
-  padding-top: 6px;
+  padding-top: 7px;
   margin-top: 0;
   border-top: 1px solid var(--line-subtle);
 }
@@ -706,7 +711,7 @@
 .qos-band-col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   margin: 0;
   flex: 0 0 auto;
   justify-content: flex-start;
@@ -715,10 +720,10 @@
 .qos-band-chip {
   background: rgba(5, 7, 13, 0.92);
   border: 1px solid rgba(var(--qb-rgb, 240, 202, 104), var(--qb-bdr-a, 0.34));
-  padding: 6px 8px;
+  padding: 7px 9px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   box-shadow: 0 0 var(--qb-glow-blur, 10px) rgba(var(--qb-rgb, 240, 202, 104), var(--qb-glow-a, 0.08));
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
@@ -738,7 +743,7 @@
 .uplink-meters {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   margin: 0;
   flex: 0 0 auto;
   justify-content: flex-start;
@@ -747,7 +752,7 @@
 .uplink-meter-row {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .uplink-meter-head {
@@ -773,8 +778,8 @@
 .uplink-foot-row {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding-top: 4px;
+  gap: 4px;
+  padding-top: 6px;
   border-top: 1px solid var(--line-subtle);
   font-size: 10px;
 }
@@ -782,9 +787,9 @@
 .relay-mini-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   margin-top: 0;
-  padding: 4px 7px;
+  padding: 5px 8px;
   background: rgba(4, 6, 12, 0.88);
   border: 1px solid var(--line-window);
   border-left: 1.5px solid rgba(var(--c-violet-rgb), 0.55);
@@ -1008,7 +1013,7 @@
 
 .spec-right-panel .bp-table.compact th,
 .spec-right-panel .bp-table.compact td {
-  padding: 5px 6px;
+  padding: 6px 7px;
   font-size: 11px;
 }
 
@@ -1061,7 +1066,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   margin-top: 8px;
   padding-right: 4px;
 }
@@ -1073,11 +1078,11 @@
   background: var(--bg-panel-alt);
   border: var(--frame-w) solid var(--line-window);
   border-left: 3px solid var(--text-muted);
-  padding: 8px 10px;
+  padding: 9px 11px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   transition: border-color 0.14s, background-color 0.14s, box-shadow 0.14s;
 }
 
@@ -1250,7 +1255,7 @@
 
 .bp-table.compact th,
 .bp-table.compact td {
-  padding: 4px 6px;
+  padding: 5px 7px;
   font-size: 11px;
   white-space: nowrap;
 }
@@ -1474,7 +1479,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 5px 0;
+  padding: 7px 0;
   border-bottom: 1px solid var(--line-subtle);
   gap: 10px;
   font-size: 11.5px;
