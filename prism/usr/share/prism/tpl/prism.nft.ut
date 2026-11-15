@@ -154,10 +154,12 @@ table inet prism {
 
 	chain output {
 		type route hook output priority mangle; policy accept;
-		meta mark & {{ mark_tunnel_out }} != {{ mark_tunnel_out }} return
 		meta nfproto != ipv4 return
 		ip daddr @local4 return
-		jump weave_out
+		meta mark & {{ mark_tunnel_out }} == {{ mark_tunnel_out }} jump weave_out
+{% if (length(cn_doh_ips ?? [])): %}
+		ip daddr { {{ join(", ", cn_doh_ips) }} } meta l4proto { tcp, udp } th dport { 53, 443, 853 } jump weave_out
+{% endif %}
 	}
 
 	chain forward {
@@ -173,12 +175,16 @@ table inet prism {
 	chain postrouting {
 		type filter hook postrouting priority mangle; policy accept;
 		meta priority set 1:20
-		ct bytes >= 4194304 meta priority set 1:30
+		ct bytes >= 8388608 meta priority set 1:30
 		ct mark & 0x100 != 0 meta priority set 1:10
-		meta l4proto tcp tcp flags & (syn | ack | fin | rst) != 0 meta length < 128 meta priority set 1:10
+		meta l4proto tcp tcp flags & (syn | ack | fin | rst) != 0 meta length <= 256 meta priority set 1:10
+		meta l4proto udp meta length <= 256 meta priority set 1:10
 		meta l4proto icmp meta priority set 1:10
 		meta l4proto { tcp, udp } th sport 53 meta priority set 1:10
 		meta l4proto { tcp, udp } th dport 53 meta priority set 1:10
+{% if (mss > 0): %}
+		oifname @strands_up tcp flags syn tcp option maxseg size > {{ mss }} tcp option maxseg size set {{ mss }}
+{% endif %}
 		oifname @lan ip saddr != @local4 update @dev_down { ip daddr }
 		oifname @strands_up return
 	}

@@ -68,28 +68,31 @@ export function update_buckets(load, dt, now) {
 		let b = (l.bucket ??= { tokens: BURST_MAX, state: "charged", cooldown_until: 0 });
 		let down_now = l.down?.now ?? 0;
 		let up_now = l.up?.now ?? 0;
+		let down_ewma = l.down?.rate ?? 0;
+		let up_ewma = l.up?.rate ?? 0;
 		let rate_now = max(down_now, up_now * 1.2);
+		let rate_eff = max(rate_now, down_ewma * 0.75, up_ewma * 0.9);
 
-		if (rate_now < IDLE_THRESH) {
+		if (rate_now < IDLE_THRESH && rate_eff < IDLE_THRESH) {
 			let factor = now < (b.cooldown_until ?? 0) ? 0.45 : 0.85;
-			let refilled = (CIR_BYTES_S - rate_now) * dt * factor;
+			let refilled = (CIR_BYTES_S - rate_eff) * dt * factor;
 			b.tokens = min(BURST_MAX, int(b.tokens + refilled));
 		}
 		else {
-			let drain = int(rate_now * dt * 0.95);
-			let cap = int(BURST_MAX * max(0.0, 1.0 - (rate_now / (1.0 * EFF_CIR_BYTES_S))));
+			let drain = int(rate_eff * dt * 0.95);
+			let cap = int(BURST_MAX * max(0.0, 1.0 - (rate_eff / (1.0 * EFF_CIR_BYTES_S))));
 			b.tokens = max(0, min(cap, b.tokens - drain));
-			if (rate_now >= 300000)
+			if (rate_eff >= 300000)
 				b.cooldown_until = now + COOLDOWN_SEC;
 		}
 
-		if (rate_now >= EFF_CIR_BYTES_S * 0.72 || b.tokens <= EMPTY_THRESH) {
-			b.state = rate_now >= IDLE_THRESH ? "depleted" : "cooling";
+		if (rate_eff >= EFF_CIR_BYTES_S * 0.72 || b.tokens <= EMPTY_THRESH) {
+			b.state = rate_eff >= IDLE_THRESH ? "depleted" : "cooling";
 		}
-		else if (rate_now < IDLE_THRESH && (now < (b.cooldown_until ?? 0) || b.tokens < CHARGED_THRESH)) {
+		else if (rate_eff < IDLE_THRESH && (now < (b.cooldown_until ?? 0) || b.tokens < CHARGED_THRESH)) {
 			b.state = "cooling";
 		}
-		else if (b.tokens >= CHARGED_THRESH && rate_now < IDLE_THRESH) {
+		else if (b.tokens >= CHARGED_THRESH && rate_eff < IDLE_THRESH) {
 			b.state = "charged";
 		}
 		else {
@@ -119,7 +122,8 @@ function loss_baseline(strands) {
 
 // Pick the lowest-loss, lowest-TTFB, uncongested strand for @vip_lane with
 // tight hysteresis: stays sticky during an active session ONLY while loss
-// remains clean and latency stays within max(15ms, 1.35 * best_ttfb) and <= 65ms.
+// remains clean and latency stays within max(best + 25ms, 1.35 * best_ttfb)
+// and active bulk load remains low.
 export function select_vip(healthy, load) {
 	if (!length(healthy))
 		return [];
@@ -127,15 +131,15 @@ export function select_vip(healthy, load) {
 	if (!length(candidates))
 		candidates = healthy;
 	let lb = loss_baseline(candidates);
-	let eff_loss = (s) => lb.active ? max(0.0, s.loss ?? 0.0) : 0.0;
+	let eff_loss = (s) => lb.active ? max(0.0, (s.loss ?? 0.0) - lb.floor * 0.5) : 0.0;
 	let best = candidates[0], best_score = 1e9, min_ttfb = 10.0;
 	for (let s in candidates) {
 		let ttfb = (s.ttfb && s.ttfb >= 0.008) ? s.ttfb : 0.25;
-		let rate = max(load?.[s.dev]?.down?.now ?? 0, load?.[s.dev]?.down?.rate ?? 0);
+		let rate = max(load?.[s.dev]?.down?.now ?? 0, load?.[s.dev]?.down?.rate ?? 0, (load?.[s.dev]?.up?.now ?? 0) * 1.2);
 		if (rate < IDLE_THRESH && ttfb < min_ttfb)
 			min_ttfb = ttfb;
-		let loss_pen = eff_loss(s) * 2000.0; // +20 ms score per 1% loss
-		let score = ttfb * 1000.0 + loss_pen + (rate / 512.0);
+		let loss_pen = eff_loss(s) * 2500.0; // +25 ms score per 1% relative loss
+		let score = ttfb * 1000.0 + loss_pen + (rate / 256.0);
 		if (score < best_score) {
 			best_score = score;
 			best = s;
@@ -150,10 +154,10 @@ export function select_vip(healthy, load) {
 		let cur = filter(healthy, (s) => s.id == prev_id)[0];
 		if (cur && (!cur.http || cur.http == 204)) {
 			let ttfb = (cur.ttfb && cur.ttfb >= 0.008) ? cur.ttfb : 0.25;
-			let rate = max(load?.[cur.dev]?.down?.now ?? 0, load?.[cur.dev]?.down?.rate ?? 0);
-			let limit = min(0.065, max(min_ttfb + 0.015, min_ttfb * 1.35));
-			let loss_ok = eff_loss(cur) <= max(0.08, lb.floor + 0.08);
-			if (loss_ok && ttfb <= limit && rate < IDLE_THRESH)
+			let rate = max(load?.[cur.dev]?.down?.now ?? 0, load?.[cur.dev]?.down?.rate ?? 0, (load?.[cur.dev]?.up?.now ?? 0) * 1.2);
+			let limit = max(min_ttfb + 0.025, min_ttfb * 1.35);
+			let loss_ok = eff_loss(cur) <= max(0.04, lb.floor * 0.5 + 0.03);
+			if (loss_ok && ttfb <= limit && rate < 65536)
 				return [ cur.id | MARK_VIP, cur.id | MARK_VIP ];
 		}
 	}
@@ -217,9 +221,9 @@ const POLICIES = {
 			if (s.ttfb && s.ttfb > 0 && s.ttfb < min_ttfb)
 				min_ttfb = s.ttfb;
 			let l = load[s.dev] ?? {}, b = l.bucket ?? { tokens: BURST_MAX, state: "charged" };
-			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, l.up?.now ?? 0);
+			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, (l.up?.now ?? 0) * 1.2, (l.up?.rate ?? 0) * 1.2);
 			let rel_loss = lb.active ? max(0.0, (s.loss ?? 0.0) - lb.floor * 0.5) : 0.0;
-			if (b.state != "depleted" && rate < EFF_CIR_BYTES_S * 0.80 && rel_loss < 0.35)
+			if (b.state != "depleted" && rate < EFF_CIR_BYTES_S * 0.65 && rel_loss < 0.14)
 				clean_active++;
 		}
 		if (min_ttfb >= 10.0)
@@ -232,15 +236,15 @@ const POLICIES = {
 			let d = min(2.0, max(0.0, ttfb - min_ttfb) / 0.10);
 			let q = 1.0 / (1.0 + 0.35 * d);
 			let rel_loss = lb.active ? max(0.0, (s.loss ?? 0.0) - lb.floor * 0.5) : 0.0;
-			let loss_q = 1.0 / (1.0 + 12.0 * rel_loss + 50.0 * rel_loss * rel_loss);
-			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, l.up?.now ?? 0);
+			let loss_q = 1.0 / (1.0 + 18.0 * rel_loss + 120.0 * rel_loss * rel_loss);
+			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, (l.up?.now ?? 0) * 1.2, (l.up?.rate ?? 0) * 1.2);
 			let ratio = b.tokens / (1.0 * BURST_MAX);
 
-			// Shield heavily losing (>=35% relative loss) or depleted strands when
-			// healthier idle alternatives exist, avoiding CUBIC SYN/CWND stalls.
-			if (b.state == "depleted" || rate >= EFF_CIR_BYTES_S * 0.80 || rel_loss >= 0.35)
+			// Shield heavily losing (>=14% relative loss) or depleted strands when
+			// healthier clean alternatives exist, avoiding CUBIC SYN/CWND stalls.
+			if (b.state == "depleted" || rate >= EFF_CIR_BYTES_S * 0.65 || rel_loss >= 0.14)
 				return clean_active > 0 ? 0 : max(FLOOR, (1.0 - rate / (1.5 * EFF_CIR_BYTES_S)) * loss_q);
-			let idle_bias = 1.0 / (1.0 + rate / 50000.0);
+			let idle_bias = 1.0 / (1.0 + rate / 25000.0);
 			if (b.state == "cooling")
 				return max(FLOOR, 1.8 * ratio * q * loss_q * idle_bias);
 			if (b.state == "charged")
@@ -364,9 +368,7 @@ export function plan(ctx) {
 		return { slots: 0, pattern: [], vip, repair: length(current()) > 0, anchor: [] };
 	}
 	let have = current(), have_vip = current_vip();
-	let prev_vip_id = (have_vip[0] ?? 0) & 0xff;
-	let vip_alive = prev_vip_id > 0 && length(filter(healthy, (s) => s.id == prev_vip_id && (!s.http || s.http == 204))) > 0;
-	let vip = (!ctx.force && vip_alive && length(have_vip) == 2) ? have_vip : select_vip(healthy, ctx.load ?? {});
+	let vip = select_vip(healthy, ctx.load ?? {});
 	let pool = harvest_pool(healthy, vip);
 	let n = nslots(ctx.cfg.weave, healthy);
 	let pool_ids = {};

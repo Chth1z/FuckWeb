@@ -61,6 +61,14 @@ function hex(n) {
 
 function build(ctx) {
 	let cfg = ctx.cfg, c = cfg.classify, tun = ctx.tunnel;
+	let doh_seen = {}, cn_doh_ips = [];
+	for (let u in (cfg.dns?.cn_upstream ?? [])) {
+		let m = match(u, /([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/);
+		if (m && !doh_seen[m[1]]) {
+			doh_seen[m[1]] = true;
+			push(cn_doh_ips, m[1]);
+		}
+	}
 
 	let base = render(core.SHARE + "/tpl/prism.nft.ut", {
 		lan: cfg.main.lan_dev,
@@ -71,6 +79,7 @@ function build(ctx) {
 		tproxy_port: cfg.tunnel.tproxy_port,
 		mark_diverted: hex(MARK_DIVERTED),
 		mark_tunnel_out: hex(MARK_TUNNEL_OUT),
+		cn_doh_ips,
 	});
 
 	// Each rule carries a counter and a tag; the dashboard reads both to show
@@ -101,7 +110,8 @@ function build(ctx) {
 	// Low byte of conntrack mark = strand ID (1..21); bit 0x100 = VIP realtime lane.
 	let w = ctx.weave, lay = [], lay_out = [];
 	if (w.slots > 0) {
-		let evict = sprintf("ct mark and 0x100 != 0 ct bytes >= 50000000 ct mark set numgen inc mod %d map @pattern", w.slots);
+		// Demote bulky >50 MB flows out of 1:10 VIP QoS without altering the strand byte (preserves NAT).
+		let evict = "ct mark and 0x100 != 0 ct bytes >= 50000000 ct mark set ct mark and 0xfffffeff";
 		let known = "ct mark and 0xff != 0 meta mark set ct mark and 0xff return";
 		let apply = "meta mark set ct mark and 0xff";
 		let spread = sprintf("ct mark set numgen inc mod %d map @pattern", w.slots);
@@ -128,8 +138,14 @@ function build(ctx) {
 			push(lay, "ct state new ct mark and 0xff == 0 " + pin);
 		}
 		push(lay, apply);
-		// The tunnel's own connections always spread across the non-VIP harvest pool.
-		lay_out = [ known, "ct state new " + spread, apply ];
+		// Let kernel MPTCP MP_JOIN subflows keep mark 0 -> PREF_FROM routes out each endpoint strand;
+		// spread initial MP_CAPABLE, direct, and DoH router sockets across @pattern.
+		lay_out = [
+			"ct state new tcp option mptcp subtype 1 meta mark set 0 return",
+			known,
+			"ct state new " + spread,
+			apply,
+		];
 	}
 
 	let dev = devices.policy_sets(cfg);
@@ -331,6 +347,66 @@ function plan_default(ctx, cmds) {
 	}
 }
 
+// Pick top-scoring clean primary strands as MPTCP in-kernel path-manager endpoints
+// so tunnel sockets spread MP_JOIN subflows across distinct uplinks concurrently.
+export function mptcp_candidates(ctx) {
+	if (!ctx.site?.aggregate)
+		return [];
+	let healthy = filter(ctx.health?.healthy ?? [], (l) => l.role == "primary" && !l.parked && l.ip && l.gw);
+	if (length(healthy) < 2)
+		return [];
+	let sorted = sort(slice(healthy), (a, b) => {
+		let sa = (a.loss ?? 0.0) * 100.0 + ((a.ttfb && a.ttfb >= 0.008) ? a.ttfb : 0.25);
+		let sb = (b.loss ?? 0.0) * 100.0 + ((b.ttfb && b.ttfb >= 0.008) ? b.ttfb : 0.25);
+		return sa < sb ? -1 : (sa > sb ? 1 : a.id - b.id);
+	});
+	let clean = filter(sorted, (l) => (l.loss ?? 0.0) < 0.14);
+	let pool = length(clean) >= 2 ? clean : sorted;
+	return slice(pool, 0, min(6, length(pool)));
+};
+
+function plan_mptcp(ctx, cmds) {
+	if (!fs.stat("/proc/sys/net/mptcp/enabled"))
+		return;
+	let eps = mptcp_candidates(ctx);
+	let want_subflows = length(eps) >= 2 ? min(5, length(eps) - 1) : 0;
+
+	let lr = core.sh("ip mptcp limits show");
+	let cur_sub = int(match(lr.out, /subflows\s+([0-9]+)/)?.[1] ?? "-1");
+	let cur_acc = int(match(lr.out, /add_addr_accepted\s+([0-9]+)/)?.[1] ?? "-1");
+	if (cur_sub != want_subflows || cur_acc != 0)
+		push(cmds, sprintf("ip mptcp limits set subflows %d add_addr_accepted 0", want_subflows));
+
+	let want = {};
+	for (let l in eps)
+		want[l.id] = { ip: l.ip, dev: l.dev };
+
+	let have = {};
+	for (let e in facts.ip("mptcp endpoint show")) {
+		if (e.id == null)
+			continue;
+		have["" + e.id] = e;
+		let w = want[e.id];
+		if (!w || e.address != w.ip || e.dev != w.dev || !e.subflow)
+			push(cmds, "ip mptcp endpoint delete id " + e.id);
+	}
+	for (let l in eps) {
+		let cur = have["" + l.id];
+		if (!cur || cur.address != l.ip || cur.dev != l.dev || !cur.subflow)
+			push(cmds, sprintf("ip mptcp endpoint add %s dev %s id %d subflow", l.ip, l.dev, l.id));
+	}
+}
+
+export function mptcp_state(ctx) {
+	let enabled = core.read("/proc/sys/net/mptcp/enabled") == "1";
+	if (!enabled)
+		return { enabled: false, subflows: 0, endpoints: [] };
+	let lr = core.sh("ip mptcp limits show");
+	let subflows = int(match(lr.out, /subflows\s+([0-9]+)/)?.[1] ?? "0");
+	let eps = map(facts.ip("mptcp endpoint show"), (e) => ({ id: e.id, dev: e.dev ?? "", ip: e.address ?? "" }));
+	return { enabled, subflows, endpoints: eps };
+};
+
 // Several addresses on one L2 segment: answer ARP only on the owning device
 // and accept the asymmetric return path.
 function strand_sysctl(ctx) {
@@ -384,12 +460,19 @@ export function apply(ctx) {
 	let cmds = [];
 	plan_default(ctx, cmds);
 	run("default route", cmds);
+	let mcmds = [];
+	plan_mptcp(ctx, mcmds);
+	run("mptcp", mcmds);
 	return apply_nft(ctx);
 };
 
 // Back to a plain router: fw4 NAT through netifd's default route.
 export function teardown(ctx) {
 	let cmds = [];
+	if (fs.stat("/proc/sys/net/mptcp/enabled")) {
+		push(cmds, "ip mptcp endpoint flush");
+		push(cmds, "ip mptcp limits set subflows 2 add_addr_accepted 0");
+	}
 	if (core.ok("nft list table " + NFT))
 		push(cmds, "nft delete table " + NFT);
 	for (let r in facts.ip("-4 rule show")) {

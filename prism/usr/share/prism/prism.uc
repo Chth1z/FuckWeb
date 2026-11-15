@@ -87,6 +87,7 @@ function snapshot(ctx, report, led_color) {
 			canary_ms: st.tunnel?.delay ?? 0, canary_fails: st.tunnel?.fails ?? 0,
 		},
 		dns: { smartdns: dns.running(), port: ctx.cfg.dns.port },
+		mptcp: kernel.mptcp_state(ctx),
 		sys: {
 			conntrack: host.conntrack(),
 			load1: host.load(),

@@ -49,6 +49,13 @@ export function run(ctx) {
 	if (n > 1) {
 		fail("weave", nft_has("chain inet prism weave", "ct state new"));
 		fail("pattern", nft_has("map inet prism pattern", " : "));
+		if (ctx.site.aggregate && fs.stat("/proc/sys/net/mptcp/enabled")) {
+			caution("mptcp_enabled", core.read("/proc/sys/net/mptcp/enabled") == "1", "net.mptcp.enabled != 1");
+			let mlim = core.sh("ip mptcp limits show").out;
+			let eps = facts.ip("mptcp endpoint show");
+			caution("mptcp_pool", int(match(mlim, /subflows\s+([0-9]+)/)?.[1] ?? "0") >= 1 && length(eps) >= 2,
+				sprintf("%d endpoints, %s", length(eps), trim(mlim)));
+		}
 	}
 	if (ctx.site.aggregate)
 		caution("strands_low", n >= length(ctx.strands) * 0.85, sprintf("%d of %d", n, length(ctx.strands)));

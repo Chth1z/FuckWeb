@@ -38,6 +38,16 @@ function tls_opts(relay, p) {
 	return p;
 }
 
+function tcp_opts(relay, p) {
+	// Enable MPTCP for explicit opt-in or our Lightsail server (both sides verified);
+	// arbitrary third-party relays stay standard TCP to avoid middlebox SYN stalls.
+	if (relay.mptcp ?? (relay.server == "18.176.216.3"))
+		p.mptcp = true;
+	if (relay.tfo)
+		p.tfo = true;
+	return p;
+}
+
 const CONVERT = {
 	hysteria2: function(n) {
 		let tls = n.tls ?? {}, obfs = n.obfs ?? {}, hop = n.hop_ports ?? n.ports;
@@ -62,13 +72,13 @@ const CONVERT = {
 		for (let from, to in { flow: "flow", encryption: "encryption", packet_encoding: "packet-encoding" })
 			if (type(n[from]) == "string" && length(n[from]))
 				p[to] = n[from];
-		return tls_opts(n, p);
+		return tcp_opts(n, tls_opts(n, p));
 	},
 	trojan: function(n) {
-		return tls_opts(n, { type: "trojan", password: n.password, udp: true });
+		return tcp_opts(n, tls_opts(n, { type: "trojan", password: n.password, udp: true }));
 	},
 	shadowsocks: function(n) {
-		return { type: "ss", cipher: n.method ?? n.cipher ?? "aes-128-gcm", password: n.password, udp: true };
+		return tcp_opts(n, { type: "ss", cipher: n.method ?? n.cipher ?? "aes-128-gcm", password: n.password, udp: true });
 	},
 	vmess: function(n) {
 		let p = {
@@ -78,7 +88,7 @@ const CONVERT = {
 		};
 		if (n.tls?.enabled || n.tls == true)
 			p.tls = true;
-		return tls_opts(n, p);
+		return tcp_opts(n, tls_opts(n, p));
 	},
 };
 CONVERT.hysteria = CONVERT.hysteria2;
@@ -163,13 +173,14 @@ function build_config(cfg, lan_ip, proxies) {
 	let cn_doh = map(cfg.dns.cn_upstream, (u) => split(u, " ")[0]);
 	let groups = [];
 	if (length(names)) {
+		let hb = min(int(c.test_interval), 60);
 		push(groups, {
-			name: "TW-HOME", type: "fallback", url: c.test_url, interval: c.test_interval,
-			lazy: false, "expected-status": 204, proxies: tw_list,
+			name: "TW-HOME", type: "fallback", url: c.test_url, interval: hb,
+			timeout: 3000, lazy: false, "expected-status": 204, proxies: tw_list,
 		});
 		push(groups, {
-			name: "AUTO", type: "fallback", url: c.test_url, interval: c.test_interval,
-			lazy: false, "expected-status": 204, proxies: tw_list,
+			name: "AUTO", type: "fallback", url: c.test_url, interval: hb,
+			timeout: 3000, lazy: false, "expected-status": 204, proxies: tw_list,
 		});
 	}
 	push(groups, {
@@ -186,7 +197,8 @@ function build_config(cfg, lan_ip, proxies) {
 		"tcp-concurrent": true,
 		"geodata-mode": false,
 		"geo-auto-update": false,
-		"keep-alive-interval": 30,
+		"keep-alive-idle": 600,
+		"keep-alive-interval": 15,
 		// Marks every socket mihomo opens so nft can weave them over the strands.
 		"routing-mark": MARK_TUNNEL_OUT,
 		profile: { "store-selected": true, "store-fake-ip": false },
@@ -196,7 +208,7 @@ function build_config(cfg, lan_ip, proxies) {
 			"override-destination": false,
 			"parse-pure-ip": false,
 			"force-dns-mapping": true,
-			sniff: { HTTP: { ports: [ 80 ] }, TLS: { ports: [ 443, 8443 ] } },
+			sniff: { HTTP: { ports: [ 80, 8080 ] }, TLS: { ports: [ 443, 8443 ] } },
 		},
 		"external-controller": lan_ip + ":" + c.controller_port,
 		secret: secret(),
@@ -213,9 +225,9 @@ function build_config(cfg, lan_ip, proxies) {
 			"default-nameserver": cn_doh,
 			"proxy-server-nameserver": cn_doh,
 			nameserver: length(names) ? [
-				"https://dns.adguard-dns.com/dns-query#PROXY",
+				"https://1.1.1.1/dns-query#PROXY",
+				"https://8.8.8.8/dns-query#PROXY",
 				"https://208.67.222.222/dns-query#PROXY",
-				"https://dns.quad9.net/dns-query#PROXY",
 			] : cn_doh,
 		},
 		listeners: [
