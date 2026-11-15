@@ -2,24 +2,51 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.5';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.5';
-import { write, call } from '../api.js?v=5.6.5';
+import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.6';
+import { write, call } from '../api.js?v=5.6.6';
 
 let drawerOpen = false;
 let rafId = null;
 let lastFrameTs = 0;
 
 let prevRuleSample = null;
+let lastHeatPaintTs = 0;
 const liveFlow = {
   totPkts: 0,
+  totBytes: 0,
   quicPkts: 0,
+  quicBytes: 0,
   vipBps: 0,
   tunBps: 0,
   domBps: 0,
   tunPkts: 0,
   domPkts: 0,
+  tunBytes: 0,
+  domBytes: 0,
   tunShare: 0
+};
+
+// Dynamic optical saturation & glow state per pipeline card (0 = obsidian standby -> 1 = active hotspot)
+const SPECTRUM_STOPS = [
+  '239, 68, 68',
+  '249, 115, 22',
+  '250, 204, 21',
+  '34, 197, 94',
+  '6, 182, 212',
+  '59, 130, 246',
+  '139, 92, 246'
+];
+
+const moduleHeat = {
+  guard:   { id: '#bp-card-guard',   kind: 'mono', rgb: '170, 142, 240', cur: 0.14, target: 0.14 },
+  pregate: { id: '#bp-card-pregate', kind: 'spectrum', cur: 0.16, target: 0.16 },
+  ingress: { id: '#bp-card-ingress', kind: 'spectrum', cur: 0.18, target: 0.18 },
+  vip:     { id: '#bp-card-vip',     kind: 'mono', rgb: '100, 174, 245', cur: 0.04, target: 0.04 },
+  tun:     { id: '#bp-card-tun',     kind: 'mono', rgb: '170, 142, 240', cur: 0.08, target: 0.08 },
+  dom:     { id: '#bp-card-dom',     kind: 'mono', rgb: '87, 209, 146',  cur: 0.16, target: 0.16 },
+  qos:     { id: '#bp-card-qos',     kind: 'mono', rgb: '240, 202, 104', cur: 0.14, target: 0.14 },
+  uplink:  { id: '#bp-card-uplink',  kind: 'spectrum', cur: 0.18, target: 0.18 }
 };
 
 const RULE_LABELS = {
@@ -78,6 +105,72 @@ function desatObsidianRgb(rgb, sat = 1) {
   const s = Math.max(0, Math.min(1, sat));
   const mix = (c, base) => Math.round(base + (c - base) * s);
   return `${mix(r, 52)}, ${mix(g, 58)}, ${mix(b, 72)}`;
+}
+
+// Drive per-module border saturation and bloom luminance from hotspot intensity (0..1)
+function paintModuleHeat(m, h) {
+  const node = $(m.id);
+  if (!node) return;
+  const k = Math.max(0.03, Math.min(1, h));
+  const sat = 0.16 + 0.84 * Math.pow(k, 0.78);
+  const bdrA = (0.30 + 0.62 * Math.pow(k, 0.70)).toFixed(3);
+  const glowA = (0.02 + 0.28 * Math.pow(k, 1.15)).toFixed(3);
+  const bloomA = (0.006 + 0.12 * Math.pow(k, 1.25)).toFixed(3);
+  const insetA = (0.01 + 0.08 * Math.pow(k, 1.10)).toFixed(3);
+  const blur1 = Math.round(8 + 16 * k);
+  const blur2 = Math.round(18 + 26 * k);
+
+  if (m.kind === 'spectrum') {
+    const stops = SPECTRUM_STOPS.map((rgb, idx) => {
+      const lit = desatObsidianRgb(rgb, sat);
+      const pct = Math.round((idx / (SPECTRUM_STOPS.length - 1)) * 100);
+      return `rgba(${lit}, ${bdrA}) ${pct}%`;
+    });
+    const rLit = desatObsidianRgb(SPECTRUM_STOPS[0], sat);
+    const gLit = desatObsidianRgb(SPECTRUM_STOPS[3], sat);
+    const bLit = desatObsidianRgb(SPECTRUM_STOPS[5], sat);
+    const vLit = desatObsidianRgb(SPECTRUM_STOPS[6], sat);
+    const sA = (0.025 + 0.21 * Math.pow(k, 1.12)).toFixed(3);
+    const vA = (0.018 + 0.16 * Math.pow(k, 1.18)).toFixed(3);
+    node.style.setProperty('--bp-spec-grad', `linear-gradient(135deg, ${stops.join(', ')})`);
+    node.style.setProperty(
+      '--bp-card-shadow',
+      `-6px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
+      `0 0 ${blur1}px rgba(${gLit}, ${sA}), ` +
+      `6px 0 ${Math.round(blur1 * 1.05)}px rgba(${bLit}, ${sA}), ` +
+      `10px 0 ${blur2}px rgba(${vLit}, ${vA}), ` +
+      `inset 0 0 ${Math.round(8 + 8 * k)}px rgba(255, 255, 255, ${insetA}), ` +
+      `0 10px 26px rgba(0, 0, 0, 0.78)`
+    );
+  } else {
+    const lit = desatObsidianRgb(m.rgb, sat);
+    const core = k > 0.72 ? mixWhiteRgb(lit, (k - 0.72) * 0.42) : lit;
+    node.style.setProperty('--bp-card-border', `rgba(${core}, ${bdrA})`);
+    node.style.setProperty(
+      '--bp-card-shadow',
+      `0 0 ${blur1}px rgba(${lit}, ${glowA}), ` +
+      `0 0 ${blur2}px rgba(${lit}, ${bloomA}), ` +
+      `inset 0 0 ${Math.round(8 + 10 * k)}px rgba(${lit}, ${insetA}), ` +
+      `0 10px 26px rgba(0, 0, 0, 0.78)`
+    );
+  }
+}
+
+function paintAllModuleHeats(snap = false) {
+  let dirty = false;
+  for (const key of Object.keys(moduleHeat)) {
+    const m = moduleHeat[key];
+    if (snap) {
+      m.cur = m.target;
+      paintModuleHeat(m, m.cur);
+      dirty = true;
+    } else if (Math.abs(m.target - m.cur) > 0.004) {
+      m.cur += (m.target - m.cur) * 0.22;
+      paintModuleHeat(m, m.cur);
+      dirty = true;
+    }
+  }
+  return dirty;
 }
 
 function clipHalfPlane(ctx, ax, ay, bx, by, sideSign, W, H) {
@@ -698,19 +791,19 @@ function renderWaveguidesCanvas() {
 
   const prismsQueue = [];
 
-  // Stage 1 Vertical Conduit: Pre-Gate -> Nftables Classify Engine
+  // Stage 1 Vertical Conduit: Guard & SmartDNS -> Nftables Classify Engine (uninterrupted parallel spectrum)
   if (ing.y - pre.bottom > 6) {
-    drawRefractedVerticalBridge(ctx, pre, ing, waveState[4], 0.00, 'QUIC→TCP');
+    drawRefractedVerticalBridge(ctx, pre, ing, waveState[4], 0.00);
   }
 
   // Inter-Engine Vertical Cross-Feed: TW-HOME (TProxy weave_out) -> Burst-Harvest Pool
   if (dom.y - tun.bottom > 6) {
-    drawRefractedVerticalBridge(ctx, tun, dom, waveState[3], 0.12, 'weave_out');
+    drawRefractedVerticalBridge(ctx, tun, dom, waveState[3], 0.12);
   }
 
   // Stage 3 Vertical Convergence: 3-Band HTB QoS -> 21-Uplink NAT & Egress
   if (up.y - qos.bottom > 6) {
-    drawRefractedVerticalBridge(ctx, qos, up, waveState[4], 0.30, '21 WAN NAT');
+    drawRefractedVerticalBridge(ctx, qos, up, waveState[4], 0.30);
   }
 
   // Symmetric Center-Axis Dual Prisms + Single-Bend 45-deg TIR Mirrors
@@ -738,6 +831,11 @@ function stepAnimation(now) {
     b.glow += (b.targetGlow - b.glow) * 0.1;
     b.width += (b.targetWidth - b.width) * 0.1;
     b.phase = (b.phase + b.vel * dt) % 1.0;
+  }
+
+  if (now - lastHeatPaintTs >= 66) {
+    lastHeatPaintTs = now;
+    paintAllModuleHeats(false);
   }
 
   renderWaveguidesCanvas();
@@ -771,12 +869,17 @@ function updateFlowPhysics(st) {
   const vipBps = vipS ? ((vipS.now ?? vipS.rate ?? 0) + (vipS.up_now ?? vipS.up ?? 0)) : 0;
 
   const rules = S.rules?.rules || [];
-  let totPkts = 0, quicPkts = 0, tunPkts = 0, domPkts = 0, tunBytes = 0, domBytes = 0;
+  let totPkts = 0, totBytes = 0, quicPkts = 0, quicBytes = 0;
+  let tunPkts = 0, domPkts = 0, tunBytes = 0, domBytes = 0;
   for (const r of rules) {
     const p = r.packets || 0;
     const b = r.bytes || 0;
     totPkts += p;
-    if (r.tag === 'quic') quicPkts += p;
+    totBytes += b;
+    if (r.tag === 'quic') {
+      quicPkts += p;
+      quicBytes += b;
+    }
     if (r.tag.includes('tunnel') || r.tag === 'rest-tunnel') {
       tunPkts += p;
       tunBytes += b;
@@ -804,9 +907,13 @@ function updateFlowPhysics(st) {
 
   liveFlow.vipBps = vipBps;
   liveFlow.totPkts = totPkts;
+  liveFlow.totBytes = totBytes;
   liveFlow.quicPkts = quicPkts;
+  liveFlow.quicBytes = quicBytes;
   liveFlow.tunPkts = tunPkts;
   liveFlow.domPkts = domPkts;
+  liveFlow.tunBytes = tunBytes;
+  liveFlow.domBytes = domBytes;
   liveFlow.tunShare = totPkts > 0 ? tunPkts / totPkts : 0;
 
   const directResidual = Math.max(0, totalRate - vipBps - liveFlow.tunBps);
@@ -837,6 +944,26 @@ function updateFlowPhysics(st) {
       b.targetWidth = 1.75 + level * 1.65;
     }
   }
+
+  // Per-module hotspot calculation driving optical saturation & glow bloom
+  const heatOf = (bps, floor = 0.03) => {
+    if (bps < 0) return 0.02;
+    if (bps <= 32) return floor;
+    const mbps = (bps * 8) / 1e6;
+    const absH = Math.min(1, Math.log10(1 + mbps * 7.5) / 1.45);
+    const relH = bps / maxBps;
+    return Math.min(1, Math.max(floor, 0.10 + absH * 0.55 + relH * 0.40));
+  };
+
+  moduleHeat.guard.rgb      = !st.ok ? '230, 108, 120' : (st.tunnel?.fail_open ? '235, 154, 94' : '170, 142, 240');
+  moduleHeat.guard.target   = !st.ok ? 0.92 : (st.tunnel?.fail_open ? 0.72 : heatOf(liveFlow.tunBps + totalRate * 0.35, 0.10));
+  moduleHeat.pregate.target = st.dns?.smartdns ? heatOf(totalRate * 0.65, 0.10) : 0.04;
+  moduleHeat.ingress.target = heatOf(totalRate, 0.12);
+  moduleHeat.vip.target     = vipS && vipS.healthy ? heatOf(vipBps, 0.03) : 0.02;
+  moduleHeat.tun.target     = st.tunnel?.running ? heatOf(liveFlow.tunBps, 0.06) : 0.03;
+  moduleHeat.dom.target     = st.healthy_count > 0 ? heatOf(weaveBps, 0.08) : 0.03;
+  moduleHeat.qos.target     = heatOf(totalRate, 0.10);
+  moduleHeat.uplink.target  = Math.min(1, heatOf(totalRate, 0.10) * 0.92 + Math.min(0.12, (st.sys?.load1 || 0) * 0.06));
 }
 
 function renderClassifyStrip() {
@@ -858,6 +985,7 @@ function renderClassifyStrip() {
   for (const r of visible) {
     const label = RULE_LABELS[r.tag] || r.tag;
     const pkts = r.packets || 0;
+    const bytes = r.bytes || 0;
     const share = (pkts / tot) * 100;
     const fillPct = pkts > 0 ? Math.min(100, Math.max(6, Math.pow(share / 100, 0.58) * 100)) : 0;
 
@@ -882,7 +1010,14 @@ function renderClassifyStrip() {
       textCls = 'c-crimson';
     }
 
-    const pktTxt = pkts >= 1000 ? `${(pkts / 1000).toFixed(1)}k` : `${pkts}`;
+    const rHeat = pkts > 0 ? Math.min(1, Math.max(0.08, Math.pow(share / 100, 0.52))) : 0;
+    const heatRgb = pkts > 0 ? desatObsidianRgb(colorRgb, 0.24 + 0.76 * rHeat) : colorRgb;
+    const bdrA = pkts > 0 ? (0.28 + 0.58 * rHeat).toFixed(2) : '0.16';
+    const glowBlur = pkts > 0 ? `${Math.round(4 + 14 * rHeat)}px` : '0px';
+    const glowA = pkts > 0 ? (0.03 + 0.22 * rHeat).toFixed(2) : '0';
+
+    const byteTxt = fmtBytes(bytes).replace(/\s+/g, '');
+    const pktTxt = pkts >= 1e6 ? `${(pkts / 1e6).toFixed(1)}M` : (pkts >= 1000 ? `${Math.round(pkts / 1000)}k` : `${pkts}`);
     const pctTxt = pkts > 0 ? (share >= 1 ? `${Math.round(share)}%` : `${share.toFixed(1)}%`) : '0%';
 
     const segEl = el('span', { class: `seg-meter compact${pkts > 0 ? ' active' : ''}` });
@@ -890,11 +1025,17 @@ function renderClassifyStrip() {
 
     frag.appendChild(el('div', {
       class: `classify-bar-card ${pkts > 0 ? 'active' : ''}`,
-      style: { '--cb-rgb': colorRgb }
+      title: `${label} · ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt})`,
+      style: {
+        '--cb-rgb': heatRgb,
+        '--cb-bdr-a': bdrA,
+        '--cb-glow-blur': glowBlur,
+        '--cb-glow-a': glowA
+      }
     },
       el('div', { class: 'classify-bar-head' },
         el('span', { class: pkts > 0 ? 'c-bright' : 'c-muted', style: { fontWeight: pkts > 0 ? '600' : '400', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label),
-        el('span', { class: pkts > 0 ? textCls : 'c-muted', style: { fontVariantNumeric: 'tabular-nums', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '9.5px' } }, `${pktTxt}·${pctTxt}`)
+        el('span', { class: pkts > 0 ? textCls : 'c-muted', style: { fontVariantNumeric: 'tabular-nums', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '9.5px' } }, `${byteTxt}·${pktTxt}·${pctTxt}`)
       ),
       segEl
     ));
@@ -921,6 +1062,8 @@ function renderMiniSpectrum(strands) {
     const cell = bar.children[i];
     if (!cell) continue;
     const col = spectralColor(i, strands.length);
+    const rateTxt = fmtRateCompact((s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0));
+    cell.title = `${s.dev} (#${s.id}) · ${s.healthy ? `${rateTxt} · τ=${s.ttfb_ms ?? '—'}ms · ${s.tokens_pct ?? 100}%` : 'fault'}`;
     if (!s.healthy) {
       cell.style.backgroundColor = 'rgba(230, 108, 120, 0.35)';
       cell.style.boxShadow = 'none';
@@ -979,6 +1122,10 @@ export function renderBlueprint() {
   if (!st) return;
 
   updateFlowPhysics(st);
+  if (!lastHeatPaintTs) {
+    lastHeatPaintTs = performance.now();
+    paintAllModuleHeats(true);
+  }
   startBlueprintAnim();
 
   const w = st.weave || {};
@@ -999,34 +1146,37 @@ export function renderBlueprint() {
     }
   }
 
-  // Left Guard Rail (Dominant Security & Invariant Panel)
+  // Left Guard Rail (Unified Adaptive Security & Invariant Panel)
   const canaryMs = st.tunnel?.canary_ms || 0;
   const canaryFails = st.tunnel?.canary_fails ?? 0;
-  $('#adv-verdict').textContent = st.ok ? 'zero-leak verified' : (st.fail?.join(', ') || 'check failed');
-  $('#adv-verdict').className = `v ${st.ok ? 'c-mint' : 'c-crimson'}`;
+  const verdictEl = $('#adv-verdict');
+  if (verdictEl) {
+    verdictEl.textContent = st.ok ? 'zero-leak' : (st.fail?.[0] || 'check failed');
+    verdictEl.className = `bp-meter-val ${st.ok ? 'c-mint' : 'c-crimson'}`;
+  }
 
   const failClosedEl = $('#adv-failclosed');
   if (failClosedEl) {
     const fc = !st.tunnel?.fail_open;
-    failClosedEl.textContent = fc ? 'locked · 0x20000000' : 'fail-open (!)';
+    failClosedEl.textContent = fc ? 'v6✕ · DoT:853✕' : 'fail-open (!)';
     failClosedEl.className = `v ${fc ? 'c-violet' : 'c-amber'}`;
   }
 
   const dnsEl = $('#adv-dns');
   if (dnsEl) {
     dnsEl.textContent = st.dns?.smartdns
-      ? `53 → ${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads on' : 'ads off'}`
+      ? `53→${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}`
       : 'offline';
     dnsEl.className = `v ${st.dns?.smartdns ? 'c-mint' : 'c-crimson'}`;
   }
 
-  $('#adv-canary').textContent = canaryMs > 0 ? `${canaryMs} ms (${canaryFails} fail)` : (st.tunnel?.on ? 'active' : 'off');
+  $('#adv-canary').textContent = canaryMs > 0 ? `${canaryMs} ms (${canaryFails}f)` : (st.tunnel?.on ? 'active' : 'off');
   const checks = S.doctor?.checks || [];
   const offCheck = checks.find(c => c.id === 'privacy_no_offload');
   const offEl = $('#adv-offload');
   if (offEl) {
     const offOk = offCheck ? !!offCheck.ok : true;
-    offEl.textContent = offOk ? 'disabled (per-pkt)' : 'offload leak!';
+    offEl.textContent = offOk ? 'per-pkt ok' : 'offload leak!';
     offEl.className = `v ${offOk ? 'c-mint' : 'c-crimson'}`;
   }
 
@@ -1039,26 +1189,26 @@ export function renderBlueprint() {
   const ctCount = st.sys?.conntrack?.count ?? 0;
   const ctMax = Math.max(1, st.sys?.conntrack?.max ?? 131072);
   $('#adv-ct').textContent = `${ctCount.toLocaleString()} / ${(ctMax / 1024).toFixed(0)}k`;
-  $('#adv-strands').textContent = `${st.healthy_count ?? 0}/${st.strand_count ?? 21} · ${st.role || 'primary'}`;
+  $('#adv-strands').textContent = `${st.healthy_count ?? 0}/${st.strand_count ?? 21} (${st.role === 'primary' ? '主' : (st.role || '主')})`;
 
-  // Subsystem Invariants Grid inside PRISM_GUARD
+  // Subsystem Invariants Grid inside PRISM_GUARD (exact disjoint partition of doctor checks)
   const totChecks = checks.length || 41;
   const okChecks = checks.length ? checks.filter(c => c.ok).length : (st.ok ? totChecks : 0);
   if ($('#adv-inv-score')) {
     $('#adv-inv-score').textContent = `${okChecks}/${totChecks} ok`;
-    $('#adv-inv-score').className = okChecks === totChecks ? 'c-mint' : 'c-crimson';
+    $('#adv-inv-score').className = `bp-live-rate ${okChecks === totChecks ? 'c-mint' : 'c-crimson'}`;
   }
   renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, okChecks === totChecks ? 'mint' : 'crimson', true);
 
   const invGrid = $('#adv-invariants-grid');
   if (invGrid && checks.length) {
     const groups = [
-      { label: 'fw4/guard',  test: c => c.id.startsWith('privacy_') || c.id === 'nft_table' || c.id === 'ip_forward' },
+      { label: 'fw4/guard',  test: c => c.id.startsWith('privacy_') || c.id === 'nft_table' || c.id === 'ip_forward' || c.id === 'ssh_public' || c.id === 'http_public' || c.id === 'secret_perms' || c.id === 'overlay_space' },
       { label: 'dns/6053',   test: c => c.id.includes('dns') || c.id.includes('dhcp') },
       { label: 'tproxy/cage',test: c => c.id.startsWith('tunnel_') },
-      { label: 'weave/126',  test: c => c.id.includes('weave') || c.id.includes('pattern') || c.id.includes('strands') || c.id.includes('domestic') },
-      { label: 'mptcp/pool', test: c => c.id.startsWith('mptcp_') },
-      { label: 'canary/ok',  test: c => c.id === 'tunnel_canary' || c.id.includes('site') || c.level === 'fail' },
+      { label: 'weave/21ch', test: c => c.id === 'weave' || c.id === 'pattern' || c.id.startsWith('strands_') || c.id === 'domestic4_loaded' },
+      { label: 'mptcp/htb',  test: c => c.id.startsWith('mptcp_') || c.id === 'uplink_carrier' || c.id === 'shaper' },
+      { label: 'wifi/ap',    test: c => c.id === 'hostapd' || c.id.startsWith('wifi_') || c.id.startsWith('ap:') || c.id.startsWith('ap_ssid:') || c.id === 'sta_with_copper' },
     ];
     const gFrag = document.createDocumentFragment();
     for (const grp of groups) {
@@ -1066,11 +1216,11 @@ export function renderBlueprint() {
       const passed = matched.filter(c => c.ok).length;
       const allOk = matched.length === 0 || passed === matched.length;
       gFrag.appendChild(el('div', { class: `guard-inv-cell ${allOk ? 'ok' : 'bad'}` },
-        el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px' } },
+        el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: '0', overflow: 'hidden' } },
           el('span', { class: `run-dot ${allOk ? 'mint' : 'crimson'}` }),
-          el('span', { class: 'c-sec' }, grp.label)
+          el('span', { class: 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, grp.label)
         ),
-        el('span', { class: allOk ? 'c-bright' : 'c-crimson', style: { fontWeight: '600', fontVariantNumeric: 'tabular-nums' } }, `${passed}/${matched.length || 1}`)
+        el('span', { class: allOk ? 'c-bright' : 'c-crimson', style: { fontWeight: '600', fontVariantNumeric: 'tabular-nums', flexShrink: '0' } }, matched.length ? `${passed}/${matched.length}` : 'n/a')
       ));
     }
     invGrid.innerHTML = '';
@@ -1078,10 +1228,15 @@ export function renderBlueprint() {
   }
 
   if ($('#adv-relays')) {
-    $('#adv-relays').textContent = `TProxy :61235 · ${st.tunnel?.relays ?? 0} relays · ${(st.mptcp?.endpoints?.length ?? 0)} ep`;
+    $('#adv-relays').textContent = `:${st.tunnel?.mixed_port || 61235}·${st.tunnel?.relays ?? 0}r·${st.mptcp?.endpoints?.length ?? 0}ep`;
   }
   if ($('#adv-classify-mode')) {
-    $('#adv-classify-mode').textContent = `remainder: ${st.settings?.['classify.remainder'] || 'tunnel'} · quic: ${st.settings?.['classify.quic'] || 'reject'}`;
+    const rem = st.settings?.['classify.remainder'] || 'tunnel';
+    const q = st.settings?.['classify.quic'] === 'reject' ? 'quic✕' : 'quic✓';
+    $('#adv-classify-mode').textContent = `${rem} · ${q}`;
+  }
+  if ($('#adv-guard-dot')) {
+    $('#adv-guard-dot').className = `run-dot ${st.ok ? 'mint' : 'crimson'}`;
   }
   if ($('#adv-reconcile')) {
     const recTs = st.reconciled || st.ts;
@@ -1093,25 +1248,41 @@ export function renderBlueprint() {
 
   const evList = S.events?.events || [];
   if ($('#log-count')) $('#log-count').textContent = `${evList.length} 條`;
-  renderSessionLog($('#ov-session-log'), evList, 35);
+  if ($('#log-latest-ts')) $('#log-latest-ts').textContent = evList[0]?.ts ? fmtClock(evList[0].ts) : 'live';
+  renderSessionLog($('#ov-session-log'), evList, 60);
 
   // Tier 1A: Pre-Gate & SmartDNS
   $('#bp-quic-pkts').textContent = liveFlow.quicPkts >= 1000
     ? `${(liveFlow.quicPkts / 1000).toFixed(1)}k pkts`
     : `${liveFlow.quicPkts} pkts`;
+  const quicMode = st.settings?.['classify.quic'] || 'reject';
+  const dnsTagEl = $('#bp-dns-mode-tag');
+  if (dnsTagEl) {
+    dnsTagEl.textContent = quicMode === 'reject' ? 'QUIC reject' : 'QUIC pass';
+    dnsTagEl.className = `bp-head-sub ${quicMode === 'reject' ? 'c-amber' : 'c-mint'}`;
+  }
+
   const sz = S.rules?.sizes || {};
   if ($('#bp-dns-port')) {
-    $('#bp-dns-port').textContent = st.dns?.smartdns ? `:${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}` : 'offline';
+    $('#bp-dns-port').textContent = st.dns?.smartdns ? `53→:${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}` : 'offline';
   }
-  $('#bp-dns-st').textContent = `${sz.domestic4 ?? 0} / ${sz.domestic4_dns ?? 0}`;
-  if ($('#bp-dns-tun')) $('#bp-dns-tun').textContent = `${sz.tunnel4_dns ?? 0} · r${sz.tunnel4 ?? 0}`;
-  if ($('#bp-site-name')) $('#bp-site-name').textContent = st.site?.name || 'direct';
+  $('#bp-dns-st').textContent = `${sz.domestic4 ?? 0} + ${sz.domestic4_dns ?? 0}`;
+  if ($('#bp-dns-tun')) $('#bp-dns-tun').textContent = `${sz.tunnel4 ?? 0} IP · ${sz.tunnel_domains ?? 0} dom`;
+  if ($('#bp-dns-dyn')) $('#bp-dns-dyn').textContent = `${sz.relay4 ?? 0}r · ${sz.tunnel4_dns ?? 0} dns`;
+  if ($('#bp-quic-bytes')) $('#bp-quic-bytes').textContent = fmtBytes(liveFlow.quicBytes);
+  const curMode = st.settings?.['strands.aggregate'] || st.site?.mode || 'auto';
+  if ($('#bp-site-name')) $('#bp-site-name').textContent = `${st.site?.name || 'direct'} (${curMode})`;
+  if ($('#bp-pregate-rules')) {
+    const preEl = $('#bp-pregate-rules');
+    preEl.innerHTML = '';
+    preEl.appendChild(el('span', {}, 'IPv6 drop · DoT:853 drop'));
+    preEl.appendChild(el('span', { class: st.tunnel?.fail_open ? 'c-amber' : 'c-mint' }, st.tunnel?.fail_open ? 'fail-open' : 'fail-closed'));
+  }
 
   const chargedRatio = (w.charged_count || 0) / nH;
   renderSegMeter($('#bp-harvest-meter'), chargedRatio, 10, 'spectrum');
   $('#bp-harvest-txt').textContent = `${w.policy || 'harvest'} ${Math.round(chargedRatio * 100)}%`;
 
-  const curMode = st.settings?.['strands.aggregate'] || st.site?.mode || 'auto';
   $$('#site-mode-seg .seg-btn').forEach(b => b.classList.toggle('on', b.dataset.mode === curMode));
 
   const memBtn = $('#site-mem-btn');
@@ -1129,20 +1300,59 @@ export function renderBlueprint() {
   }
 
   // Tier 1B: Nftables Classify Engine
+  if ($('#bp-classify-sub')) {
+    const remMode = st.settings?.['classify.remainder'] === 'direct' ? '直連' : '隧道';
+    $('#bp-classify-sub').textContent = `prerouting mangle → @dev_policy · 餘量${remMode}`;
+  }
   $('#bp-ingress-rate').textContent = fmtRate(totalRate).full;
-  $('#bp-ingress-pkts').textContent = `${(liveFlow.totPkts / 1000).toFixed(1)}k pkts`;
+  $('#bp-ingress-pkts').textContent = liveFlow.totPkts >= 1e6
+    ? `${(liveFlow.totPkts / 1e6).toFixed(2)}M pkts`
+    : `${(liveFlow.totPkts / 1000).toFixed(1)}k pkts`;
   renderClassifyStrip();
+  if ($('#bp-classify-mix')) {
+    const mixTot = Math.max(1, liveFlow.totPkts);
+    const domShare = Math.round((liveFlow.domPkts / mixTot) * 100);
+    const tunShare = Math.round((liveFlow.tunPkts / mixTot) * 100);
+    const dropShare = Math.max(0, ((liveFlow.quicPkts / mixTot) * 100)).toFixed(1);
+    $('#bp-classify-mix').textContent = `直連 ${domShare}% · 隧道 ${tunShare}% · 攔截 ${dropShare}%`;
+  }
+  if ($('#bp-classify-foot')) {
+    $('#bp-classify-foot').textContent = `prerouting · ${(S.rules?.rules || []).length} rules active`;
+  }
+  if ($('#bp-classify-bytes')) {
+    $('#bp-classify-bytes').textContent = `累計 ${fmtBytes(liveFlow.totBytes)}`;
+  }
 
   // Tier 2 · Branch 0: @vip_lane
   const vipS = strands.find(s => s.vip);
   $('#bp-vip-rate').textContent = vipS ? fmtRate(liveFlow.vipBps).full : '0 bps';
+  if ($('#bp-vip-share')) {
+    const vShare = totalRate > 0 ? Math.round((liveFlow.vipBps / totalRate) * 100) : 0;
+    $('#bp-vip-share').textContent = `${vShare}% 流佔比`;
+  }
   const vipTok = vipS ? (vipS.tokens_pct ?? 100) / 100 : 0;
   renderSegMeter($('#bp-vip-meter'), vipTok, 10, 'blue');
   $('#bp-vip-pct').textContent = vipS ? `${Math.round(vipTok * 100)}%` : 'none';
+  if ($('#bp-vip-iface')) $('#bp-vip-iface').textContent = vipS ? `${vipS.dev} (#${vipS.id})` : 'auto';
+  if ($('#bp-vip-rtt')) $('#bp-vip-rtt').textContent = vipS ? `${vipS.ttfb_ms ?? '—'} ms · ${vipS.loss_pct ?? 0}%` : '— ms · 0%';
+  if ($('#bp-vip-down')) $('#bp-vip-down').textContent = vipS ? fmtBytes(vipS.down_bytes || 0) : '0 B';
+  if ($('#bp-vip-up')) $('#bp-vip-up').textContent = vipS ? fmtBytes(vipS.up_bytes || 0) : '0 B';
+  if ($('#bp-vip-ports')) {
+    const ports = S.rules?.ports || [];
+    $('#bp-vip-ports').textContent = ports.length ? ports.join(',') : '123,3478,5349';
+  }
+  if ($('#bp-vip-quota')) {
+    $('#bp-vip-quota').textContent = vipS ? `${fmtRateCompact(vipS.peak || 0)} 峰 · ${vipS.slots ?? 0} 槽` : '<50MB 優先';
+  }
+  if ($('#bp-vip-dot')) {
+    $('#bp-vip-dot').className = `run-dot ${vipS && vipS.healthy ? (liveFlow.vipBps > 400 ? 'blue' : 'off') : 'off'}`;
+  }
+  $('#bp-vip-st').textContent = vipS && vipS.healthy
+    ? (liveFlow.vipBps > 32 ? 'vip active' : 'vip pinned (idle)')
+    : 'standby';
   $('#bp-vip-desc').textContent = vipS
-    ? `${vipS.dev} · τ=${vipS.ttfb_ms || '—'}ms · ${vipS.loss_pct ?? 0}% loss`
+    ? `token ${vipS.tokens_pct ?? 100}% · ${vipS.slots ?? 0} slots`
     : 'auto selecting lowest RTT strand...';
-  $('#bp-vip-st').textContent = vipS && vipS.healthy ? 'vip pinned' : 'standby';
 
   // Tier 2 · Branch 1: TW-HOME Mihomo + MPTCP + Zashboard
   const mihomoOk = !!st.tunnel?.running;
@@ -1150,22 +1360,75 @@ export function renderBlueprint() {
   renderSegMeter($('#bp-tun-meter'), mihomoOk ? Math.max(0.08, liveFlow.tunShare) : 0, 10, mihomoOk ? 'violet' : 'amber');
   $('#bp-tun-pct').textContent = mihomoOk ? `${Math.round(liveFlow.tunShare * 100)}%` : '0%';
   $('#bp-tun-desc').textContent = tun?.tw_home || tun?.selected || 'TW-HOME';
+  if ($('#bp-tun-bytes')) $('#bp-tun-bytes').textContent = fmtBytes(liveFlow.tunBytes);
   if ($('#bp-tun-pkts')) {
-    $('#bp-tun-pkts').textContent = liveFlow.tunPkts >= 1000
-      ? `${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts`
-      : `${liveFlow.tunPkts} pkts`;
+    $('#bp-tun-pkts').textContent = liveFlow.tunPkts >= 1e6
+      ? `${(liveFlow.tunPkts / 1e6).toFixed(2)}M pkts`
+      : (liveFlow.tunPkts >= 1000 ? `${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts` : `${liveFlow.tunPkts} pkts`);
   }
+  const eps = st.mptcp?.endpoints || [];
   const mptcpEl = $('#bp-tun-mptcp');
   if (mptcpEl) {
-    mptcpEl.textContent = st.mptcp?.enabled
-      ? `${st.mptcp.subflows} sub · ${st.mptcp.endpoints?.length || 0} ep`
-      : 'single-path';
+    mptcpEl.textContent = st.mptcp?.enabled ? `${st.mptcp.subflows} sub · ${eps.length} ep` : 'single-path';
+  }
+  if ($('#bp-tun-eps')) {
+    $('#bp-tun-eps').textContent = eps.length
+      ? eps.map(e => e.dev).slice(0, 3).join(',') + (eps.length > 3 ? `+${eps.length - 3}` : '')
+      : '0 ep';
   }
   if ($('#bp-tun-relays')) {
-    $('#bp-tun-relays').textContent = `${st.tunnel?.relays ?? 0} nodes · weave`;
+    $('#bp-tun-relays').textContent = `${st.tunnel?.relays ?? 0} nodes`;
+  }
+  if ($('#bp-tun-auto')) {
+    $('#bp-tun-auto').textContent = tun?.auto || tun?.selected || '—';
+  }
+  if ($('#bp-tun-canary')) {
+    $('#bp-tun-canary').textContent = canaryMs > 0 ? `${canaryMs} ms · ${canaryFails}f` : '— ms';
   }
   if ($('#bp-tun-meta')) {
     $('#bp-tun-meta').textContent = st.tunnel?.fail_open ? 'fail-open' : 'fail-closed';
+  }
+  const relayListEl = $('#bp-tun-relay-list');
+  if (relayListEl) {
+    const relays = Array.isArray(tun?.relays) ? tun.relays : [];
+    const activeName = tun?.tw_home || tun?.selected || '';
+    const valid = relays.filter(r => r && r.name && (r.delay || 0) > 0).sort((a, b) => a.delay - b.delay);
+    const picked = [];
+    const activeItem = relays.find(r => r && r.name === activeName);
+    if (activeItem) picked.push(activeItem);
+    for (const r of valid) {
+      if (picked.length >= 3) break;
+      if (!picked.some(x => x.name === r.name)) picked.push(r);
+    }
+    if (!picked.length) {
+      for (const r of relays.slice(0, 3)) if (r && r.name) picked.push(r);
+    }
+    const rFrag = document.createDocumentFragment();
+    if (picked.length) {
+      for (const r of picked) {
+        const isAct = activeName && r.name === activeName;
+        const d = r.delay || 0;
+        const latCls = d > 0 ? (d <= 120 ? 'c-mint' : (d <= 220 ? 'c-amber' : 'c-crimson')) : 'c-muted';
+        rFrag.appendChild(el('div', { class: 'relay-mini-row' },
+          el('span', { class: isAct ? 'c-violet' : 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: '0' } },
+            isAct ? `▸ ${r.name}` : r.name
+          ),
+          el('span', { class: latCls, style: { flexShrink: '0', fontWeight: '600', fontVariantNumeric: 'tabular-nums' } },
+            d > 0 ? `${d}ms` : (r.type || '—')
+          )
+        ));
+      }
+    } else {
+      rFrag.appendChild(el('div', { class: 'relay-mini-row' },
+        el('span', { class: 'c-muted' }, mihomoOk ? '等待節點延遲探測...' : 'Mihomo 隧道未啟動'),
+        el('span', { class: 'c-dim' }, '—')
+      ));
+    }
+    relayListEl.innerHTML = '';
+    relayListEl.appendChild(rFrag);
+  }
+  if ($('#bp-tun-dot')) {
+    $('#bp-tun-dot').className = `run-dot ${mihomoOk ? 'violet' : 'amber'}`;
   }
   $('#bp-tun-st').textContent = mihomoOk ? (canaryMs > 0 ? `canary ${canaryMs} ms ok` : 'cage encrypted') : 'offline / direct';
   const zBtn = $('#zashboard-link');
@@ -1174,18 +1437,46 @@ export function renderBlueprint() {
   }
 
   // Tier 2 · Branch 2: Domestic Direct + Burst-Harvest
+  const nTotal = Math.max(1, st.strand_count || 21);
+  const faultCnt = strands.length ? strands.filter(s => !s.healthy).length : Math.max(0, nTotal - (st.healthy_count ?? 0));
   const directShare = Math.max(0, 1 - liveFlow.tunShare);
   const weaveRate = Math.max(liveFlow.domBps, Math.max(0, totalRate - liveFlow.vipBps));
   $('#bp-dom-rate').textContent = fmtRate(weaveRate).full;
   renderSegMeter($('#bp-dom-meter'), chargedRatio, 10, 'mint');
   $('#bp-dom-pct').textContent = `${w.charged_count ?? 0}/${nH}`;
+  if ($('#bp-dom-share')) $('#bp-dom-share').textContent = `${Math.round(directShare * 100)}% 流佔比`;
   renderMiniSpectrum(strands);
   if ($('#bp-dom-slots')) $('#bp-dom-slots').textContent = `${w.slots ?? 126} (${w.affinity || 'flow'})`;
-  if ($('#bp-dom-direct')) $('#bp-dom-direct').textContent = `${(liveFlow.domPkts / 1000).toFixed(1)}k (${Math.round(directShare * 100)}%)`;
-  if ($('#bp-dom-probe')) $('#bp-dom-probe').textContent = `every ${w.interval ?? 2}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`;
-  if ($('#bp-dom-buckets')) $('#bp-dom-buckets').textContent = `${w.charged_count ?? 0} chg · ${w.draining_count ?? 0} drn`;
-  $('#bp-dom-desc').textContent = `vip #${w.vip_id ?? '—'} (${w.vip_dev || 'auto'})`;
+  if ($('#bp-dom-direct')) {
+    const domByteCompact = fmtBytes(liveFlow.domBytes).replace(/\s+/g, '');
+    const domPktCompact = liveFlow.domPkts >= 1e6 ? `${(liveFlow.domPkts / 1e6).toFixed(1)}M` : `${Math.round(liveFlow.domPkts / 1000)}k`;
+    $('#bp-dom-direct').textContent = `${domByteCompact} · ${domPktCompact}`;
+  }
+  if ($('#bp-dom-probe')) $('#bp-dom-probe').textContent = `${w.interval ?? 2}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`;
+  if ($('#bp-dom-buckets')) $('#bp-dom-buckets').textContent = `${w.charged_count ?? 0}滿 / ${w.depleted_count ?? 0}耗 / ${w.cooling_count ?? 0}冷`;
+  if ($('#bp-dom-vip')) $('#bp-dom-vip').textContent = w.vip_dev ? `${w.vip_dev} (#${w.vip_id ?? '—'})` : 'auto';
+  const healthyStrands = strands.filter(s => s.healthy && (s.ttfb_ms || 0) > 0);
+  const meanRtt = healthyStrands.length
+    ? Math.round(healthyStrands.reduce((a, s) => a + s.ttfb_ms, 0) / healthyStrands.length)
+    : null;
+  const peakStrandBps = strands.length ? Math.max(...strands.map(s => s.peak || (s.now ?? s.rate ?? 0))) : 0;
+  if ($('#bp-dom-rtt')) $('#bp-dom-rtt').textContent = `${meanRtt != null ? `${meanRtt} ms` : '— ms'} · ${fmtRateCompact(peakStrandBps)}`;
+  if ($('#bp-dom-best')) {
+    const bestS = healthyStrands.length
+      ? healthyStrands.reduce((best, s) => (s.ttfb_ms < best.ttfb_ms ? s : best), healthyStrands[0])
+      : null;
+    $('#bp-dom-best').textContent = bestS
+      ? `fastest ${bestS.dev} (${bestS.ttfb_ms}ms) · fault ${faultCnt}`
+      : `fault ${faultCnt}/${nTotal}`;
+  }
+  if ($('#bp-dom-toks')) {
+    const avgTok = strands.length
+      ? Math.round(strands.reduce((a, s) => a + (s.tokens_pct ?? 100), 0) / strands.length)
+      : 100;
+    $('#bp-dom-toks').textContent = `均令牌 ${avgTok}%`;
+  }
   $('#bp-dom-st').textContent = `${w.charged_count ?? 0}/${nH} charged · ${(w.cooling_count || 0) + (w.depleted_count || 0)} cool`;
+  $('#bp-dom-desc').textContent = `累計直連 ${fmtBytes(liveFlow.domBytes)} · 均值 ${meanRtt != null ? `${meanRtt} ms` : '—'}`;
 
   // Tier 3: Stage 3 Full-Height HTB QoS + 21-Uplink Egress Unified Segmented Meters
   const setSegMeter = (sel, ratio, count, colorName, compact = false, active = false) => {
@@ -1197,9 +1488,11 @@ export function renderBlueprint() {
 
   if ($('#bp-qos-meta')) $('#bp-qos-meta').textContent = `MSS ${st.settings?.['main.mss'] ?? 1440}`;
   const qosDomBps = Math.max(liveFlow.domBps, Math.max(0, totalRate - liveFlow.vipBps - liveFlow.tunBps));
-  const qosTotBps = Math.max(1, liveFlow.vipBps + liveFlow.tunBps + qosDomBps);
+  const qosSumBps = liveFlow.vipBps + liveFlow.tunBps + qosDomBps;
+  const qosTotBps = Math.max(1, qosSumBps);
   const shareRatio = (bps) => (bps > 0 ? Math.max(1 / 14, bps / qosTotBps) : 0);
 
+  if ($('#bp-qos-rate')) $('#bp-qos-rate').textContent = fmtRate(qosSumBps).full;
   if ($('#bp-qos-10-rate')) $('#bp-qos-10-rate').textContent = fmtRate(liveFlow.vipBps).full;
   if ($('#bp-qos-20-rate')) $('#bp-qos-20-rate').textContent = fmtRate(liveFlow.tunBps).full;
   if ($('#bp-qos-30-rate')) $('#bp-qos-30-rate').textContent = fmtRate(qosDomBps).full;
@@ -1207,19 +1500,38 @@ export function renderBlueprint() {
   setSegMeter('#bp-qos-20-bar', shareRatio(liveFlow.tunBps), 14, 'violet', true, liveFlow.tunBps > 400);
   setSegMeter('#bp-qos-30-bar', shareRatio(qosDomBps),       14, 'mint',   true, qosDomBps > 400);
 
+  const paintQosBandHeat = (sel, baseRgb, bps) => {
+    const chip = $(sel);
+    if (!chip) return;
+    const ratio = bps > 32
+      ? Math.min(1, Math.max(0.18, 0.16 + (bps / qosTotBps) * 0.55 + Math.min(0.45, Math.log10(1 + ((bps * 8) / 1e6) * 7) * 0.45)))
+      : 0.04;
+    const sat = 0.18 + 0.82 * Math.pow(ratio, 0.8);
+    chip.style.setProperty('--qb-rgb', desatObsidianRgb(baseRgb, sat));
+    chip.style.setProperty('--qb-bdr-a', (0.20 + 0.58 * ratio).toFixed(2));
+    chip.style.setProperty('--qb-glow-blur', `${Math.round(4 + 14 * ratio)}px`);
+    chip.style.setProperty('--qb-glow-a', (0.02 + 0.24 * ratio).toFixed(2));
+  };
+  paintQosBandHeat('#bp-qos-10', '100, 174, 245', liveFlow.vipBps);
+  paintQosBandHeat('#bp-qos-20', '170, 142, 240', liveFlow.tunBps);
+  paintQosBandHeat('#bp-qos-30', '87, 209, 146',  qosDomBps);
+
   const ewmaDown = st.rate_ewma ?? st.rate ?? 0;
   const ewmaUp = st.rate_up_ewma ?? st.rate_up ?? 0;
   const ewmaMbps = ((ewmaDown + ewmaUp) * 8) / 1e6;
   if ($('#bp-qos-tx-txt')) $('#bp-qos-tx-txt').textContent = `↑ ${fmtRateCompact(ewmaUp)} · ↓ ${fmtRateCompact(ewmaDown)}`;
   const ewmaRatio = ewmaMbps > 0 ? Math.min(1, Math.max(1 / 18, Math.log10(1 + ewmaMbps * 3.5) * 0.44)) : 0;
   setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', true, ewmaMbps > 0.02);
+  if ($('#bp-qos-mss-kv')) $('#bp-qos-mss-kv').textContent = `SYN MSS ${st.settings?.['main.mss'] ?? 1440}`;
+  if ($('#bp-qos-st')) $('#bp-qos-st').textContent = `${liveFlow.vipBps > 400 ? '1:10+20+30' : '1:20+30'} shaping`;
+  if ($('#bp-qos-foot')) $('#bp-qos-foot').textContent = `SYN MSS ${st.settings?.['main.mss'] ?? 1440} · 8MB 分界`;
 
+  if ($('#bp-up-rate')) $('#bp-up-rate').textContent = fmtRate(totalRate).full;
   const upSec = st.sys?.uptime || 0;
   const upDays = Math.floor(upSec / 86400);
   const upHours = Math.floor((upSec % 86400) / 3600);
   if ($('#bp-up-uptime')) $('#bp-up-uptime').textContent = upSec > 0 ? `up ${upDays}d ${upHours}h` : 'up —';
 
-  const nTotal = Math.max(1, st.strand_count || 21);
   if ($('#bp-up-pool-txt')) $('#bp-up-pool-txt').textContent = `${w.charged_count ?? 0}/${nTotal} charged · ${st.healthy_count ?? 0} up`;
   setSegMeter('#bp-up-pool-bar', (w.charged_count ?? 0) / nTotal, 16, 'spectrum', false, (w.charged_count ?? 0) > 0 && totalRate > 2000);
 
@@ -1232,9 +1544,22 @@ export function renderBlueprint() {
   if ($('#bp-up-mem-txt')) $('#bp-up-mem-txt').textContent = `${memMb} MB free · load ${load1}`;
   setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / 256)), 16, 'gold', false, load1 > 0.5);
 
+  if ($('#bp-up-down')) $('#bp-up-down').textContent = fmtBytes(st.down_bytes || 0);
+  if ($('#bp-up-up')) $('#bp-up-up').textContent = fmtBytes(st.up_bytes || 0);
+  if ($('#bp-up-health')) $('#bp-up-health').textContent = `${st.healthy_count ?? 0}/${nTotal} up · ${faultCnt} fault`;
+  if ($('#bp-up-mptcp')) {
+    $('#bp-up-mptcp').textContent = st.mptcp?.enabled
+      ? `${st.mptcp.subflows} sub · ${eps.length} ep`
+      : 'single-path';
+  }
   $('#bp-verify-summary').textContent = st.ok
-    ? `累計 ↓ ${fmtBytes(st.down_bytes)} · ↑ ${fmtBytes(st.up_bytes)} · ${nTotal}/${nTotal} kernel ok`
+    ? `${nTotal}/${nTotal} kernel ok`
     : `異常: ${(st.fail || []).join(', ')}`;
+  if ($('#bp-up-ver')) $('#bp-up-ver').textContent = `PRISM ${st.version || UI_VERSION}`;
+  if ($('#bp-up-sync')) {
+    const recTs = st.reconciled || st.ts;
+    $('#bp-up-sync').textContent = recTs ? fmtClock(recTs) : 'live';
+  }
 
   if (drawerOpen) renderBlueprintDrawer();
 }

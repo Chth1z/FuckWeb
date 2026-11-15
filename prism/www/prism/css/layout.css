@@ -179,7 +179,7 @@
 /* View 02: Left Rail [PRISM_GUARD + Session Log] + Right Fluid 3-Stage Optical Pipeline */
 .blueprint-stage {
   display: grid;
-  grid-template-columns: clamp(252px, 20vw, 296px) minmax(0, 1fr);
+  grid-template-columns: clamp(258px, 20.5vw, 306px) minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
   flex: 1;
@@ -200,11 +200,11 @@
   position: relative;
   display: grid;
   grid-template-columns:
-    minmax(244px, 0.99fr)
-    minmax(76px, 0.30fr)
-    minmax(254px, 1.04fr)
-    minmax(76px, 0.30fr)
-    minmax(254px, 1.02fr);
+    minmax(254px, 1.00fr)
+    minmax(58px, 0.22fr)
+    minmax(274px, 1.12fr)
+    minmax(58px, 0.22fr)
+    minmax(266px, 1.06fr);
   align-items: stretch;
   height: 100%;
   min-width: 0;
@@ -247,18 +247,28 @@
 }
 
 .bp-stage-bridge {
-  flex: 1 1 auto;
-  min-height: 46px;
+  flex: 0.36 1 26px;
+  min-height: 22px;
+  max-height: 64px;
   pointer-events: none;
 }
 
 .bp-col-ingress .bp-stage-bridge {
-  flex: 0 0 clamp(58px, 14.5vh, 155px);
+  flex: 0.32 1 26px;
+  min-height: 22px;
+  max-height: 54px;
+}
+
+.bp-col-engines .bp-stage-bridge {
+  flex: 0.28 1 22px;
+  min-height: 18px;
+  max-height: 46px;
 }
 
 .bp-stage-gap {
-  height: clamp(36px, 7vh, 78px);
-  flex: 0 0 auto;
+  flex: 0.28 1 22px;
+  min-height: 18px;
+  max-height: 46px;
   pointer-events: none;
 }
 
@@ -388,6 +398,8 @@
   }
   .guard-panel,
   .session-log-panel,
+  #bp-card-guard,
+  #bp-card-log,
   #bp-card-pregate,
   #bp-card-ingress,
   #bp-card-vip,

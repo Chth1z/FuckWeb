@@ -2,9 +2,9 @@
  * PRISM 5.0 — View 01: Standalone Dark Side of the Moon Optical Overview
  * ============================================================================ */
 
-import { S, fmtRate, fmtBytes } from '../state.js?v=5.6.5';
-import { $ } from '../dom.js?v=5.6.5';
-import { markPrismDirty } from '../canvas/prism.js?v=5.6.5';
+import { S, fmtRate, fmtBytes } from '../state.js?v=5.6.6';
+import { $ } from '../dom.js?v=5.6.6';
+import { markPrismDirty } from '../canvas/prism.js?v=5.6.6';
 
 export function renderOverview() {
   const st = S.status;
