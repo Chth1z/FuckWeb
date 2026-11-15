@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.3';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.3';
-import { write, call } from '../api.js?v=5.6.3';
+import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.4';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.4';
+import { write, call } from '../api.js?v=5.6.4';
 
 let drawerOpen = false;
 let rafId = null;
@@ -111,17 +111,17 @@ function drawLinkTag(ctx, x, y, text, rgb) {
   const tw = ctx.measureText(text).width;
   const bx = x - tw * 0.5 - 5;
   const bw = tw + 10;
-  ctx.fillStyle = 'rgba(4, 6, 12, 0.90)';
-  ctx.fillRect(bx, y - 8, bw, 15);
+  ctx.fillStyle = 'rgba(4, 6, 12, 0.78)';
+  ctx.fillRect(bx, y - 7, bw, 14);
   if (rgb === 'spectrum') {
     const g = ctx.createLinearGradient(bx, y, bx + bw, y);
-    for (let i = 0; i < 6; i++) g.addColorStop(i / 5, `rgba(${spectralColor(i, 6).rgb}, 0.78)`);
+    for (let i = 0; i < 6; i++) g.addColorStop(i / 5, `rgba(${spectralColor(i, 6).rgb}, 0.74)`);
     ctx.strokeStyle = g;
   } else {
     ctx.strokeStyle = `rgba(${rgb}, 0.48)`;
   }
   ctx.lineWidth = 1;
-  ctx.strokeRect(bx, y - 8, bw, 15);
+  ctx.strokeRect(bx, y - 7, bw, 14);
   ctx.fillStyle = rgb === 'spectrum'
     ? 'rgba(244, 247, 252, 0.96)'
     : `rgba(${mixWhiteRgb(rgb, 0.40)}, 0.94)`;
@@ -129,6 +129,110 @@ function drawLinkTag(ctx, x, y, text, rgb) {
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y);
   ctx.restore();
+}
+
+// Refracted 21-wavelength spectral dispersion bridge for same-column vertical module links
+function drawRefractedVerticalBridge(ctx, topCard, botCard, waveSt, phaseOffset, tagText) {
+  const y0 = topCard.bottom - 1;
+  const y1 = botCard.y + 1;
+  const gap = y1 - y0;
+  if (gap <= 10) return;
+
+  const cx = (topCard.cx + botCard.cx) * 0.5;
+  const N = 21;
+  const topHalfW = 14;
+  const botHalfW = Math.min(27, 17 + Math.min(10, gap * 0.16));
+  const g = Math.max(0.08, Math.min(1, waveSt?.glow ?? 0.10));
+  const sat = 0.25 + 0.75 * g;
+  const strands = S.status?.strands;
+
+  ctx.save();
+
+  // Soft Gaussian outer atmospheric halo across the full dispersion fan
+  const auraGrad = ctx.createLinearGradient(cx - botHalfW - 10, 0, cx + botHalfW + 10, 0);
+  auraGrad.addColorStop(0, `rgba(${spectralColor(0, 7).rgb}, 0)`);
+  for (let k = 0; k < 7; k++) {
+    const u = 0.14 + (k / 6) * 0.72;
+    const tc = desatObsidianRgb(spectralColor(k, 7).rgb, sat);
+    auraGrad.addColorStop(u, `rgba(${tc}, ${(0.045 + g * 0.095).toFixed(3)})`);
+  }
+  auraGrad.addColorStop(1, `rgba(${spectralColor(6, 7).rgb}, 0)`);
+
+  ctx.fillStyle = auraGrad;
+  ctx.beginPath();
+  ctx.moveTo(cx - topHalfW - 8, y0);
+  ctx.lineTo(cx + topHalfW + 8, y0);
+  ctx.lineTo(cx + botHalfW + 10, y1);
+  ctx.lineTo(cx - botHalfW - 10, y1);
+  ctx.closePath();
+  ctx.fill();
+
+  // 21 individual wavelength filaments (700nm Red left -> 380nm Violet right)
+  for (let i = 0; i < N; i++) {
+    const sObj = Array.isArray(strands) && strands.length ? strands[i % strands.length] : null;
+    const healthy = sObj ? sObj.healthy !== false : true;
+    const sRate = sObj ? (Number(sObj.now || sObj.rate || 0) + Number(sObj.up_now || sObj.up || 0)) : 0;
+    const sAct = sRate > 0 ? Math.min(1, Math.log10(1 + sRate / 1024) / 3.4) : 0;
+    const e = healthy ? Math.min(1, Math.max(0.10, g * 0.40 + sAct * 0.80)) : 0.04;
+
+    const col = spectralColor(i, N);
+    const toneRgb = desatObsidianRgb(col.rgb, 0.28 + e * 0.72);
+    const f0 = (i / N) * 2 - 1;
+    const f1 = ((i + 1) / N) * 2 - 1;
+    const fMid = (f0 + f1) * 0.5;
+
+    const x0L = cx + f0 * topHalfW;
+    const x0R = cx + f1 * topHalfW;
+    const x1L = cx + f0 * botHalfW;
+    const x1R = cx + f1 * botHalfW;
+    const xMid0 = cx + fMid * topHalfW;
+    const xMid1 = cx + fMid * botHalfW;
+
+    const ribGrad = ctx.createLinearGradient(0, y0, 0, y1);
+    ribGrad.addColorStop(0.00, `rgba(${toneRgb}, ${(0.20 + e * 0.56).toFixed(3)})`);
+    ribGrad.addColorStop(0.50, `rgba(${toneRgb}, ${(0.14 + e * 0.44).toFixed(3)})`);
+    ribGrad.addColorStop(1.00, `rgba(${toneRgb}, ${(0.22 + e * 0.58).toFixed(3)})`);
+
+    ctx.fillStyle = ribGrad;
+    ctx.beginPath();
+    ctx.moveTo(x0L, y0);
+    ctx.lineTo(x0R, y0);
+    ctx.lineTo(x1R, y1);
+    ctx.lineTo(x1L, y1);
+    ctx.closePath();
+    ctx.fill();
+
+    if (healthy && e > 0.28) {
+      ctx.strokeStyle = `rgba(${col.rgb}, ${(e * 0.20).toFixed(3)})`;
+      ctx.lineWidth = 2.8 + e * 2.4;
+      ctx.beginPath();
+      ctx.moveTo(xMid0, y0);
+      ctx.lineTo(xMid1, y1);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = `rgba(${mixWhiteRgb(toneRgb, e * 0.52)}, ${(0.20 + e * 0.68).toFixed(3)})`;
+    ctx.lineWidth = healthy ? (0.85 + e * 1.15) : 0.5;
+    ctx.beginPath();
+    ctx.moveTo(xMid0, y0);
+    ctx.lineTo(xMid1, y1);
+    ctx.stroke();
+
+    if (healthy && (e > 0.22 || g > 0.14)) {
+      ctx.strokeStyle = makeFlowShimmerGradient(
+        ctx, xMid0, y0, xMid1, y1, waveSt, phaseOffset + i * 0.015,
+        mixWhiteRgb(col.rgb, 0.55), 0.22 + e * 0.46
+      );
+      ctx.lineWidth = 1.0 + e * 1.1;
+      ctx.beginPath();
+      ctx.moveTo(xMid0, y0);
+      ctx.lineTo(xMid1, y1);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+  if (tagText) drawLinkTag(ctx, cx, (y0 + y1) * 0.5, tagText, 'spectrum');
 }
 
 function makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, rgb, maxAlpha) {
@@ -615,29 +719,17 @@ function renderWaveguidesCanvas() {
 
   // Stage 1 Vertical Conduit: Pre-Gate -> Nftables Classify Engine
   if (ing.y - pre.bottom > 6) {
-    drawOrthoStepWithPrisms(
-      ctx,
-      [{ x: pre.cx, y: pre.bottom - 1 }, { x: pre.cx, y: ing.y + 1 }],
-      'spectrum', waveState[4], 0.00, prismsQueue, { tag: 'QUIC→TCP' }
-    );
+    drawRefractedVerticalBridge(ctx, pre, ing, waveState[4], 0.00, 'QUIC→TCP');
   }
 
   // Inter-Engine Vertical Cross-Feed: TW-HOME (TProxy weave_out) -> Burst-Harvest Pool
   if (dom.y - tun.bottom > 6) {
-    drawOrthoStepWithPrisms(
-      ctx,
-      [{ x: tun.cx, y: tun.bottom - 1 }, { x: tun.cx, y: dom.y + 1 }],
-      '170, 142, 240', waveState[3], 0.12, prismsQueue, { tag: 'weave_out' }
-    );
+    drawRefractedVerticalBridge(ctx, tun, dom, waveState[3], 0.12, 'weave_out');
   }
 
   // Stage 3 Vertical Convergence: 3-Band HTB QoS -> 21-Uplink NAT & Egress
   if (up.y - qos.bottom > 6) {
-    drawOrthoStepWithPrisms(
-      ctx,
-      [{ x: qos.cx, y: qos.bottom - 1 }, { x: qos.cx, y: up.y + 1 }],
-      'spectrum', waveState[4], 0.30, prismsQueue, { tag: '21 WAN NAT' }
-    );
+    drawRefractedVerticalBridge(ctx, qos, up, waveState[4], 0.30, '21 WAN NAT');
   }
 
   // Symmetric Center-Axis Dual Prisms + Single-Bend 45-deg TIR Mirrors
@@ -1085,14 +1177,14 @@ export function renderBlueprint() {
   const mptcpEl = $('#bp-tun-mptcp');
   if (mptcpEl) {
     mptcpEl.textContent = st.mptcp?.enabled
-      ? `${st.mptcp.subflows} subflows · ${st.mptcp.endpoints?.length || 0} ep`
+      ? `${st.mptcp.subflows} sub · ${st.mptcp.endpoints?.length || 0} ep`
       : 'single-path';
   }
   if ($('#bp-tun-relays')) {
     $('#bp-tun-relays').textContent = `${st.tunnel?.relays ?? 0} nodes · weave`;
   }
   if ($('#bp-tun-meta')) {
-    $('#bp-tun-meta').textContent = `${st.tunnel?.fail_open ? 'fail-open' : 'fail-closed'} · ${canaryMs || '—'}ms`;
+    $('#bp-tun-meta').textContent = st.tunnel?.fail_open ? 'fail-open' : 'fail-closed';
   }
   $('#bp-tun-st').textContent = mihomoOk ? (canaryMs > 0 ? `canary ${canaryMs} ms ok` : 'cage encrypted') : 'offline / direct';
   const zBtn = $('#zashboard-link');
