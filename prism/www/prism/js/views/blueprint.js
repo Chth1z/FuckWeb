@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtBytes } from '../state.js?v=5.6.0';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.0';
-import { write, call } from '../api.js?v=5.6.0';
+import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtBytes, fmtClock } from '../state.js?v=5.6.1';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.1';
+import { write, call } from '../api.js?v=5.6.1';
 
 let drawerOpen = false;
 let rafId = null;
@@ -68,13 +68,6 @@ function mixWhiteRgb(rgb, whiteMix = 0.60) {
   return `${mix(parts[0])}, ${mix(parts[1])}, ${mix(parts[2])}`;
 }
 
-function blendDarkCss(rgb, alpha, bg = 5) {
-  const parts = String(rgb).split(',').map(v => Number(v.trim()) || 0);
-  const a = Math.max(0, Math.min(1, alpha));
-  const c = (v) => Math.round(bg * (1 - a) + v * a);
-  return `rgb(${c(parts[0])}, ${c(parts[1])}, ${c(parts[2])})`;
-}
-
 function clipHalfPlane(ctx, ax, ay, bx, by, sideSign, W, H) {
   const dx = bx - ax;
   const dy = (by - ay) || 1;
@@ -126,17 +119,6 @@ function drawLinkTag(ctx, x, y, text, rgb) {
   ctx.restore();
 }
 
-function cleanOrthoPts(pts) {
-  const out = [];
-  for (const p of pts) {
-    const prev = out[out.length - 1];
-    if (!prev || Math.hypot(p.x - prev.x, p.y - prev.y) > 0.5) {
-      out.push({ x: p.x, y: p.y });
-    }
-  }
-  return out;
-}
-
 function orthoStepPts(x0, y0, xTurn, y1, x1) {
   if (Math.abs(y1 - y0) < 2) {
     const ym = (y0 + y1) * 0.5;
@@ -148,46 +130,6 @@ function orthoStepPts(x0, y0, xTurn, y1, x1) {
     { x: xTurn, y: y1 },
     { x: x1, y: y1 },
   ];
-}
-
-function segDir(a, b) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const l = Math.hypot(dx, dy) || 1;
-  return { nx: -dy / l, ny: dx / l };
-}
-
-function offsetOrthoPts(pts, dist) {
-  if (pts.length < 2 || Math.abs(dist) < 1e-4) return pts;
-  const out = [];
-  for (let i = 0; i < pts.length; i++) {
-    if (i === 0) {
-      const d0 = segDir(pts[0], pts[1]);
-      out.push({ x: pts[0].x + d0.nx * dist, y: pts[0].y + d0.ny * dist });
-    } else if (i === pts.length - 1) {
-      const dn = segDir(pts[i - 1], pts[i]);
-      out.push({ x: pts[i].x + dn.nx * dist, y: pts[i].y + dn.ny * dist });
-    } else {
-      const dPrev = segDir(pts[i - 1], pts[i]);
-      const dNext = segDir(pts[i], pts[i + 1]);
-      const denom = 1 + (dPrev.nx * dNext.nx + dPrev.ny * dNext.ny);
-      if (denom < 0.25) {
-        out.push({ x: pts[i].x + dPrev.nx * dist, y: pts[i].y + dPrev.ny * dist });
-      } else {
-        out.push({
-          x: pts[i].x + ((dPrev.nx + dNext.nx) / denom) * dist,
-          y: pts[i].y + ((dPrev.ny + dNext.ny) / denom) * dist,
-        });
-      }
-    }
-  }
-  return out;
-}
-
-function tracePts(ctx, pArr) {
-  ctx.beginPath();
-  ctx.moveTo(pArr[0].x, pArr[0].y);
-  for (let i = 1; i < pArr.length; i++) ctx.lineTo(pArr[i].x, pArr[i].y);
 }
 
 function makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, rgb, maxAlpha) {
@@ -202,135 +144,253 @@ function makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, rgb, maxA
   return grad;
 }
 
-// Unified Figure-3 Strictly Horizontal/Vertical Mitered Optical Bus
-function drawOrthoOpticalRibbon(ctx, rawPts, rgb, st, phaseOffset = 0, tag = '', tagAt = null) {
-  const pts = cleanOrthoPts(rawPts);
-  if (pts.length < 2) return;
+function fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, halfW, fillStyle) {
+  ctx.fillStyle = fillStyle;
+  ctx.beginPath();
+  ctx.moveTo(x0 - nx * halfW, y0 - ny * halfW);
+  ctx.lineTo(x1 - nx * halfW, y1 - ny * halfW);
+  ctx.lineTo(x1 + nx * halfW, y1 + ny * halfW);
+  ctx.lineTo(x0 + nx * halfW, y0 + ny * halfW);
+  ctx.closePath();
+  ctx.fill();
+}
 
-  let len = 0;
-  for (let i = 1; i < pts.length; i++) {
-    len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  }
-  if (len < 2) return;
+// Smooth Fig-5 continuous perpendicular Gaussian glow + solid optical core (zero contour layering)
+function drawSmoothStraightBeam(ctx, x0, y0, x1, y1, rgb, st, phaseOffset = 0, auraScale = 1) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  if (len < 1.5) return;
 
-  const p0 = pts[0];
-  const pLast = pts[pts.length - 1];
+  const ux = dx / len;
+  const uy = dy / len;
+  const nx = -uy;
+  const ny = ux;
+  const mx = (x0 + x1) * 0.5;
+  const my = (y0 + y1) * 0.5;
   const g = st.glow;
   const active = st.vel > 0.01;
-  const isSpec = rgb === 'spectrum';
+  const makePerpGrad = (halfW) => ctx.createLinearGradient(
+    mx - nx * halfW, my - ny * halfW,
+    mx + nx * halfW, my + ny * halfW
+  );
 
   ctx.save();
-  ctx.lineJoin = 'miter';
-  ctx.lineCap = 'butt';
-  ctx.miterLimit = 6;
+  if (rgb === 'spectrum') {
+    const totalHalf = Math.max(3.6, st.width * 1.45);
+    const auraHalf = totalHalf + (10.5 + g * 6.0) * auraScale;
+    const redRgb = spectralColor(0, 7).rgb;
+    const midRgb = spectralColor(3, 7).rgb;
+    const vioRgb = spectralColor(6, 7).rgb;
+    const auraA = 0.12 + g * 0.08;
 
-  if (isSpec) {
-    // Seamless 7-strand opaque-composited rainbow bus + soft chromatic outer edge halo
-    const nStripes = 7;
-    const totalHalf = Math.max(4.0, st.width * 1.85);
-    const bandAlpha = 0.58 + g * 0.34;
-    const redRgb = spectralColor(0, nStripes).rgb;
-    const vioRgb = spectralColor(nStripes - 1, nStripes).rgb;
+    const uTopIn = 0.5 - (totalHalf * 0.72) / auraHalf;
+    const uTopOut = 0.5 - (totalHalf * 1.32) / auraHalf;
+    const uBotIn = 0.5 + (totalHalf * 0.72) / auraHalf;
+    const uBotOut = 0.5 + (totalHalf * 1.32) / auraHalf;
+    const haloGrad = makePerpGrad(auraHalf);
+    haloGrad.addColorStop(0.00, `rgba(${redRgb}, 0)`);
+    haloGrad.addColorStop(uTopOut, `rgba(${redRgb}, ${(auraA * 0.34).toFixed(3)})`);
+    haloGrad.addColorStop(uTopIn, `rgba(${redRgb}, ${auraA.toFixed(3)})`);
+    haloGrad.addColorStop(0.50, `rgba(${midRgb}, ${(auraA * 0.52).toFixed(3)})`);
+    haloGrad.addColorStop(uBotIn, `rgba(${vioRgb}, ${auraA.toFixed(3)})`);
+    haloGrad.addColorStop(uBotOut, `rgba(${vioRgb}, ${(auraA * 0.34).toFixed(3)})`);
+    haloGrad.addColorStop(1.00, `rgba(${vioRgb}, 0)`);
 
-    const topAura = offsetOrthoPts(pts, -totalHalf * 0.55);
-    const botAura = offsetOrthoPts(pts, totalHalf * 0.55);
-    const edgeGlows = [
-      { addW: 16 + g * 10, a: 0.025 + g * 0.032 },
-      { addW: 9 + g * 6,   a: 0.052 + g * 0.055 },
-      { addW: 4 + g * 3,   a: 0.088 + g * 0.080 },
-    ];
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for (const eg of edgeGlows) {
-      ctx.lineWidth = totalHalf + eg.addW;
-      ctx.strokeStyle = `rgba(${redRgb}, ${eg.a.toFixed(3)})`;
-      tracePts(ctx, topAura);
-      ctx.stroke();
-      ctx.strokeStyle = `rgba(${vioRgb}, ${eg.a.toFixed(3)})`;
-      tracePts(ctx, botAura);
-      ctx.stroke();
-    }
+    fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, auraHalf, haloGrad);
     ctx.restore();
 
-    const bandW = (totalHalf * 2) / nStripes;
-    for (let i = 0; i < nStripes; i++) {
-      const offset = (-1 + (2 * (i + 0.5)) / nStripes) * totalHalf;
-      ctx.strokeStyle = blendDarkCss(spectralColor(i, nStripes).rgb, bandAlpha);
-      ctx.lineWidth = bandW + 0.45;
-      tracePts(ctx, offsetOrthoPts(pts, offset));
-      ctx.stroke();
+    const bodyHalf = totalHalf + 0.9;
+    const bandA = (0.76 + g * 0.18).toFixed(3);
+    const specGrad = makePerpGrad(bodyHalf);
+    specGrad.addColorStop(0.00, `rgba(${redRgb}, 0)`);
+    for (let i = 0; i < 7; i++) {
+      specGrad.addColorStop(0.10 + (i / 6) * 0.80, `rgba(${spectralColor(i, 7).rgb}, ${bandA})`);
     }
+    specGrad.addColorStop(1.00, `rgba(${vioRgb}, 0)`);
+    fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, bodyHalf, specGrad);
 
     if (active && g > 0.10) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = makeFlowShimmerGradient(
-        ctx, p0.x, p0.y, pLast.x, pLast.y, st, phaseOffset, '255, 255, 255', 0.16
-      );
-      ctx.lineWidth = totalHalf * 1.42;
-      tracePts(ctx, pts);
-      ctx.stroke();
+      const shim = makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, '255, 255, 255', 0.16);
+      fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, totalHalf * 0.85, shim);
       ctx.restore();
     }
   } else {
-    // Monochrome Figure-3 mitered H/V bus (smooth concentric aura + rich saturated core)
-    const bandW = 3.8 + g * 2.2;
-    const haloPasses = [
-      { addW: 20 + g * 14, a: 0.024 + g * 0.032 },
-      { addW: 13 + g * 9,  a: 0.048 + g * 0.056 },
-      { addW: 7 + g * 5,   a: 0.088 + g * 0.095 },
-      { addW: 3 + g * 2,   a: 0.145 + g * 0.125 },
-    ];
+    const coreHalf = 1.65 + g * 0.88;
+    const glowHalf = (11.0 + g * 7.2) * auraScale;
+    const peakA = (0.14 + g * 0.10) * (0.72 + 0.28 * auraScale);
+
+    const haloGrad = makePerpGrad(glowHalf);
+    for (let k = 0; k <= 8; k++) {
+      const u = k / 8;
+      const t = (u - 0.5) * 2;
+      const a = (k === 0 || k === 8) ? 0 : peakA * Math.exp(-(t * t) / 0.18);
+      haloGrad.addColorStop(u, `rgba(${rgb}, ${a.toFixed(4)})`);
+    }
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    tracePts(ctx, pts);
-    for (const hp of haloPasses) {
-      ctx.strokeStyle = `rgba(${rgb}, ${hp.a.toFixed(3)})`;
-      ctx.lineWidth = bandW + hp.addW;
-      ctx.stroke();
-    }
+    fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, glowHalf, haloGrad);
     ctx.restore();
 
-    ctx.strokeStyle = `rgba(${rgb}, ${(0.64 + g * 0.30).toFixed(3)})`;
-    ctx.lineWidth = bandW;
-    tracePts(ctx, pts);
-    ctx.stroke();
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(${mixWhiteRgb(rgb, 0.25)}, ${(0.22 + g * 0.24).toFixed(3)})`;
-    ctx.lineWidth = Math.max(1.5, bandW * 0.44);
-    tracePts(ctx, pts);
-    ctx.stroke();
+    const bodyHalf = coreHalf + 0.9;
+    const edgeA = (0.76 + g * 0.20).toFixed(3);
+    const centerA = (0.94 + g * 0.05).toFixed(3);
+    const bodyGrad = makePerpGrad(bodyHalf);
+    bodyGrad.addColorStop(0.00, `rgba(${rgb}, 0)`);
+    bodyGrad.addColorStop(0.24, `rgba(${rgb}, ${edgeA})`);
+    bodyGrad.addColorStop(0.50, `rgba(${mixWhiteRgb(rgb, 0.40)}, ${centerA})`);
+    bodyGrad.addColorStop(0.76, `rgba(${rgb}, ${edgeA})`);
+    bodyGrad.addColorStop(1.00, `rgba(${rgb}, 0)`);
+    fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, bodyHalf, bodyGrad);
 
     if (active && g > 0.10) {
-      ctx.strokeStyle = makeFlowShimmerGradient(
-        ctx, p0.x, p0.y, pLast.x, pLast.y,
-        st, phaseOffset, mixWhiteRgb(rgb, 0.38), 0.24
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const shim = makeFlowShimmerGradient(
+        ctx, x0, y0, x1, y1, st, phaseOffset, mixWhiteRgb(rgb, 0.45), 0.22
       );
-      ctx.lineWidth = bandW * 0.90;
-      tracePts(ctx, pts);
-      ctx.stroke();
+      fillBeamQuad(ctx, x0, y0, x1, y1, nx, ny, coreHalf * 0.90, shim);
+      ctx.restore();
     }
-    ctx.restore();
   }
   ctx.restore();
+}
 
-  if (tag && len >= 18) {
-    const tp = tagAt || { x: (p0.x + pLast.x) * 0.5, y: (p0.y + pLast.y) * 0.5 };
-    drawLinkTag(ctx, tp.x, tp.y, tag, rgb);
+// 45-45-90 Total Internal Reflection Crystal Prism placed at each 90-degree beam bend
+function drawRightAngleTurningPrism(ctx, prism) {
+  const { x, y, inDir, outDir, rgb, glow, r } = prism;
+  const cX = x + r * (-inDir.x + outDir.x);
+  const cY = y + r * (-inDir.y + outDir.y);
+  const aX = x + r * (inDir.x + outDir.x);
+  const aY = y + r * (inDir.y + outDir.y);
+  const bX = x + r * (-inDir.x - outDir.x);
+  const bY = y + r * (-inDir.y - outDir.y);
+
+  ctx.save();
+  ctx.fillStyle = '#04060a';
+  ctx.beginPath();
+  ctx.moveTo(cX, cY);
+  ctx.lineTo(aX, aY);
+  ctx.lineTo(bX, bY);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.save();
+  ctx.clip();
+  const sheeR = r * 1.18;
+  const sheen = ctx.createRadialGradient(x, y, 0, x, y, sheeR);
+  sheen.addColorStop(0.00, `rgba(${mixWhiteRgb(rgb, 0.55)}, ${(0.28 + glow * 0.26).toFixed(3)})`);
+  sheen.addColorStop(0.65, `rgba(${rgb}, ${(0.08 + glow * 0.08).toFixed(3)})`);
+  sheen.addColorStop(1.00, `rgba(${rgb}, 0)`);
+  ctx.fillStyle = sheen;
+  ctx.fillRect(x - r - 2, y - r - 2, r * 2 + 4, r * 2 + 4);
+  ctx.restore();
+
+  ctx.strokeStyle = 'rgba(210, 228, 252, 0.56)';
+  ctx.lineWidth = 1.0;
+  ctx.beginPath();
+  ctx.moveTo(cX, cY);
+  ctx.lineTo(aX, aY);
+  ctx.lineTo(bX, bY);
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.shadowColor = `rgba(${rgb}, 0.50)`;
+  ctx.shadowBlur = 4;
+  ctx.strokeStyle = `rgba(${mixWhiteRgb(rgb, 0.65)}, ${(0.72 + glow * 0.22).toFixed(3)})`;
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.moveTo(aX, aY);
+  ctx.lineTo(bX, bY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawOrthoStepWithPrisms(ctx, rawPts, rgb, st, phaseOffset, prismsQueue, opts = {}) {
+  const pts = [];
+  for (const p of rawPts) {
+    const prev = pts[pts.length - 1];
+    if (!prev || Math.hypot(p.x - prev.x, p.y - prev.y) > 0.5) {
+      pts.push({ x: p.x, y: p.y });
+    }
+  }
+  if (pts.length < 2) return;
+
+  const segs = [];
+  let totalLen = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x;
+    const dy = pts[i + 1].y - pts[i].y;
+    const l = Math.hypot(dx, dy);
+    segs.push({ ux: dx / (l || 1), uy: dy / (l || 1), len: l, cumStart: totalLen });
+    totalLen += l;
+  }
+  if (totalLen < 2) return;
+
+  const baseR = opts.prismRadius ?? 6.5;
+  const cornerRadii = new Array(pts.length).fill(0);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const inS = segs[i - 1];
+    const outS = segs[i];
+    if (Math.abs(inS.ux * outS.ux + inS.uy * outS.uy) < 0.05) {
+      const rFit = Math.min(baseR, inS.len * 0.42, outS.len * 0.42);
+      if (rFit >= 3.8) {
+        cornerRadii[i] = rFit;
+        prismsQueue.push({
+          x: pts[i].x,
+          y: pts[i].y,
+          inDir: { x: inS.ux, y: inS.uy },
+          outDir: { x: outS.ux, y: outS.uy },
+          rgb: rgb === 'spectrum' ? '195, 222, 255' : rgb,
+          glow: st.glow,
+          r: rFit
+        });
+      }
+    }
+  }
+
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    if (s.len < 1.5) continue;
+    const trimA = cornerRadii[i] > 0 ? cornerRadii[i] - 0.8 : 0;
+    const trimB = cornerRadii[i + 1] > 0 ? cornerRadii[i + 1] - 0.8 : 0;
+    if (s.len - trimA - trimB < 1.0) continue;
+
+    const sx = pts[i].x + s.ux * trimA;
+    const sy = pts[i].y + s.uy * trimA;
+    const ex = pts[i + 1].x - s.ux * trimB;
+    const ey = pts[i + 1].y - s.uy * trimB;
+    const segPhase = phaseOffset + (s.cumStart + trimA) / Math.max(80, totalLen);
+
+    if (i === 0 && opts.clipFirst) {
+      ctx.save();
+      opts.clipFirst(ctx);
+      drawSmoothStraightBeam(ctx, sx, sy, ex, ey, rgb, st, segPhase, opts.auraScale ?? 1);
+      ctx.restore();
+    } else {
+      drawSmoothStraightBeam(ctx, sx, sy, ex, ey, rgb, st, segPhase, opts.auraScale ?? 1);
+    }
+  }
+
+  if (opts.tag && totalLen >= 18) {
+    const tp = opts.tagAt || { x: (pts[0].x + pts[pts.length - 1].x) * 0.5, y: (pts[0].y + pts[pts.length - 1].y) * 0.5 };
+    drawLinkTag(ctx, tp.x, tp.y, opts.tag, rgb);
   }
 }
 
-function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom) {
+function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom, prismsQueue) {
   const rightEdgeEnd = Math.min(vip.x, tun.x, dom.x);
   const gapW = rightEdgeEnd - ing.right;
   if (gapW < 30) return;
 
   const focalX = ing.right + gapW * 0.34;
-  const focalY = tun.cy;
-  const side = Math.max(26, Math.min(40, gapW * 0.36));
+  const focalY = Math.max(ing.y + 28, Math.min(ing.bottom - 28, tun.cy));
+  const side = Math.max(28, Math.min(40, gapW * 0.35));
   const triH = (side * Math.sqrt(3)) / 2;
 
   const topX = focalX;
@@ -344,13 +404,13 @@ function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom) {
   const entryX = topX + (leftX - topX) * tMid;
   const entryY = focalY;
 
-  const splitDy = Math.min(7, triH * 0.17);
-  const splitBaseX = rightX + (rightEdgeEnd - rightX) * 0.48;
+  const splitDy = Math.min(7.5, triH * 0.18);
+  const splitBaseX = Math.max(rightX + 18, rightX + (rightEdgeEnd - rightX) * 0.48);
 
   const exits = [
-    { dy: -splitDy, xTurn: splitBaseX - 6, tx: vip.x + 2, ty: vip.cy, rgb: '100, 174, 245', st: waveState[0], phase: 0.00 },
-    { dy: 0,        xTurn: splitBaseX,     tx: tun.x + 2, ty: tun.cy, rgb: '170, 142, 240', st: waveState[1], phase: 0.16 },
-    { dy: splitDy,  xTurn: splitBaseX + 6, tx: dom.x + 2, ty: dom.cy, rgb: '87, 209, 146',  st: waveState[2], phase: 0.32 },
+    { dy: -splitDy, xTurn: splitBaseX - 6, tx: vip.x + 1, ty: vip.cy, rgb: '100, 174, 245', st: waveState[0], phase: 0.00 },
+    { dy: 0,        xTurn: splitBaseX,     tx: tun.x + 1, ty: tun.cy, rgb: '170, 142, 240', st: waveState[1], phase: 0.16 },
+    { dy: splitDy,  xTurn: splitBaseX + 6, tx: dom.x + 1, ty: dom.cy, rgb: '87, 209, 146',  st: waveState[2], phase: 0.32 },
   ].map((e) => {
     const ey = focalY + e.dy;
     const tOut = (ey - topY) / triH;
@@ -358,27 +418,24 @@ function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom) {
     return { ...e, ex, ey };
   });
 
-  // 1. Strictly Horizontal Ingress -> Focal Prism Left Bevel (with H-V-H guard on extreme viewports)
-  const ingY = Math.max(ing.y + 14, Math.min(ing.bottom - 14, focalY));
-  const inPts = Math.abs(ingY - focalY) < 2
-    ? [{ x: ing.right - 2, y: focalY }, { x: entryX + 16, y: focalY }]
-    : orthoStepPts(ing.right - 2, ingY, ing.right + (leftX - ing.right) * 0.42, focalY, entryX + 16);
+  // 1. Strictly Straight Rainbow Ingress -> Focal Prism Left Bevel (locally clipped to left of bevel)
+  const inPts = orthoStepPts(ing.right - 1, focalY, ing.right + (leftX - ing.right) * 0.42, focalY, entryX + 14);
+  drawOrthoStepWithPrisms(ctx, inPts, 'spectrum', waveState[4], 0.05, prismsQueue, {
+    clipFirst: (c) => clipHalfPlane(c, topX, topY, leftX, leftY, -1, W, H),
+    prismRadius: 6
+  });
 
-  ctx.save();
-  clipHalfPlane(ctx, topX, topY, leftX, leftY, -1, W, H);
-  drawOrthoOpticalRibbon(ctx, inPts, 'spectrum', waveState[4], 0.05);
-  ctx.restore();
-
-  // 2. Strictly Horizontal/Vertical 1 -> 3 Dispersed Optical Branches from Focal Prism Right Bevel
-  ctx.save();
-  clipHalfPlane(ctx, topX, topY, rightX, rightY, 1, W, H);
+  // 2. Strictly Horizontal/Vertical 1 -> 3 Dispersed Branches (clipFirst ONLY on horizontal prism stub!)
   for (const e of exits) {
-    const branchPts = orthoStepPts(e.ex - 16, e.ey, e.xTurn, e.ty, e.tx);
-    drawOrthoOpticalRibbon(ctx, branchPts, e.rgb, e.st, e.phase);
+    const branchPts = orthoStepPts(e.ex - 14, e.ey, e.xTurn, e.ty, e.tx);
+    drawOrthoStepWithPrisms(ctx, branchPts, e.rgb, e.st, e.phase, prismsQueue, {
+      clipFirst: (c) => clipHalfPlane(c, topX, topY, rightX, rightY, 1, W, H),
+      auraScale: 0.78,
+      prismRadius: 6
+    });
   }
-  ctx.restore();
 
-  // 3. Focal Crystal Prism (dark optical glass + soft radial dispersion + uniform rim)
+  // 3. Main Dispersion Crystal Prism (drawn crisp above ingress/exit beam stubs)
   ctx.fillStyle = '#04060a';
   ctx.beginPath();
   ctx.moveTo(topX, topY);
@@ -412,8 +469,8 @@ function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom) {
   ctx.restore();
 
   ctx.save();
-  ctx.shadowColor = 'rgba(180, 214, 250, 0.30)';
-  ctx.shadowBlur = 7;
+  ctx.shadowColor = 'rgba(180, 214, 250, 0.28)';
+  ctx.shadowBlur = 6;
   ctx.strokeStyle = 'rgba(232, 242, 255, 0.88)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -458,36 +515,38 @@ function renderWaveguidesCanvas() {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, rect.width, rect.height);
 
+  const prismsQueue = [];
+
   // Stage 1 Vertical Conduit: Pre-Gate -> Nftables Classify Engine
   if (ing.y - pre.bottom > 6) {
-    drawOrthoOpticalRibbon(
+    drawOrthoStepWithPrisms(
       ctx,
-      [{ x: pre.cx, y: pre.bottom - 2 }, { x: pre.cx, y: ing.y + 2 }],
-      'spectrum', waveState[4], 0.00, 'QUIC→TCP'
+      [{ x: pre.cx, y: pre.bottom - 1 }, { x: pre.cx, y: ing.y + 1 }],
+      'spectrum', waveState[4], 0.00, prismsQueue, { tag: 'QUIC→TCP' }
     );
   }
 
   // Inter-Engine Vertical Cross-Feed: TW-HOME (TProxy weave_out) -> Burst-Harvest Pool
   if (dom.y - tun.bottom > 6) {
-    drawOrthoOpticalRibbon(
+    drawOrthoStepWithPrisms(
       ctx,
-      [{ x: tun.cx, y: tun.bottom - 2 }, { x: tun.cx, y: dom.y + 2 }],
-      '170, 142, 240', waveState[3], 0.12, 'weave_out'
+      [{ x: tun.cx, y: tun.bottom - 1 }, { x: tun.cx, y: dom.y + 1 }],
+      '170, 142, 240', waveState[3], 0.12, prismsQueue, { tag: 'weave_out' }
     );
   }
 
   // Stage 3 Vertical Convergence: 3-Band HTB QoS -> 21-Uplink NAT & Egress
   if (up.y - qos.bottom > 6) {
-    drawOrthoOpticalRibbon(
+    drawOrthoStepWithPrisms(
       ctx,
-      [{ x: qos.cx, y: qos.bottom - 2 }, { x: qos.cx, y: up.y + 2 }],
-      'spectrum', waveState[4], 0.30, '21 WAN NAT'
+      [{ x: qos.cx, y: qos.bottom - 1 }, { x: qos.cx, y: up.y + 1 }],
+      'spectrum', waveState[4], 0.30, prismsQueue, { tag: '21 WAN NAT' }
     );
   }
 
-  // Strictly Horizontal/Vertical Optical Channels + Focal Prism (1 -> 3 Dispersion)
+  // Horizontal/Vertical Optical Bus + Main Focal Prism + 45-45-90 TIR Turning Prisms
   if (Math.min(vip.x, tun.x, dom.x) - ing.right > 30) {
-    drawFocalPrismAndFan(ctx, rect.width, rect.height, ing, vip, tun, dom);
+    drawFocalPrismAndFan(ctx, rect.width, rect.height, ing, vip, tun, dom, prismsQueue);
 
     const rightS2 = Math.max(vip.right, tun.right, dom.right);
     const gap2W = qos.x - rightS2;
@@ -500,11 +559,14 @@ function renderWaveguidesCanvas() {
       const xLane1 = tun.right + (qos.x - tun.right) * 0.50;
       const xLane2 = dom.right + (qos.x - dom.right) * 0.72;
 
-      drawOrthoOpticalRibbon(ctx, orthoStepPts(vip.right - 2, vip.cy, xLane0, y10, qos.x + 2), '100, 174, 245', waveState[0], 0.24);
-      drawOrthoOpticalRibbon(ctx, orthoStepPts(tun.right - 2, tun.cy, xLane1, y20, qos.x + 2), '170, 142, 240', waveState[1], 0.38);
-      drawOrthoOpticalRibbon(ctx, orthoStepPts(dom.right - 2, dom.cy, xLane2, y30, qos.x + 2), '87, 209, 146',  waveState[2], 0.52);
+      drawOrthoStepWithPrisms(ctx, orthoStepPts(vip.right - 1, vip.cy, xLane0, y10, qos.x + 1), '100, 174, 245', waveState[0], 0.24, prismsQueue);
+      drawOrthoStepWithPrisms(ctx, orthoStepPts(tun.right - 1, tun.cy, xLane1, y20, qos.x + 1), '170, 142, 240', waveState[1], 0.38, prismsQueue);
+      drawOrthoStepWithPrisms(ctx, orthoStepPts(dom.right - 1, dom.cy, xLane2, y30, qos.x + 1), '87, 209, 146',  waveState[2], 0.52, prismsQueue);
     }
   }
+
+  // Render all 45-degree crystal turning prisms crisply above all straight beam spans
+  for (const p of prismsQueue) drawRightAngleTurningPrism(ctx, p);
 
   ctx.restore();
 }
@@ -674,7 +736,7 @@ function renderClassifyStrip() {
     const pctTxt = pkts > 0 ? (share >= 1 ? `${Math.round(share)}%` : `${share.toFixed(1)}%`) : '0%';
 
     const segEl = el('span', { class: `seg-meter compact${pkts > 0 ? ' active' : ''}` });
-    renderSegMeter(segEl, fillPct / 100, 10, colorName, true);
+    renderSegMeter(segEl, fillPct / 100, 16, colorName, true);
 
     frag.appendChild(el('div', {
       class: `classify-bar-card ${pkts > 0 ? 'active' : ''}`,
@@ -787,21 +849,96 @@ export function renderBlueprint() {
     }
   }
 
-  // Left Guard Rail
+  // Left Guard Rail (Dominant Security & Invariant Panel)
   const canaryMs = st.tunnel?.canary_ms || 0;
+  const canaryFails = st.tunnel?.canary_fails ?? 0;
   $('#adv-verdict').textContent = st.ok ? 'zero-leak verified' : (st.fail?.join(', ') || 'check failed');
   $('#adv-verdict').className = `v ${st.ok ? 'c-mint' : 'c-crimson'}`;
-  $('#adv-canary').textContent = canaryMs > 0 ? `${canaryMs} ms` : (st.tunnel?.on ? 'active' : 'off');
-  $('#adv-ct').textContent = `${st.sys?.conntrack?.count ?? 0}`;
-  $('#adv-strands').textContent = `${st.healthy_count ?? 0}/${st.strand_count ?? 21}`;
+
+  const failClosedEl = $('#adv-failclosed');
+  if (failClosedEl) {
+    const fc = !st.tunnel?.fail_open;
+    failClosedEl.textContent = fc ? 'locked · 0x20000000' : 'fail-open (!)';
+    failClosedEl.className = `v ${fc ? 'c-violet' : 'c-amber'}`;
+  }
 
   const dnsEl = $('#adv-dns');
   if (dnsEl) {
-    dnsEl.textContent = st.dns?.smartdns ? `53 → ${st.dns.port || 6053}` : 'offline';
+    dnsEl.textContent = st.dns?.smartdns
+      ? `53 → ${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads on' : 'ads off'}`
+      : 'offline';
     dnsEl.className = `v ${st.dns?.smartdns ? 'c-mint' : 'c-crimson'}`;
   }
+
+  $('#adv-canary').textContent = canaryMs > 0 ? `${canaryMs} ms (${canaryFails} fail)` : (st.tunnel?.on ? 'active' : 'off');
+  const checks = S.doctor?.checks || [];
+  const offCheck = checks.find(c => c.id === 'privacy_no_offload');
+  const offEl = $('#adv-offload');
+  if (offEl) {
+    const offOk = offCheck ? !!offCheck.ok : true;
+    offEl.textContent = offOk ? 'disabled (per-pkt)' : 'offload leak!';
+    offEl.className = `v ${offOk ? 'c-mint' : 'c-crimson'}`;
+  }
+
+  const siteEl = $('#adv-site');
+  if (siteEl) {
+    const sName = st.site?.name || (st.site?.gateway ? 'unnamed gw' : 'direct');
+    siteEl.textContent = `${sName} · ${st.settings?.['strands.aggregate'] || st.site?.mode || 'auto'}`;
+  }
+
+  const ctCount = st.sys?.conntrack?.count ?? 0;
+  const ctMax = Math.max(1, st.sys?.conntrack?.max ?? 131072);
+  $('#adv-ct').textContent = `${ctCount.toLocaleString()} / ${(ctMax / 1024).toFixed(0)}k`;
+  $('#adv-strands').textContent = `${st.healthy_count ?? 0}/${st.strand_count ?? 21} · ${st.role || 'primary'}`;
+
+  // Subsystem Invariants Grid inside PRISM_GUARD
+  const totChecks = checks.length || 41;
+  const okChecks = checks.length ? checks.filter(c => c.ok).length : (st.ok ? totChecks : 0);
+  if ($('#adv-inv-score')) {
+    $('#adv-inv-score').textContent = `${okChecks}/${totChecks} ok`;
+    $('#adv-inv-score').className = okChecks === totChecks ? 'c-mint' : 'c-crimson';
+  }
+  renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, okChecks === totChecks ? 'mint' : 'crimson', true);
+
+  const invGrid = $('#adv-invariants-grid');
+  if (invGrid && checks.length) {
+    const groups = [
+      { label: 'fw4/guard',  test: c => c.id.startsWith('privacy_') || c.id === 'nft_table' || c.id === 'ip_forward' },
+      { label: 'dns/6053',   test: c => c.id.includes('dns') || c.id.includes('dhcp') },
+      { label: 'tproxy/cage',test: c => c.id.startsWith('tunnel_') },
+      { label: 'weave/126',  test: c => c.id.includes('weave') || c.id.includes('pattern') || c.id.includes('strands') || c.id.includes('domestic') },
+      { label: 'mptcp/pool', test: c => c.id.startsWith('mptcp_') },
+      { label: 'canary/ok',  test: c => c.id === 'tunnel_canary' || c.id.includes('site') || c.level === 'fail' },
+    ];
+    const gFrag = document.createDocumentFragment();
+    for (const grp of groups) {
+      const matched = checks.filter(grp.test);
+      const passed = matched.filter(c => c.ok).length;
+      const allOk = matched.length === 0 || passed === matched.length;
+      gFrag.appendChild(el('div', { class: `guard-inv-cell ${allOk ? 'ok' : 'bad'}` },
+        el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px' } },
+          el('span', { class: `run-dot ${allOk ? 'mint' : 'crimson'}` }),
+          el('span', { class: 'c-sec' }, grp.label)
+        ),
+        el('span', { class: allOk ? 'c-bright' : 'c-crimson', style: { fontWeight: '600', fontVariantNumeric: 'tabular-nums' } }, `${passed}/${matched.length || 1}`)
+      ));
+    }
+    invGrid.innerHTML = '';
+    invGrid.appendChild(gFrag);
+  }
+
+  if ($('#adv-relays')) {
+    $('#adv-relays').textContent = `TProxy :61235 · ${st.tunnel?.relays ?? 0} relays · ${(st.mptcp?.endpoints?.length ?? 0)} ep`;
+  }
+  if ($('#adv-classify-mode')) {
+    $('#adv-classify-mode').textContent = `remainder: ${st.settings?.['classify.remainder'] || 'tunnel'} · quic: ${st.settings?.['classify.quic'] || 'reject'}`;
+  }
+  if ($('#adv-reconcile')) {
+    const recTs = st.reconciled || st.ts;
+    $('#adv-reconcile').textContent = recTs ? `sync ${fmtClock(recTs)}` : 'live';
+  }
   $('#adv-doctor').textContent = st.ok
-    ? `all ${S.doctor?.checks?.length || 41} invariants ok`
+    ? `all ${totChecks} invariants ok`
     : `${st.fail?.length || 1} fail · ${st.warn?.length || 0} warn`;
 
   const evList = S.events?.events || [];
@@ -813,7 +950,12 @@ export function renderBlueprint() {
     ? `${(liveFlow.quicPkts / 1000).toFixed(1)}k pkts`
     : `${liveFlow.quicPkts} pkts`;
   const sz = S.rules?.sizes || {};
-  $('#bp-dns-st').textContent = `SmartDNS :${st.dns?.port || 6053} · dom ${sz.domestic4 ?? 0} · cn ${sz.domestic4_dns ?? 0} · tun ${sz.tunnel4_dns ?? 0}`;
+  if ($('#bp-dns-port')) {
+    $('#bp-dns-port').textContent = st.dns?.smartdns ? `:${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}` : 'offline';
+  }
+  $('#bp-dns-st').textContent = `dom ${sz.domestic4 ?? 0} · cn ${sz.domestic4_dns ?? 0}`;
+  if ($('#bp-dns-tun')) $('#bp-dns-tun').textContent = `${sz.tunnel4_dns ?? 0} (range ${sz.tunnel4 ?? 0})`;
+  if ($('#bp-site-name')) $('#bp-site-name').textContent = `${st.site?.name || 'direct'} · ${st.site?.mode || 'auto'}`;
 
   const chargedRatio = (w.charged_count || 0) / nH;
   renderSegMeter($('#bp-harvest-meter'), chargedRatio, 10, 'spectrum');
@@ -857,12 +999,15 @@ export function renderBlueprint() {
   $('#bp-tun-rate').textContent = mihomoOk ? fmtRate(liveFlow.tunBps).full : '0 bps';
   renderSegMeter($('#bp-tun-meter'), mihomoOk ? Math.max(0.08, liveFlow.tunShare) : 0, 10, mihomoOk ? 'violet' : 'amber');
   $('#bp-tun-pct').textContent = mihomoOk ? `${Math.round(liveFlow.tunShare * 100)}%` : '0%';
-  $('#bp-tun-desc').textContent = `主力: ${(tun?.tw_home || tun?.selected || 'TW-HOME').slice(0, 24)} · ${(liveFlow.tunPkts / 1000).toFixed(1)}k`;
+  $('#bp-tun-desc').textContent = `主力: ${(tun?.tw_home || tun?.selected || 'TW-HOME').slice(0, 26)} · ${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts`;
   const mptcpEl = $('#bp-tun-mptcp');
   if (mptcpEl) {
     mptcpEl.textContent = st.mptcp?.enabled
-      ? `MPTCP ${st.mptcp.subflows} subflows → weave_out`
+      ? `MPTCP ${st.mptcp.subflows} subflows · ${st.mptcp.endpoints?.length || 0} ep → weave_out`
       : 'MPTCP single-path → weave_out';
+  }
+  if ($('#bp-tun-meta')) {
+    $('#bp-tun-meta').textContent = `relays ${st.tunnel?.relays ?? 0} · canary ${canaryMs || '—'}ms · ${st.tunnel?.fail_open ? 'fail-open' : 'fail-closed'}`;
   }
   $('#bp-tun-st').textContent = mihomoOk ? (canaryMs > 0 ? `canary ${canaryMs} ms ok` : 'cage encrypted') : 'offline / direct';
   const zBtn = $('#zashboard-link');
@@ -877,8 +1022,12 @@ export function renderBlueprint() {
   renderSegMeter($('#bp-dom-meter'), chargedRatio, 10, 'mint');
   $('#bp-dom-pct').textContent = `${w.charged_count ?? 0}/${nH}`;
   renderMiniSpectrum(strands);
-  $('#bp-dom-desc').textContent = `slots ${w.slots ?? 126} (${w.affinity || 'flow'}) · direct ${(liveFlow.domPkts / 1000).toFixed(1)}k (${Math.round(directShare * 100)}%)`;
-  $('#bp-dom-st').textContent = `${w.charged_count ?? 0} charged · ${w.draining_count ?? 0} drain · ${(w.cooling_count || 0) + (w.depleted_count || 0)} cool`;
+  if ($('#bp-dom-slots')) $('#bp-dom-slots').textContent = `${w.slots ?? 126} (${w.affinity || 'flow'})`;
+  if ($('#bp-dom-direct')) $('#bp-dom-direct').textContent = `${(liveFlow.domPkts / 1000).toFixed(1)}k (${Math.round(directShare * 100)}%)`;
+  if ($('#bp-dom-probe')) $('#bp-dom-probe').textContent = `every ${w.interval ?? 2}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`;
+  if ($('#bp-dom-buckets')) $('#bp-dom-buckets').textContent = `${w.charged_count ?? 0} chg · ${w.draining_count ?? 0} drn`;
+  $('#bp-dom-desc').textContent = `vip #${w.vip_id ?? '—'} (${w.vip_dev || 'auto'})`;
+  $('#bp-dom-st').textContent = `${w.charged_count ?? 0}/${nH} charged · ${(w.cooling_count || 0) + (w.depleted_count || 0)} cool`;
 
   // Tier 3: Stage 3 Full-Height HTB QoS + 21-Uplink Egress Unified Segmented Meters
   const setSegMeter = (sel, ratio, count, colorName, compact = false, active = false) => {
@@ -916,8 +1065,6 @@ export function renderBlueprint() {
   if ($('#bp-up-pool-txt')) $('#bp-up-pool-txt').textContent = `${w.charged_count ?? 0}/${nTotal} charged · ${st.healthy_count ?? 0} up`;
   setSegMeter('#bp-up-pool-bar', (w.charged_count ?? 0) / nTotal, 16, 'spectrum', false, (w.charged_count ?? 0) > 0 && totalRate > 2000);
 
-  const ctCount = st.sys?.conntrack?.count ?? 0;
-  const ctMax = Math.max(1, st.sys?.conntrack?.max ?? 131072);
   if ($('#bp-up-ct-txt')) $('#bp-up-ct-txt').textContent = `${ctCount.toLocaleString()} / ${ctMax.toLocaleString()}`;
   const ctRatio = ctCount > 0 ? Math.max(1 / 16, ctCount / ctMax) : 0;
   setSegMeter('#bp-up-ct-bar', ctRatio, 16, 'blue', false, ctCount > 0);

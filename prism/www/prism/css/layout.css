@@ -179,7 +179,7 @@
 /* View 02: Left Rail [PRISM_GUARD + Session Log] + Right Fluid 3-Stage Optical Pipeline */
 .blueprint-stage {
   display: grid;
-  grid-template-columns: clamp(235px, 18.5vw, 275px) minmax(0, 1fr);
+  grid-template-columns: clamp(252px, 20vw, 296px) minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
   flex: 1;
@@ -200,11 +200,11 @@
   position: relative;
   display: grid;
   grid-template-columns:
-    minmax(240px, 0.94fr)
-    minmax(94px, 0.36fr)
-    minmax(282px, 1.10fr)
-    minmax(74px, 0.28fr)
-    minmax(268px, 1.04fr);
+    minmax(242px, 0.94fr)
+    minmax(108px, 0.42fr)
+    minmax(274px, 1.08fr)
+    minmax(88px, 0.34fr)
+    minmax(262px, 1.02fr);
   align-items: stretch;
   height: 100%;
   min-width: 0;
@@ -233,17 +233,17 @@
 
 .bp-col-ingress {
   grid-column: 1;
-  gap: 28px;
+  gap: 24px;
 }
 
 .bp-col-engines {
   grid-column: 3;
-  gap: 26px;
+  gap: 24px;
 }
 
 .bp-col-egress {
   grid-column: 5;
-  gap: 28px;
+  gap: 24px;
 }
 
 .bp-stage-card {
@@ -366,6 +366,8 @@
     grid-column: 1;
     gap: 12px;
   }
+  .guard-panel,
+  .session-log-panel,
   #bp-card-pregate,
   #bp-card-ingress,
   #bp-card-vip,
