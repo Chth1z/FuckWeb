@@ -247,28 +247,24 @@
 }
 
 .bp-stage-bridge {
-  flex: 0.36 1 26px;
+  flex: 1 1 auto;
   min-height: 22px;
-  max-height: 64px;
   pointer-events: none;
 }
 
 .bp-col-ingress .bp-stage-bridge {
-  flex: 0.32 1 26px;
+  flex: 1 1 auto;
   min-height: 22px;
-  max-height: 54px;
 }
 
 .bp-col-engines .bp-stage-bridge {
-  flex: 0.28 1 22px;
-  min-height: 18px;
-  max-height: 46px;
+  flex: 1 1 auto;
+  min-height: 20px;
 }
 
 .bp-stage-gap {
-  flex: 0.28 1 22px;
+  flex: 0.72 1 auto;
   min-height: 18px;
-  max-height: 46px;
   pointer-events: none;
 }
 

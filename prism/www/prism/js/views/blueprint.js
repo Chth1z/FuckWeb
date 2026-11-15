@@ -1020,8 +1020,8 @@ function renderClassifyStrip() {
     const pktTxt = pkts >= 1e6 ? `${(pkts / 1e6).toFixed(1)}M` : (pkts >= 1000 ? `${Math.round(pkts / 1000)}k` : `${pkts}`);
     const pctTxt = pkts > 0 ? (share >= 1 ? `${Math.round(share)}%` : `${share.toFixed(1)}%`) : '0%';
 
-    const segEl = el('span', { class: `seg-meter compact${pkts > 0 ? ' active' : ''}` });
-    renderSegMeter(segEl, fillPct / 100, 16, colorName, true);
+    const segEl = el('span', { class: `seg-meter${pkts > 0 ? ' active' : ''}` });
+    renderSegMeter(segEl, fillPct / 100, 16, colorName, false);
 
     frag.appendChild(el('div', {
       class: `classify-bar-card ${pkts > 0 ? 'active' : ''}`,
@@ -1198,7 +1198,7 @@ export function renderBlueprint() {
     $('#adv-inv-score').textContent = `${okChecks}/${totChecks} ok`;
     $('#adv-inv-score').className = `bp-live-rate ${okChecks === totChecks ? 'c-mint' : 'c-crimson'}`;
   }
-  renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, okChecks === totChecks ? 'mint' : 'crimson', true);
+  renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, okChecks === totChecks ? 'mint' : 'crimson', false);
 
   const invGrid = $('#adv-invariants-grid');
   if (invGrid && checks.length) {
@@ -1302,7 +1302,7 @@ export function renderBlueprint() {
   // Tier 1B: Nftables Classify Engine
   if ($('#bp-classify-sub')) {
     const remMode = st.settings?.['classify.remainder'] === 'direct' ? '直連' : '隧道';
-    $('#bp-classify-sub').textContent = `prerouting mangle → @dev_policy · 餘量${remMode}`;
+    $('#bp-classify-sub').textContent = `prerouting → @dev_policy · 餘量${remMode}`;
   }
   $('#bp-ingress-rate').textContent = fmtRate(totalRate).full;
   $('#bp-ingress-pkts').textContent = liveFlow.totPkts >= 1e6
@@ -1496,9 +1496,9 @@ export function renderBlueprint() {
   if ($('#bp-qos-10-rate')) $('#bp-qos-10-rate').textContent = fmtRate(liveFlow.vipBps).full;
   if ($('#bp-qos-20-rate')) $('#bp-qos-20-rate').textContent = fmtRate(liveFlow.tunBps).full;
   if ($('#bp-qos-30-rate')) $('#bp-qos-30-rate').textContent = fmtRate(qosDomBps).full;
-  setSegMeter('#bp-qos-10-bar', shareRatio(liveFlow.vipBps), 14, 'blue',   true, liveFlow.vipBps > 400);
-  setSegMeter('#bp-qos-20-bar', shareRatio(liveFlow.tunBps), 14, 'violet', true, liveFlow.tunBps > 400);
-  setSegMeter('#bp-qos-30-bar', shareRatio(qosDomBps),       14, 'mint',   true, qosDomBps > 400);
+  setSegMeter('#bp-qos-10-bar', shareRatio(liveFlow.vipBps), 14, 'blue',   false, liveFlow.vipBps > 400);
+  setSegMeter('#bp-qos-20-bar', shareRatio(liveFlow.tunBps), 14, 'violet', false, liveFlow.tunBps > 400);
+  setSegMeter('#bp-qos-30-bar', shareRatio(qosDomBps),       14, 'mint',   false, qosDomBps > 400);
 
   const paintQosBandHeat = (sel, baseRgb, bps) => {
     const chip = $(sel);
@@ -1521,7 +1521,7 @@ export function renderBlueprint() {
   const ewmaMbps = ((ewmaDown + ewmaUp) * 8) / 1e6;
   if ($('#bp-qos-tx-txt')) $('#bp-qos-tx-txt').textContent = `↑ ${fmtRateCompact(ewmaUp)} · ↓ ${fmtRateCompact(ewmaDown)}`;
   const ewmaRatio = ewmaMbps > 0 ? Math.min(1, Math.max(1 / 18, Math.log10(1 + ewmaMbps * 3.5) * 0.44)) : 0;
-  setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', true, ewmaMbps > 0.02);
+  setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', false, ewmaMbps > 0.02);
   if ($('#bp-qos-mss-kv')) $('#bp-qos-mss-kv').textContent = `SYN MSS ${st.settings?.['main.mss'] ?? 1440}`;
   if ($('#bp-qos-st')) $('#bp-qos-st').textContent = `${liveFlow.vipBps > 400 ? '1:10+20+30' : '1:20+30'} shaping`;
   if ($('#bp-qos-foot')) $('#bp-qos-foot').textContent = `SYN MSS ${st.settings?.['main.mss'] ?? 1440} · 8MB 分界`;

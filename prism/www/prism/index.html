@@ -153,7 +153,7 @@
               </div>
 
               <div class="bp-meter-row">
-                <span id="adv-invariants-meter" class="seg-meter compact"></span>
+                <span id="adv-invariants-meter" class="seg-meter"></span>
                 <strong id="adv-verdict" class="bp-meter-val c-mint">checking</strong>
               </div>
 
@@ -204,7 +204,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title"><span class="c-spectrum">PRE-GATE · GUARD &amp; DNS</span></div>
-                    <div class="bp-card-sub">dns_hijack :53→:6053 · IPv6 / DoT:853 閉鎖</div>
+                    <div class="bp-card-sub">dns :53→:6053 · IPv6 / DoT:853 閉鎖</div>
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-quic-pkts" class="bp-live-rate c-spectrum">0 pkts</span>
@@ -245,7 +245,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title"><span class="c-spectrum">NFTABLES CLASSIFY</span></div>
-                    <div id="bp-classify-sub" class="bp-card-sub">prerouting mangle → @dev_policy · 餘量隧道</div>
+                    <div id="bp-classify-sub" class="bp-card-sub">prerouting → @dev_policy · 餘量隧道</div>
                   </div>
                   <div class="bp-head-kpi">
                     <div id="bp-ingress-rate" class="bp-live-rate c-bright">0 Mbps</div>
@@ -401,7 +401,7 @@
                       <span class="c-blue" style="font-weight:700;font-size:10.5px">1:10 · Prio0 (VIP / ≤256B)</span>
                       <span id="bp-qos-10-rate" class="c-blue" style="font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums">0 bps</span>
                     </div>
-                    <span id="bp-qos-10-bar" class="seg-meter compact"></span>
+                    <span id="bp-qos-10-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
                       <span class="c-sec">遊戲 UDP / SYN·ACK / DNS / ICMP</span>
                       <span id="bp-qos-10-sub" class="c-muted">fq_codel target 2ms</span>
@@ -413,7 +413,7 @@
                       <span class="c-violet" style="font-weight:700;font-size:10.5px">1:20 · Prio1 (&lt;8MB)</span>
                       <span id="bp-qos-20-rate" class="c-violet" style="font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums">0 bps</span>
                     </div>
-                    <span id="bp-qos-20-bar" class="seg-meter compact"></span>
+                    <span id="bp-qos-20-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
                       <span class="c-sec">TW-HOME 隧道 / 互動網頁突發</span>
                       <span id="bp-qos-20-sub" class="c-muted">default interactive</span>
@@ -425,7 +425,7 @@
                       <span class="c-mint" style="font-weight:700;font-size:10.5px">1:30 · Prio2 (≥8MB)</span>
                       <span id="bp-qos-30-rate" class="c-mint" style="font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums">0 bps</span>
                     </div>
-                    <span id="bp-qos-30-bar" class="seg-meter compact"></span>
+                    <span id="bp-qos-30-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
                       <span class="c-sec">直連收割 / ct≥8MB 大流降級</span>
                       <span id="bp-qos-30-sub" class="c-muted">21-strand fair bulk</span>
@@ -445,7 +445,7 @@
                     <span class="c-sec">EWMA 上/下行速率</span>
                     <span id="bp-qos-tx-txt" class="c-bright" style="font-variant-numeric:tabular-nums">—</span>
                   </div>
-                  <span id="bp-qos-tx-bar" class="seg-meter compact"></span>
+                  <span id="bp-qos-tx-bar" class="seg-meter"></span>
                 </div>
 
                 <div class="bp-node-foot bp-node-foot-rule">
