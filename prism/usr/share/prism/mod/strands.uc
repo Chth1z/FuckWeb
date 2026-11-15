@@ -121,21 +121,40 @@ export function discover(ctx) {
 
 // --- health ----------------------------------------------------------------
 
-function probe(devs, cfg) {
-	let res = {};
-	if (!length(devs))
+function probe(set, cfg) {
+	let res = {}, pings = {};
+	if (!length(set))
 		return res;
-	let cmds = map(devs, (d) => sprintf(
-		"curl -4 --interface %s -m %d -sS -o /dev/null -w '%s %%{http_code} %%{time_starttransfer} %%{time_namelookup}\\n' %s 2>/dev/null &",
-		d, cfg.probe_timeout, d, core.shq(cfg.probe_url)));
+	let cmds = map(set, (s) => sprintf(
+		"curl -4 --interface %s -m %d --connect-timeout 2 -sS -o /dev/null -w '%s %%{http_code} %%{time_starttransfer} %%{time_namelookup}\\n' %s 2>/dev/null &",
+		s.dev, cfg.probe_timeout, s.dev, core.shq(cfg.probe_url)));
+	let gw_strands = filter(set, (s) => s.gw);
+	const PING_WAVES = 4;
+	if (length(gw_strands)) {
+		for (let w = 0; w < PING_WAVES; w++) {
+			if (w > 0)
+				push(cmds, "ucode -e 'sleep(150)'");
+			for (let s in gw_strands)
+				push(cmds, sprintf("ping -I %s -c 1 -W 1 %s >/dev/null 2>&1 && echo 'PING %s' &", s.dev, s.gw, s.dev));
+		}
+	}
 	push(cmds, "wait");
 	for (let line in split(core.sh(join("\n", cmds)).out, "\n")) {
-		let m = match(line, /^(\S+) ([0-9]+) ([0-9.]+) ([0-9.]+)/);
+		let pm = match(line, /^PING (\S+)$/);
+		if (pm) {
+			pings[pm[1]] = (pings[pm[1]] ?? 0) + 1;
+			continue;
+		}
+		let m = match(line, /^(\S+) ([0-9]+) ([0-9.]+) ([0-9.]+)$/);
 		if (m && !res[m[1]]) {
 			let code = int(m[2]);
 			let pure = code > 0 ? max(0.005, (+m[3]) - (+m[4])) : 0;
 			res[m[1]] = { code, ttfb: pure };
 		}
+	}
+	for (let s in set) {
+		let cur = (res[s.dev] ??= { code: 0, ttfb: 0 });
+		cur.loss = s.gw ? max(0.0, 1.0 - (pings[s.dev] ?? 0) * 1.0 / PING_WAVES) : 0.0;
 	}
 	return res;
 }
@@ -166,7 +185,7 @@ export function check(ctx) {
 	let cfg = ctx.cfg.strands, st = ctx.st, now = ctx.now, strands = ctx.strands;
 	st.strands ??= {};
 	let routed = filter(strands, (s) => s.ip && s.gw);
-	let state = (s) => (st.strands[s.dev] ??= { code: 0, ttfb: 0, probed: 0, strikes: 0, logins: 0, parked: 0 });
+	let state = (s) => (st.strands[s.dev] ??= { code: 0, ttfb: 0, loss: 0, probed: 0, strikes: 0, logins: 0, parked: 0 });
 	let good = (s) => state(s).code == cfg.probe_expect;
 
 	// The dashboard's "log in again" clears every park and forces a full round.
@@ -176,10 +195,17 @@ export function check(ctx) {
 
 	let due = filter(routed, (s) => !good(s) || now - state(s).probed >= cfg.probe_interval);
 	let run = (set) => {
-		let res = probe(map(set, (s) => s.dev), cfg);
+		let res = probe(set, cfg);
 		for (let s in set) {
-			let h = state(s), r = res[s.dev] ?? { code: 0, ttfb: 0 };
+			let h = state(s), r = res[s.dev] ?? { code: 0, ttfb: 0, loss: h.loss ?? 0 };
 			h.code = r.code;
+			let sloss = r.loss ?? 0.0;
+			if (!h.probed || h.loss == null)
+				h.loss = sloss;
+			else if (sloss >= 0.5)
+				h.loss = max(0.45 * sloss + 0.55 * h.loss, sloss * 0.7);
+			else
+				h.loss = 0.40 * sloss + 0.60 * h.loss;
 			if (r.code == cfg.probe_expect && r.ttfb > 0) {
 				let sample = (h.ttfb > 0 && h.ttfb < 0.45 && r.ttfb > h.ttfb * 1.8) ? (h.ttfb * 1.25) : r.ttfb;
 				h.ttfb = (h.ttfb > 0 && h.ttfb < 0.45) ? (0.35 * sample + 0.65 * h.ttfb) : sample;
@@ -192,13 +218,17 @@ export function check(ctx) {
 	};
 	run(due);
 
-	// Two batches per pass at most: a dead upstream must not hold the pass
-	// (and its lock) for minutes while every strand times out at the portal.
-	let login = [];
+	// Up to 3 batches per pass so mass portal drops recover quickly without
+	// blocking forever on an unresponsive upstream.
+	let login = [], backlog = false;
 	for (let s in filter(due, (s) => !good(s))) {
 		let h = state(s);
-		if (length(login) >= cfg.auth_batch * 2 || (h.parked && now - h.parked < cfg.park_sec))
+		if (h.parked && now - h.parked < cfg.park_sec)
 			continue;
+		if (length(login) >= cfg.auth_batch * 3) {
+			backlog = true;
+			continue;
+		}
 		h.parked = 0;
 		if (++h.logins >= cfg.park_fails)
 			h.parked = now;
@@ -206,25 +236,34 @@ export function check(ctx) {
 	}
 	// The re-probe, not the portal's answer, says whether a login worked:
 	// log both outcomes so a portal that stops accepting us is visible.
+	let failed_login = {};
 	if (length(login) && portal_login(map(login, (s) => s.dev), ctx.site, cfg)) {
 		run(login);
 		let back = filter(login, good), down = filter(login, (s) => !good(s));
+		for (let s in down)
+			failed_login[s.dev] = true;
 		let devs = (set) => join(" ", map(set, (s) => s.dev + (!good(s) && state(s).parked ? " (parked)" : "")));
 		core.event("PORTAL %s login: %s%s", ctx.site.portal,
 			length(back) ? "back " + devs(back) : "",
 			length(down) ? (length(back) ? "; " : "") + "still down " + devs(down) : "");
 	}
+	if (backlog)
+		ctx.want_rescan = true;
 
-	// A strand survives fail_keep-1 bad rounds so one lost probe does not flap it.
+	// A strand survives fail_keep-1 transient timeouts so one lost probe does
+	// not flap it, whereas captive-portal HTTP answers or failed re-logins are
+	// evicted immediately to avoid blackholing client flows.
 	let healthy = [];
 	for (let s in routed) {
 		let h = state(s);
 		s.ttfb = h.ttfb ?? 0;
 		s.http = h.code ?? 0;
+		s.loss = +(sprintf("%.3f", h.loss ?? 0));
+		let captive = (h.code >= 200 && h.code != cfg.probe_expect);
 		if (good(s))
 			h.strikes = h.logins = h.parked = 0;
 		else if (s in due)
-			h.strikes++;
+			h.strikes = (failed_login[s.dev] || captive) ? max(h.strikes + 1, cfg.fail_keep) : h.strikes + 1;
 		if (h.strikes < cfg.fail_keep)
 			push(healthy, s);
 	}

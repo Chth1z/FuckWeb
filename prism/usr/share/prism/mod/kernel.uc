@@ -91,6 +91,7 @@ function build(ctx) {
 		push(classify, rule("ip daddr @tunnel4", "goto divert", "tunnel-range"));
 		push(classify, rule("ip daddr @tunnel4_dns", "goto divert", "tunnel-domain"));
 		push(classify, rule("ip daddr @domestic4", "goto direct_ok", "domestic"));
+		push(classify, rule("ip daddr @domestic4_dns", "goto direct_ok", "domestic-domain"));
 		if (length(c.tunnel_udp_port))
 			push(classify, rule(sprintf("udp dport { %s }", join(", ", c.tunnel_udp_port)), "goto divert", "tunnel-port"));
 		push(classify, c.remainder == "tunnel" ? rule("", "goto divert", "rest-tunnel") : rule("", "goto direct_ok", "rest-direct"));
@@ -150,8 +151,8 @@ function build(ctx) {
 
 // SmartDNS only adds an address when it resolves the name, so carry the live
 // entries across a skeleton rebuild.
-function carry_dynamic() {
-	let r = core.sh("nft -j list set " + NFT + " tunnel4_dns");
+function carry_dynamic_set(name) {
+	let r = core.sh("nft -j list set " + NFT + " " + name);
 	if (r.code != 0)
 		return "";
 	let elems = [];
@@ -164,7 +165,11 @@ function carry_dynamic() {
 	catch (e) {
 		return "";
 	}
-	return length(elems) ? sprintf("add element %s tunnel4_dns { %s }\n", NFT, join(", ", elems)) : "";
+	return length(elems) ? sprintf("add element %s %s { %s }\n", NFT, name, join(", ", elems)) : "";
+}
+
+function carry_dynamic() {
+	return join("", map([ "tunnel4_dns", "domestic4_dns" ], carry_dynamic_set));
 }
 
 function apply_nft(ctx) {

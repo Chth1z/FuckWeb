@@ -144,7 +144,7 @@ function updateFlowPhysics(st) {
     if (r.tag.includes('tunnel') || r.tag === 'rest-tunnel') {
       tunPkts += p;
       tunBytes += b;
-    } else if (r.tag === 'domestic' || r.tag === 'device-direct' || r.tag === 'rest-direct') {
+    } else if (r.tag === 'domestic' || r.tag === 'domestic-domain' || r.tag === 'device-direct' || r.tag === 'rest-direct') {
       domPkts += p;
       domBytes += b;
     }

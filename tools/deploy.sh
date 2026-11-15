@@ -53,6 +53,9 @@ acl_before=$(md5sum /usr/share/rpcd/acl.d/prism.json 2>/dev/null | cut -d' ' -f1
 rm -rf /www/prism/css /www/prism/js
 cp -a "$STAGE/tree/." /
 chmod -R u=rwX,go=rX /www/prism 2>/dev/null || true
+for pid in $(ps w | awk '/braidd\.uc/{print $1}'); do
+	kill -9 "$pid" 2>/dev/null || true
+done
 if [ -d /etc/braid ] || [ -d /usr/share/braid ] || [ -x /etc/init.d/braid ]; then
 	if [ -x /etc/init.d/braid ]; then
 		/etc/init.d/braid disable 2>/dev/null || true

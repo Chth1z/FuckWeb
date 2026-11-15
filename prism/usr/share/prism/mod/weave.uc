@@ -104,21 +104,38 @@ export function current_vip() {
 	return core.load_json(VIP_FILE, []);
 };
 
-// Pick the lowest-TTFB, uncongested strand for @vip_lane with tight hysteresis:
-// stays sticky during an active session ONLY while its latency remains within
-// max(15ms, 1.35 * best_ttfb) and <= 65ms.
+// Baseline first-hop ICMP loss across active strands. If every strand reads
+// >= 90% loss (e.g. an upstream gateway that drops ICMP), disable loss
+// penalties so we never falsely penalize healthy strands.
+function loss_baseline(strands) {
+	let floor = 1.0;
+	for (let s in strands) {
+		let l = s.loss ?? 0.0;
+		if (l < floor)
+			floor = l;
+	}
+	return { active: floor < 0.90, floor };
+}
+
+// Pick the lowest-loss, lowest-TTFB, uncongested strand for @vip_lane with
+// tight hysteresis: stays sticky during an active session ONLY while loss
+// remains clean and latency stays within max(15ms, 1.35 * best_ttfb) and <= 65ms.
 export function select_vip(healthy, load) {
 	if (!length(healthy))
 		return [];
-	let best = healthy[0], best_score = 1e9, min_ttfb = 10.0;
-	for (let s in healthy) {
-		if (s.http && s.http != 204)
-			continue;
+	let candidates = filter(healthy, (s) => !s.http || s.http == 204);
+	if (!length(candidates))
+		candidates = healthy;
+	let lb = loss_baseline(candidates);
+	let eff_loss = (s) => lb.active ? max(0.0, s.loss ?? 0.0) : 0.0;
+	let best = candidates[0], best_score = 1e9, min_ttfb = 10.0;
+	for (let s in candidates) {
 		let ttfb = (s.ttfb && s.ttfb >= 0.008) ? s.ttfb : 0.25;
 		let rate = max(load?.[s.dev]?.down?.now ?? 0, load?.[s.dev]?.down?.rate ?? 0);
 		if (rate < IDLE_THRESH && ttfb < min_ttfb)
 			min_ttfb = ttfb;
-		let score = ttfb * 1000.0 + (rate / 512.0);
+		let loss_pen = eff_loss(s) * 2000.0; // +20 ms score per 1% loss
+		let score = ttfb * 1000.0 + loss_pen + (rate / 512.0);
 		if (score < best_score) {
 			best_score = score;
 			best = s;
@@ -135,7 +152,8 @@ export function select_vip(healthy, load) {
 			let ttfb = (cur.ttfb && cur.ttfb >= 0.008) ? cur.ttfb : 0.25;
 			let rate = max(load?.[cur.dev]?.down?.now ?? 0, load?.[cur.dev]?.down?.rate ?? 0);
 			let limit = min(0.065, max(min_ttfb + 0.015, min_ttfb * 1.35));
-			if (ttfb <= limit && rate < IDLE_THRESH)
+			let loss_ok = eff_loss(cur) <= max(0.08, lb.floor + 0.08);
+			if (loss_ok && ttfb <= limit && rate < IDLE_THRESH)
 				return [ cur.id | MARK_VIP, cur.id | MARK_VIP ];
 		}
 	}
@@ -193,14 +211,16 @@ const POLICIES = {
 	// (18~70 Mbps first-second burst window), and evict depleted strands (0 slots)
 	// into cooldown before the hotel gateway's drop-tail policer collapses TCP cwnd.
 	harvest: function(strands, load, nslots, cfg) {
-		let min_ttfb = 10.0, non_depleted = 0;
+		let lb = loss_baseline(strands);
+		let min_ttfb = 10.0, clean_active = 0;
 		for (let s in strands) {
 			if (s.ttfb && s.ttfb > 0 && s.ttfb < min_ttfb)
 				min_ttfb = s.ttfb;
 			let l = load[s.dev] ?? {}, b = l.bucket ?? { tokens: BURST_MAX, state: "charged" };
 			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, l.up?.now ?? 0);
-			if (b.state != "depleted" && rate < EFF_CIR_BYTES_S * 0.80)
-				non_depleted++;
+			let rel_loss = lb.active ? max(0.0, (s.loss ?? 0.0) - lb.floor * 0.5) : 0.0;
+			if (b.state != "depleted" && rate < EFF_CIR_BYTES_S * 0.80 && rel_loss < 0.35)
+				clean_active++;
 		}
 		if (min_ttfb >= 10.0)
 			min_ttfb = 0.15;
@@ -211,17 +231,22 @@ const POLICIES = {
 			let ttfb = (s.ttfb && s.ttfb > 0) ? s.ttfb : 0.035;
 			let d = min(2.0, max(0.0, ttfb - min_ttfb) / 0.10);
 			let q = 1.0 / (1.0 + 0.35 * d);
+			let rel_loss = lb.active ? max(0.0, (s.loss ?? 0.0) - lb.floor * 0.5) : 0.0;
+			let loss_q = 1.0 / (1.0 + 12.0 * rel_loss + 50.0 * rel_loss * rel_loss);
 			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, l.up?.now ?? 0);
 			let ratio = b.tokens / (1.0 * BURST_MAX);
 
-			if (b.state == "depleted" || rate >= EFF_CIR_BYTES_S * 0.80)
-				return non_depleted > 0 ? 0 : max(FLOOR, 1.0 - rate / (1.5 * EFF_CIR_BYTES_S));
+			// Shield heavily losing (>=35% relative loss) or depleted strands when
+			// healthier idle alternatives exist, avoiding CUBIC SYN/CWND stalls.
+			if (b.state == "depleted" || rate >= EFF_CIR_BYTES_S * 0.80 || rel_loss >= 0.35)
+				return clean_active > 0 ? 0 : max(FLOOR, (1.0 - rate / (1.5 * EFF_CIR_BYTES_S)) * loss_q);
+			let idle_bias = 1.0 / (1.0 + rate / 50000.0);
 			if (b.state == "cooling")
-				return max(FLOOR, 1.8 * ratio * q);
+				return max(FLOOR, 1.8 * ratio * q * loss_q * idle_bias);
 			if (b.state == "charged")
-				return max(FLOOR, 10.0 * ratio * ratio * q);
+				return max(FLOOR, 10.0 * ratio * ratio * q * loss_q * idle_bias);
 			let rem = max(0.10, 1.0 - rate / (1.0 * EFF_CIR_BYTES_S));
-			return max(FLOOR, 3.5 * rem * q);
+			return max(FLOOR, 3.5 * rem * q * loss_q * idle_bias);
 		}), nslots);
 	},
 

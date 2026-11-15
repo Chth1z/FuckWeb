@@ -118,9 +118,10 @@ function shape(dev, rate) {
 		return ours;
 	}
 	let classes = ours ? core.sh("tc class show dev " + dev).out : "";
-	if (ours && index(classes, sprintf("1:1 root rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
+	let stale_10 = index(classes, "burst 1600b") >= 0;
+	if (ours && !stale_10 && index(classes, sprintf("1:1 root rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
 		return false;
-	if (ours && index(classes, sprintf("1:1 htb rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
+	if (ours && !stale_10 && index(classes, sprintf("1:1 htb rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
 		return false;
 	let r10 = max(5, int(rate * 20 / 100));
 	let r20 = max(10, int(rate * 50 / 100));
@@ -132,7 +133,7 @@ function shape(dev, rate) {
 		sprintf("tc qdisc del dev %s root 2>/dev/null || true", dev),
 		sprintf("tc qdisc add dev %s root handle 1: htb default 20", dev),
 		sprintf("tc class add dev %s parent 1: classid 1:1 htb rate %dmbit ceil %dmbit burst 128k cburst 128k", dev, rate, rate),
-		sprintf("tc class add dev %s parent 1:1 classid 1:10 htb rate %dmbit ceil %dmbit prio 0 quantum 1514", dev, r10, rate),
+		sprintf("tc class add dev %s parent 1:1 classid 1:10 htb rate %dmbit ceil %dmbit prio 0 burst 32k cburst 32k quantum 1514", dev, r10, rate),
 		sprintf("tc class add dev %s parent 1:1 classid 1:20 htb rate %dmbit ceil %dmbit prio 1 burst 64k cburst 64k quantum 1514", dev, r20, rate),
 		sprintf("tc class add dev %s parent 1:1 classid 1:30 htb rate %dmbit ceil %dmbit prio 2 burst 64k cburst 64k quantum 1514", dev, r30, rate),
 		sprintf("%s limit 1000 target 2ms interval 50ms quantum 300 memory_limit 1048576 noecn || %s noecn || %s", q10, q10, q10),

@@ -50,11 +50,13 @@ function smartdns_conf(cfg, proxy_on) {
 		"server-name prism-dns",
 		"response-mode " + d.response_mode,
 		sprintf("cache-size %d", d.cache_size),
-		"cache-persist no",
+		sprintf("cache-file %s/cache.db", core.RUN),
+		"cache-persist yes",
 		"prefetch-domain " + yn(d.prefetch),
 		"serve-expired " + yn(d.serve_expired),
 		"serve-expired-reply-ttl 2",
 		sprintf("serve-expired-ttl %d", d.serve_expired_ttl),
+		"serve-expired-prefetch-time 86400",
 		sprintf("rr-ttl-min %d", d.rr_ttl_min),
 		"rr-ttl-max 3600",
 		"rr-ttl-reply-max 60",
@@ -76,11 +78,13 @@ function smartdns_conf(cfg, proxy_on) {
 			sprintf("server 127.0.0.1:%d", cfg.tunnel.dns_port),
 			sprintf("speed-check-mode %s -group cn", d.speed_check),
 			...doh(" -group cn -exclude-default-group"),
-			"nameserver /cn/cn");
+			"nameserver /cn/cn",
+			"nftset /cn/#4:inet#prism#domestic4_dns");
 		if (cn_list)
 			push(conf,
 				sprintf("domain-set -name cn-list -type list -file %s", cn_list),
-				"nameserver /domain-set:cn-list/cn");
+				"nameserver /domain-set:cn-list/cn",
+				"nftset /domain-set:cn-list/#4:inet#prism#domestic4_dns");
 		// After cn-list on purpose: these names never take the domestic group,
 		// and their answers are pinned so nft tunnels them even inside domestic4.
 		if (fs.stat(tunnel_domains)?.size > 0)

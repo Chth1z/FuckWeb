@@ -166,6 +166,7 @@ export function methods(d) {
 					return {
 						...s,
 						ttfb_ms: int((s.ttfb ?? 0) * 1000 + 0.5),
+						loss_pct: int((s.loss ?? 0) * 100 + 0.5),
 						rate: int(down.rate ?? 0), now: int(down.now ?? 0), peak: int(down.peak ?? 0), down_bytes: down.bytes ?? 0,
 						up: int(up.rate ?? 0), up_now: int(up.now ?? 0), up_peak: int(up.peak ?? 0), up_bytes: up.bytes ?? 0,
 						slots: weight[s.id] ?? 0,
@@ -288,6 +289,7 @@ export function methods(d) {
 						tunnel4: list_count(config.path(c.classify.tunnel4)),
 						tunnel_domains: list_count(config.path(c.classify.tunnel_domains)),
 						tunnel4_dns: set_size("tunnel4_dns"),
+						domestic4_dns: set_size("domestic4_dns"),
 						relay4: set_size("relay4"),
 					},
 					ports: c.classify.tunnel_udp_port,

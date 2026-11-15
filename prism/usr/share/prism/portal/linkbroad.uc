@@ -13,7 +13,7 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/
 
 export function login_cmd(dev, secret) {
 	let jar = RUN + "/portal." + dev + ".jar";
-	let curl = sprintf("curl -4 --interface %s -k -m 12 -sS --resolve \"portal.linkbroad.com:443:$pip\" -A %s -c %s -b %s", dev, shq(UA), jar, jar);
+	let curl = sprintf("curl -4 --interface %s -k -m 6 --connect-timeout 3 -sS --resolve \"portal.linkbroad.com:443:$pip\" -A %s -c %s -b %s", dev, shq(UA), jar, jar);
 	return join("\n", [
 		"rm -f " + jar,
 		"pip=$(nslookup -type=a -timeout=2 -retry=1 portal.linkbroad.com 127.0.0.1 2>/dev/null | awk '/^Name:/{f=1} f&&/^Address/{print $2; exit}')",

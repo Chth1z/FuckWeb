@@ -76,7 +76,7 @@ function snapshot(ctx, report, led_color) {
 				dev: s.dev, id: s.id, ip: s.ip ?? "", gw: s.gw ?? "",
 				subnet: s.subnet ?? "", iface: s.iface ?? "", role: s.role,
 				healthy: s.dev in healthy,
-				http: h.code ?? 0, ttfb: h.ttfb ?? 0,
+				http: h.code ?? 0, ttfb: h.ttfb ?? 0, loss: h.loss ?? 0,
 				parked: (h.parked ?? 0) > 0,
 			};
 		}),
@@ -127,6 +127,13 @@ function reconcile(ctx) {
 	}
 	else {
 		ctx.st.resync = 0;
+		if (ctx.want_rescan && !core.is_dry()) {
+			if ((ctx.st.rescan = (ctx.st.rescan ?? 0) + 1) <= 2)
+				kick();
+		}
+		else {
+			ctx.st.rescan = 0;
+		}
 	}
 
 	let report = doctor.run(ctx);

@@ -21,7 +21,7 @@ const STATUS = core.RUN + "/status.json";
 const DEBOUNCE_MS = 2000;
 const HISTORY = 720;                    // samples kept
 const PEAK_DECAY = 0.998;               // per sample
-const SETTLE = 1;                       // slot changes needed to trigger an update
+const SETTLE = 2;                       // slot changes needed to trigger an update
 const DEVICE_SCAN = 5;                  // look for devices every this many samples
 
 let cfg = config.load();

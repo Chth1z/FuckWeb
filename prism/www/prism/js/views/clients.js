@@ -23,6 +23,7 @@ const RULE_LABELS = {
   'tunnel-range': '強制IP段',
   'tunnel-domain': 'SmartDNS釘選',
   'domestic': '國內直連',
+  'domestic-domain': 'SmartDNS國內',
   'tunnel-port': '海外UDP端口',
   'rest-tunnel': '其餘→TW-HOME',
   'rest-direct': '其餘直連'
