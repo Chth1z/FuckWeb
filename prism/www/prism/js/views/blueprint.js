@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.4';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.4';
-import { write, call } from '../api.js?v=5.6.4';
+import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.5';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.5';
+import { write, call } from '../api.js?v=5.6.5';
 
 let drawerOpen = false;
 let rafId = null;
@@ -131,7 +131,7 @@ function drawLinkTag(ctx, x, y, text, rgb) {
   ctx.restore();
 }
 
-// Refracted 21-wavelength spectral dispersion bridge for same-column vertical module links
+// Parallel 21-wavelength spectral ribbon bridge for same-column vertical module links
 function drawRefractedVerticalBridge(ctx, topCard, botCard, waveSt, phaseOffset, tagText) {
   const y0 = topCard.bottom - 1;
   const y1 = botCard.y + 1;
@@ -140,16 +140,17 @@ function drawRefractedVerticalBridge(ctx, topCard, botCard, waveSt, phaseOffset,
 
   const cx = (topCard.cx + botCard.cx) * 0.5;
   const N = 21;
-  const topHalfW = 14;
-  const botHalfW = Math.min(27, 17 + Math.min(10, gap * 0.16));
+  const halfW = 27;
+  const ribbonW = halfW * 2;
+  const pitch = ribbonW / N;
   const g = Math.max(0.08, Math.min(1, waveSt?.glow ?? 0.10));
   const sat = 0.25 + 0.75 * g;
   const strands = S.status?.strands;
 
   ctx.save();
 
-  // Soft Gaussian outer atmospheric halo across the full dispersion fan
-  const auraGrad = ctx.createLinearGradient(cx - botHalfW - 10, 0, cx + botHalfW + 10, 0);
+  // Soft Gaussian outer atmospheric halo across the parallel spectrum band
+  const auraGrad = ctx.createLinearGradient(cx - halfW - 10, 0, cx + halfW + 10, 0);
   auraGrad.addColorStop(0, `rgba(${spectralColor(0, 7).rgb}, 0)`);
   for (let k = 0; k < 7; k++) {
     const u = 0.14 + (k / 6) * 0.72;
@@ -159,15 +160,9 @@ function drawRefractedVerticalBridge(ctx, topCard, botCard, waveSt, phaseOffset,
   auraGrad.addColorStop(1, `rgba(${spectralColor(6, 7).rgb}, 0)`);
 
   ctx.fillStyle = auraGrad;
-  ctx.beginPath();
-  ctx.moveTo(cx - topHalfW - 8, y0);
-  ctx.lineTo(cx + topHalfW + 8, y0);
-  ctx.lineTo(cx + botHalfW + 10, y1);
-  ctx.lineTo(cx - botHalfW - 10, y1);
-  ctx.closePath();
-  ctx.fill();
+  ctx.fillRect(cx - halfW - 10, y0, ribbonW + 20, gap);
 
-  // 21 individual wavelength filaments (700nm Red left -> 380nm Violet right)
+  // 21 strictly parallel wavelength filaments (700nm Red left -> 380nm Violet right)
   for (let i = 0; i < N; i++) {
     const sObj = Array.isArray(strands) && strands.length ? strands[i % strands.length] : null;
     const healthy = sObj ? sObj.healthy !== false : true;
@@ -177,16 +172,8 @@ function drawRefractedVerticalBridge(ctx, topCard, botCard, waveSt, phaseOffset,
 
     const col = spectralColor(i, N);
     const toneRgb = desatObsidianRgb(col.rgb, 0.28 + e * 0.72);
-    const f0 = (i / N) * 2 - 1;
-    const f1 = ((i + 1) / N) * 2 - 1;
-    const fMid = (f0 + f1) * 0.5;
-
-    const x0L = cx + f0 * topHalfW;
-    const x0R = cx + f1 * topHalfW;
-    const x1L = cx + f0 * botHalfW;
-    const x1R = cx + f1 * botHalfW;
-    const xMid0 = cx + fMid * topHalfW;
-    const xMid1 = cx + fMid * botHalfW;
+    const xL = cx - halfW + i * pitch;
+    const xMid = xL + pitch * 0.5;
 
     const ribGrad = ctx.createLinearGradient(0, y0, 0, y1);
     ribGrad.addColorStop(0.00, `rgba(${toneRgb}, ${(0.20 + e * 0.56).toFixed(3)})`);
@@ -194,39 +181,33 @@ function drawRefractedVerticalBridge(ctx, topCard, botCard, waveSt, phaseOffset,
     ribGrad.addColorStop(1.00, `rgba(${toneRgb}, ${(0.22 + e * 0.58).toFixed(3)})`);
 
     ctx.fillStyle = ribGrad;
-    ctx.beginPath();
-    ctx.moveTo(x0L, y0);
-    ctx.lineTo(x0R, y0);
-    ctx.lineTo(x1R, y1);
-    ctx.lineTo(x1L, y1);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillRect(xL, y0, pitch + 0.15, gap);
 
     if (healthy && e > 0.28) {
       ctx.strokeStyle = `rgba(${col.rgb}, ${(e * 0.20).toFixed(3)})`;
       ctx.lineWidth = 2.8 + e * 2.4;
       ctx.beginPath();
-      ctx.moveTo(xMid0, y0);
-      ctx.lineTo(xMid1, y1);
+      ctx.moveTo(xMid, y0);
+      ctx.lineTo(xMid, y1);
       ctx.stroke();
     }
 
     ctx.strokeStyle = `rgba(${mixWhiteRgb(toneRgb, e * 0.52)}, ${(0.20 + e * 0.68).toFixed(3)})`;
     ctx.lineWidth = healthy ? (0.85 + e * 1.15) : 0.5;
     ctx.beginPath();
-    ctx.moveTo(xMid0, y0);
-    ctx.lineTo(xMid1, y1);
+    ctx.moveTo(xMid, y0);
+    ctx.lineTo(xMid, y1);
     ctx.stroke();
 
     if (healthy && (e > 0.22 || g > 0.14)) {
       ctx.strokeStyle = makeFlowShimmerGradient(
-        ctx, xMid0, y0, xMid1, y1, waveSt, phaseOffset + i * 0.015,
+        ctx, xMid, y0, xMid, y1, waveSt, phaseOffset + i * 0.015,
         mixWhiteRgb(col.rgb, 0.55), 0.22 + e * 0.46
       );
       ctx.lineWidth = 1.0 + e * 1.1;
       ctx.beginPath();
-      ctx.moveTo(xMid0, y0);
-      ctx.lineTo(xMid1, y1);
+      ctx.moveTo(xMid, y0);
+      ctx.lineTo(xMid, y1);
       ctx.stroke();
     }
   }
