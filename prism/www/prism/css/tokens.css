@@ -23,32 +23,38 @@
   --text-secondary:#8c9ab5;
   --text-muted:    #58657e;
 
-  /* Luminous Spectral Accents */
+  /* Luminous Spectral Accents (Unified 圖1 Soft Bloom Palette) */
   --c-amber:       #eb9a5e;
+  --c-amber-rgb:   235, 154, 94;
   --c-amber-dim:   rgba(235, 154, 94, 0.14);
-  --c-amber-glow:  rgba(235, 154, 94, 0.34);
+  --c-amber-glow:  rgba(235, 154, 94, 0.42);
 
   --c-mint:        #57d192;
+  --c-mint-rgb:    87, 209, 146;
   --c-mint-bar:    #57d192;
   --c-mint-dim:    rgba(87, 209, 146, 0.14);
-  --c-mint-glow:   rgba(87, 209, 146, 0.34);
+  --c-mint-glow:   rgba(87, 209, 146, 0.44);
 
   --c-blue:        #64aef5;
+  --c-blue-rgb:    100, 174, 245;
   --c-blue-bar:    #64aef5;
   --c-blue-dim:    rgba(100, 174, 245, 0.15);
-  --c-blue-glow:   rgba(100, 174, 245, 0.36);
+  --c-blue-glow:   rgba(100, 174, 245, 0.46);
 
   --c-violet:      #aa8ef0;
+  --c-violet-rgb:  170, 142, 240;
   --c-violet-dim:  rgba(170, 142, 240, 0.15);
-  --c-violet-glow: rgba(170, 142, 240, 0.36);
+  --c-violet-glow: rgba(170, 142, 240, 0.46);
 
   --c-gold:        #f0ca68;
+  --c-gold-rgb:    240, 202, 104;
   --c-gold-dim:    rgba(240, 202, 104, 0.14);
-  --c-gold-glow:   rgba(240, 202, 104, 0.32);
+  --c-gold-glow:   rgba(240, 202, 104, 0.40);
 
   --c-crimson:     #e66c78;
+  --c-crimson-rgb: 230, 108, 120;
   --c-crimson-dim: rgba(230, 108, 120, 0.14);
-  --c-crimson-glow:rgba(230, 108, 120, 0.34);
+  --c-crimson-glow:rgba(230, 108, 120, 0.42);
 
   /* Typography */
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'SF Mono', 'Consolas', 'Noto Sans Mono CJK TC', monospace;
@@ -91,7 +97,7 @@
 }
 
 html, body {
-  min-height: 100%;
+  height: 100%;
   background: var(--bg-void);
   color: var(--text-primary);
   font-family: var(--font-mono);

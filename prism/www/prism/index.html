@@ -6,10 +6,10 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>PRISM v5.1.0 · Optical Spectrum &amp; Privacy Router</title>
-  <link rel="stylesheet" href="css/tokens.css?v=5.1.0">
-  <link rel="stylesheet" href="css/layout.css?v=5.1.0">
-  <link rel="stylesheet" href="css/components.css?v=5.1.0">
+  <title>PRISM v5.3.0 · Optical Spectrum &amp; Privacy Router</title>
+  <link rel="stylesheet" href="css/tokens.css?v=5.3.0">
+  <link rel="stylesheet" href="css/layout.css?v=5.3.0">
+  <link rel="stylesheet" href="css/components.css?v=5.3.0">
 </head>
 <body>
   <div class="app-shell">
@@ -27,34 +27,34 @@
           </svg>
         </span>
         <span class="brand-name">PRISM</span>
-        <span class="brand-sub"><span id="hdr-ver">v5.1.0</span> · <span id="hdr-ip">192.168.16.1</span></span>
+        <span class="brand-sub"><span id="hdr-ver">v5.3.0</span> · <span id="hdr-ip">192.168.16.1</span></span>
       </div>
 
       <nav class="nav-tabs" aria-label="Primary">
-        <button class="nav-tab active" data-tab="overview">
+        <button type="button" class="nav-tab active" data-tab="overview">
           <span class="tab-idx">01</span><span>總覽</span>
         </button>
-        <button class="nav-tab" data-tab="blueprint">
+        <button type="button" class="nav-tab" data-tab="blueprint">
           <span class="tab-idx">02</span><span>藍圖</span>
         </button>
-        <button class="nav-tab" data-tab="spectrum">
+        <button type="button" class="nav-tab" data-tab="spectrum">
           <span class="tab-idx">03</span><span>光譜</span>
           <span id="n-strands" class="tab-badge">21</span>
         </button>
-        <button class="nav-tab" data-tab="clients">
+        <button type="button" class="nav-tab" data-tab="clients">
           <span class="tab-idx">04</span><span>終端與連接</span>
           <span id="n-devices" class="tab-badge">0</span>
         </button>
       </nav>
 
       <div class="topbar-right">
-        <span id="site-badge" class="c-sec" style="font-size:11.5px">SITE · —</span>
-        <span id="health-pill" class="st-badge charged" style="cursor:pointer" title="查看藍圖與體檢">DOCTOR · 檢查中</span>
-        <button id="btn-auth" class="btn-cmd">管理登入</button>
+        <span id="site-badge" class="c-sec" style="font-size:11px">SITE · —</span>
+        <span id="health-pill" class="st-badge charged" role="button" tabindex="0" style="cursor:pointer" title="查看藍圖與體檢">DOCTOR · 檢查中</span>
+        <button id="btn-auth" type="button" class="btn-cmd">管理登入</button>
       </div>
     </header>
 
-    <!-- Main Edge-to-Edge Content Workspace -->
+    <!-- Main Edge-to-Edge Content Workspace (Zero Page Vertical Scroll) -->
     <main class="main-stage">
 
       <!-- ================================================================
@@ -64,7 +64,6 @@
         <div class="dsotm-stage">
           <canvas id="topo"></canvas>
 
-          <!-- Top-Left Corner: Aggregate Optical Throughput -->
           <div class="corner-hud tl">
             <div id="ov-ver" class="corner-tag">PRISM v5.1.0 · DISPERSION FLUX</div>
             <div class="corner-rate-row">
@@ -78,7 +77,6 @@
             </div>
           </div>
 
-          <!-- Top-Right Corner: Spectrum Health & VIP 專線 -->
           <div class="corner-hud tr">
             <div class="corner-tag">SPECTRUM · @vip_lane</div>
             <div class="corner-sub">
@@ -93,7 +91,6 @@
             </div>
           </div>
 
-          <!-- Bottom-Left Corner: Incident Source (LAN Devices & Totals) -->
           <div class="corner-hud bl">
             <div class="corner-tag">INCIDENT WHITE BEAM</div>
             <div class="corner-sub">
@@ -108,7 +105,6 @@
             </div>
           </div>
 
-          <!-- Bottom-Right Corner: TW-HOME Cage & Refraction Law -->
           <div class="corner-hud br">
             <div class="corner-tag">TW-HOME PRIVACY CAGE</div>
             <div class="corner-sub">
@@ -130,20 +126,19 @@
            ================================================================ -->
       <section id="page-blueprint" class="page page-contained">
 
-        <!-- Slim Unified Legend & Pool Status Strip -->
         <div class="bp-compact-legend">
           <div class="legend-group">
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-amber)"></span><span>ingress · classify</span></span>
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-blue)"></span><span>@vip_lane · 遊戲專線</span></span>
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-violet)"></span><span>TW-HOME · Mihomo &amp; MPTCP</span></span>
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-mint)"></span><span>burst-harvest · 21 光譜織網</span></span>
+            <span class="legend-item"><span class="legend-sq" style="background:var(--c-amber);box-shadow:0 0 8px var(--c-amber)"></span><span>ingress · classify</span></span>
+            <span class="legend-item"><span class="legend-sq" style="background:var(--c-blue);box-shadow:0 0 8px var(--c-blue)"></span><span>@vip_lane · 遊戲專線</span></span>
+            <span class="legend-item"><span class="legend-sq" style="background:var(--c-violet);box-shadow:0 0 8px var(--c-violet)"></span><span>TW-HOME · Mihomo &amp; weave_out</span></span>
+            <span class="legend-item"><span class="legend-sq" style="background:var(--c-mint);box-shadow:0 0 8px var(--c-mint)"></span><span>burst-harvest · 21 光譜織網</span></span>
           </div>
           <span id="bp-mptcp-badge" class="st-badge vip">MPTCP · checking</span>
         </div>
 
         <div class="blueprint-stage">
 
-          <!-- Left Column: PRISM_GUARD + Session Log Stacked -->
+          <!-- Left Rail: PRISM_GUARD + Full-Height Session Log -->
           <div class="blueprint-left-col">
             <aside class="s-box violet guard-panel">
               <div class="guard-head">
@@ -169,9 +164,8 @@
               </div>
             </aside>
 
-            <!-- Session Log Placed Cleanly on Left Under PRISM_GUARD -->
             <div class="s-box session-log-panel">
-              <div class="panel-head" style="margin-bottom:6px;padding-bottom:6px">
+              <div class="panel-head" style="margin-bottom:5px;padding-bottom:5px">
                 <span class="panel-title c-sec">SESSION LOG</span>
                 <span id="log-count" class="c-muted" style="font-size:10.5px">—</span>
               </div>
@@ -179,123 +173,114 @@
             </div>
           </div>
 
-          <!-- Right Expanded Architecture Flow Pipeline -->
-          <div class="blueprint-pipeline">
+          <!-- Right Expanded Architecture Diagram + Measured Optical Waveguides -->
+          <div id="bp-pipeline" class="blueprint-pipeline">
+            <canvas id="bp-flow-canvas" class="bp-flow-canvas"></canvas>
 
-            <!-- Stage 1: Ingress, SmartDNS & Nftables Classify Split (Integrated 圖7) -->
-            <div class="s-box amber" style="width:100%">
-              <div class="bp-node-head">
-                <div>
-                  <span style="font-weight:700;color:var(--c-amber);font-size:13.5px">LAN INGRESS · NFTABLES CLASSIFY</span>
-                  <span class="c-sec" style="font-size:11px;margin-left:8px">prerouting → @dev_policy → SmartDNS :6053 → classify</span>
-                </div>
-                <span id="bp-ingress-rate" class="bp-live-rate c-bright">0 Mbps</span>
-              </div>
-
-              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:4px 0">
-                <div style="display:flex;align-items:center;gap:8px">
-                  <span class="c-sec" style="font-size:11px">harvest</span>
-                  <span id="bp-harvest-meter" class="seg-meter"></span>
-                  <span id="bp-harvest-txt" class="c-gold" style="font-size:11px">harvest</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                  <div id="site-mode-seg" class="seg-group">
-                    <button class="seg-btn" data-mode="auto">auto</button>
-                    <button class="seg-btn" data-mode="on">強制聚匯</button>
-                    <button class="seg-btn" data-mode="off">單線</button>
+            <!-- Tier 1: Guard Gate + Nftables Classify Engine (README Architecture) -->
+            <div class="bp-tier1-row">
+              <div id="bp-card-pregate" class="s-box amber bp-stage-card">
+                <div class="bp-node-head" style="margin-bottom:4px">
+                  <div>
+                    <div style="font-weight:700;color:var(--c-amber);font-size:12px">PRE-GATE · QUIC / DNS</div>
+                    <div class="c-sec" style="font-size:10px">@dev_block · UDP:443 1ms 回退 TCP</div>
                   </div>
-                  <button id="site-mem-btn" class="btn-cmd">記住站點</button>
+                  <span id="bp-quic-pkts" class="bp-live-rate c-amber" style="font-size:12.5px">0 pkts</span>
+                </div>
+                <div class="bp-meta-line" style="margin-top:3px">
+                  <span id="bp-dns-st">SmartDNS :6053 · cn: 0 · tun: 0</span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;flex-wrap:wrap">
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <span id="bp-harvest-meter" class="seg-meter"></span>
+                    <span id="bp-harvest-txt" class="c-gold" style="font-size:10px">harvest</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <div id="site-mode-seg" class="seg-group" aria-label="站點聚匯模式">
+                      <button type="button" class="seg-btn" data-mode="auto">auto</button>
+                      <button type="button" class="seg-btn" data-mode="on">聚匯</button>
+                      <button type="button" class="seg-btn" data-mode="off">單線</button>
+                    </div>
+                    <button id="site-mem-btn" type="button" class="btn-cmd" style="padding:3px 7px;font-size:10px">記住站點</button>
+                  </div>
                 </div>
               </div>
 
-              <div class="bp-meta-line">
-                <span id="bp-dns-st">SmartDNS :6053 · domestic4: 0 · domestic4_dns: 0 · tunnel4_dns: 0</span>
-                <span id="bp-ingress-pkts">classify: 0 pkts</span>
+              <div id="bp-card-ingress" class="s-box amber bp-stage-card">
+                <div class="bp-node-head" style="margin-bottom:3px">
+                  <div>
+                    <span style="font-weight:700;color:var(--c-amber);font-size:12.5px">NFTABLES CLASSIFY ENGINE</span>
+                    <span class="c-sec" style="font-size:10px;margin-left:8px">prerouting → @dev_policy → 分流決策</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span id="bp-ingress-pkts" class="c-sec" style="font-size:10.5px">0 pkts</span>
+                    <span id="bp-ingress-rate" class="bp-live-rate c-bright">0 Mbps</span>
+                  </div>
+                </div>
+                <div id="bp-classify-grid" class="classify-strip" style="margin-top:4px;padding-top:6px"></div>
               </div>
-
-              <!-- Live nftables Classification Counters (Moved Cleanly from Tab 04) -->
-              <div id="bp-classify-grid" class="classify-strip"></div>
             </div>
 
-            <!-- Optical Waveguide Fork: Continuous Flowing Light-Ribbons (圖5) -->
-            <svg id="bp-fork-svg" class="fork-svg" viewBox="0 0 900 58" preserveAspectRatio="none">
-              <path class="bp-conduit-base" d="M 450,0 L 450,24 L 146,24 L 146,58"/>
-              <path class="bp-conduit-base" d="M 450,0 L 450,58"/>
-              <path class="bp-conduit-base" d="M 450,0 L 450,24 L 754,24 L 754,58"/>
+            <div class="bp-gap-spacer" aria-hidden="true"></div>
 
-              <path id="halo-f0" class="bp-ribbon-halo" stroke="#64aef5" pathLength="100" d="M 450,0 L 450,24 L 146,24 L 146,58"/>
-              <path id="core-f0" class="bp-ribbon-core" stroke="#64aef5" pathLength="100" d="M 450,0 L 450,24 L 146,24 L 146,58"/>
-              <path id="band-f0" class="bp-ribbon-band" stroke="#64aef5" pathLength="100" d="M 450,0 L 450,24 L 146,24 L 146,58"/>
-              <path id="crest-f0" class="bp-ribbon-crest" pathLength="100" d="M 450,0 L 450,24 L 146,24 L 146,58"/>
-
-              <path id="halo-f1" class="bp-ribbon-halo" stroke="#aa8ef0" pathLength="100" d="M 450,0 L 450,58"/>
-              <path id="core-f1" class="bp-ribbon-core" stroke="#aa8ef0" pathLength="100" d="M 450,0 L 450,58"/>
-              <path id="band-f1" class="bp-ribbon-band" stroke="#aa8ef0" pathLength="100" d="M 450,0 L 450,58"/>
-              <path id="crest-f1" class="bp-ribbon-crest" pathLength="100" d="M 450,0 L 450,58"/>
-
-              <path id="halo-f2" class="bp-ribbon-halo" stroke="#57d192" pathLength="100" d="M 450,0 L 450,24 L 754,24 L 754,58"/>
-              <path id="core-f2" class="bp-ribbon-core" stroke="#57d192" pathLength="100" d="M 450,0 L 450,24 L 754,24 L 754,58"/>
-              <path id="band-f2" class="bp-ribbon-band" stroke="#57d192" pathLength="100" d="M 450,0 L 450,24 L 754,24 L 754,58"/>
-              <path id="crest-f2" class="bp-ribbon-crest" pathLength="100" d="M 450,0 L 450,24 L 754,24 L 754,58"/>
-            </svg>
-
-            <!-- Stage 2: 3 Real Processing & Routing Engines -->
+            <!-- Tier 2: 3 Real Processing Engines + Cross-Inject Waveguide (TW-HOME -> weave_out -> Burst-Harvest) -->
             <div class="blueprint-subnodes">
-              <!-- Branch 0: @vip_lane -->
-              <div class="s-box blue bp-subnode-card">
+              <div id="bp-card-vip" class="s-box blue bp-subnode-card bp-stage-card">
                 <div>
                   <div class="bp-node-head">
                     <div>
-                      <div style="font-weight:700;color:var(--c-blue);white-space:nowrap">@vip_lane · 專線</div>
-                      <div class="c-sec" style="font-size:10.5px">mark 0x100 · low-RTT</div>
+                      <div style="font-weight:700;color:var(--c-blue);white-space:nowrap">@vip_lane · 電競/實時專線</div>
+                      <div class="c-sec" style="font-size:10px">mark 0x100 · 非80/443 UDP/DNS/SSH</div>
                     </div>
                     <span id="bp-vip-rate" class="bp-live-rate c-blue">0 bps</span>
                   </div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px">
                     <span id="bp-vip-meter" class="seg-meter"></span>
                     <strong id="bp-vip-pct" class="c-bright">—</strong>
                   </div>
-                  <div id="bp-vip-desc" class="c-sec" style="font-size:11px">—</div>
+                  <div id="bp-vip-desc" class="c-sec" style="font-size:10.5px">—</div>
+                  <div class="c-muted" style="font-size:10px;margin-top:3px">單流 &gt;50MB 自動退回 @pattern · 0% 網關丟包</div>
                 </div>
-                <div style="margin-top:8px;display:flex;align-items:center;gap:6px;font-size:11px">
+                <div style="margin-top:6px;display:flex;align-items:center;gap:6px;font-size:10.5px">
                   <span class="run-dot"></span>
                   <span id="bp-vip-st" class="c-blue">standby</span>
                 </div>
               </div>
 
-              <!-- Branch 1: TW-HOME Mihomo TProxy + MPTCP Pool + Zashboard Button -->
-              <div class="s-box violet bp-subnode-card">
+              <div id="bp-card-tun" class="s-box violet bp-subnode-card bp-stage-card">
                 <div>
                   <div class="bp-node-head">
                     <div>
-                      <div style="font-weight:700;color:var(--c-violet)">TW-HOME · Mihomo</div>
-                      <div class="c-sec" style="font-size:10.5px">TProxy :61235 · @tunnel4</div>
+                      <div style="font-weight:700;color:var(--c-violet)">TW-HOME · 台灣家寬零跳變籠</div>
+                      <div class="c-sec" style="font-size:10px">TProxy :61235 · @tunnel4 &amp; 海外全閉鎖</div>
                     </div>
                     <span id="bp-tun-rate" class="bp-live-rate c-violet">0 bps</span>
                   </div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
                     <span id="bp-tun-meter" class="seg-meter"></span>
                     <strong id="bp-tun-pct" class="c-bright">0%</strong>
                   </div>
-                  <div id="bp-tun-desc" class="c-sec" style="font-size:11px">—</div>
-                  <div id="bp-tun-mptcp" class="c-muted" style="font-size:10.5px;margin-top:3px">MPTCP —</div>
+                  <div id="bp-tun-desc" class="c-sec" style="font-size:10.5px">—</div>
+                  <div id="bp-tun-chain" class="relay-mini-list">
+                    <div id="bp-tun-mptcp" class="c-bright">MPTCP —</div>
+                    <div class="c-muted">備援鏈: JP-Lightsail → 台灣家寬 (同IP)</div>
+                  </div>
                 </div>
-                <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px">
+                <div style="margin-top:5px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px">
                   <span style="display:inline-flex;align-items:center;gap:6px">
                     <span class="run-dot violet"></span>
                     <span id="bp-tun-st" class="c-violet">checking...</span>
                   </span>
-                  <a id="zashboard-link" href="#" target="_blank" rel="noopener" class="btn-cmd violet" style="padding:2px 8px;font-size:10.5px">Zashboard ↗</a>
+                  <a id="zashboard-link" href="#" target="_blank" rel="noopener noreferrer" class="btn-cmd violet" style="padding:2px 8px;font-size:10.5px">Zashboard ↗</a>
                 </div>
               </div>
 
-              <!-- Branch 2: Domestic Direct + Burst-Harvest 21-Strand Weave + Live Mini Spectrum -->
-              <div class="s-box mint bp-subnode-card">
+              <div id="bp-card-dom" class="s-box mint bp-subnode-card bp-stage-card">
                 <div>
                   <div class="bp-node-head">
                     <div>
-                      <div style="font-weight:700;color:var(--c-mint)">Burst-Harvest · @pattern</div>
-                      <div class="c-sec" style="font-size:10.5px">@domestic4 · 126-slot weave</div>
+                      <div style="font-weight:700;color:var(--c-mint)">Burst-Harvest 2.0 · 收割池</div>
+                      <div class="c-sec" style="font-size:10px">@domestic4 &amp; weave_out · 126槽 ISWRR</div>
                     </div>
                     <span id="bp-dom-rate" class="bp-live-rate c-mint">0 bps</span>
                   </div>
@@ -304,155 +289,127 @@
                     <strong id="bp-dom-pct" class="c-bright">0%</strong>
                   </div>
                   <div id="bp-mini-spectrum" class="mini-spectrum-bar" title="21-Wavelength Real-Time Charge"></div>
-                  <div id="bp-dom-desc" class="c-sec" style="font-size:11px">0/21 滿桶 · 126 slots</div>
+                  <div id="bp-dom-desc" class="c-sec" style="font-size:10.5px">0/21 滿桶 · 126 slots</div>
                 </div>
-                <div style="margin-top:6px;display:flex;align-items:center;gap:6px;font-size:11px">
+                <div style="margin-top:5px;display:flex;align-items:center;gap:6px;font-size:10.5px">
                   <span class="run-dot mint"></span>
                   <span id="bp-dom-st" class="c-mint">harvest ready</span>
                 </div>
               </div>
             </div>
 
-            <!-- Optical Waveguide Merge: Continuous Flowing Light-Ribbons -> 3-Band HTB QoS -->
-            <svg id="bp-merge-svg" class="fork-svg" viewBox="0 0 900 58" preserveAspectRatio="none">
-              <path class="bp-conduit-base" d="M 146,0 L 146,30 L 450,30 L 450,58"/>
-              <path class="bp-conduit-base" d="M 450,0 L 450,58"/>
-              <path class="bp-conduit-base" d="M 754,0 L 754,30 L 450,30 L 450,58"/>
+            <div class="bp-gap-spacer" aria-hidden="true"></div>
 
-              <path id="halo-m0" class="bp-ribbon-halo" stroke="#64aef5" pathLength="100" d="M 146,0 L 146,30 L 450,30 L 450,58"/>
-              <path id="core-m0" class="bp-ribbon-core" stroke="#64aef5" pathLength="100" d="M 146,0 L 146,30 L 450,30 L 450,58"/>
-              <path id="band-m0" class="bp-ribbon-band" stroke="#64aef5" pathLength="100" d="M 146,0 L 146,30 L 450,30 L 450,58"/>
-              <path id="crest-m0" class="bp-ribbon-crest" pathLength="100" d="M 146,0 L 146,30 L 450,30 L 450,58"/>
-
-              <path id="halo-m1" class="bp-ribbon-halo" stroke="#aa8ef0" pathLength="100" d="M 450,0 L 450,58"/>
-              <path id="core-m1" class="bp-ribbon-core" stroke="#aa8ef0" pathLength="100" d="M 450,0 L 450,58"/>
-              <path id="band-m1" class="bp-ribbon-band" stroke="#aa8ef0" pathLength="100" d="M 450,0 L 450,58"/>
-              <path id="crest-m1" class="bp-ribbon-crest" pathLength="100" d="M 450,0 L 450,58"/>
-
-              <path id="halo-m2" class="bp-ribbon-halo" stroke="#57d192" pathLength="100" d="M 754,0 L 754,30 L 450,30 L 450,58"/>
-              <path id="core-m2" class="bp-ribbon-core" stroke="#57d192" pathLength="100" d="M 754,0 L 754,30 L 450,30 L 450,58"/>
-              <path id="band-m2" class="bp-ribbon-band" stroke="#57d192" pathLength="100" d="M 754,0 L 754,30 L 450,30 L 450,58"/>
-              <path id="crest-m2" class="bp-ribbon-crest" pathLength="100" d="M 754,0 L 754,30 L 450,30 L 450,58"/>
-            </svg>
-
-            <!-- Stage 3: 3-Band HTB QoS & Actions -->
-            <div class="s-box gold" style="width:100%">
-              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-                <div>
-                  <div style="font-weight:700;color:var(--c-gold)">3-BAND HTB QoS &amp; KERNEL VERIFY</div>
-                  <div id="bp-qos-tags" class="c-sec" style="font-size:11px;margin-top:2px">
-                    1:10 ACK/DNS/ICMP · 1:20 @vip_lane/Game · 1:30 Bulk/Cage · fw4 persist
+            <!-- Tier 3: 3-Band HTB QoS Engine -> Physical 21-Uplink NAT Dispatch -->
+            <div class="bp-tier3-row">
+              <div id="bp-card-qos" class="s-box gold bp-stage-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                  <span style="font-weight:700;color:var(--c-gold);font-size:12px">3-BAND DIFFSERV HTB + FQ_CODEL</span>
+                  <span class="c-muted" style="font-size:10px">wan + br-lan · ACK ≤128B 優先插隊</span>
+                </div>
+                <div class="qos-band-row">
+                  <div class="qos-band-chip" style="--qb-rgb:100,174,245">
+                    <span class="c-blue" style="font-weight:700;font-size:10.5px">1:10 · Prio0 (2ms)</span>
+                    <span class="c-sec" style="font-size:10px">遊戲UDP / SYN / DNS</span>
                   </div>
-                  <div id="bp-verify-summary" class="c-muted" style="font-size:11px;margin-top:2px">
+                  <div class="qos-band-chip" style="--qb-rgb:87,209,146">
+                    <span class="c-mint" style="font-weight:700;font-size:10.5px">1:20 · Prio1 (&lt;4MB)</span>
+                    <span class="c-sec" style="font-size:10px">網頁 / 4K 分片突發</span>
+                  </div>
+                  <div class="qos-band-chip" style="--qb-rgb:235,154,94">
+                    <span class="c-amber" style="font-weight:700;font-size:10.5px">1:30 · Prio2 (≥4MB)</span>
+                    <span class="c-sec" style="font-size:10px">大流持續下載</span>
+                  </div>
+                </div>
+              </div>
+
+              <div id="bp-card-uplink" class="s-box mint bp-stage-card" style="display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+                    <span style="font-weight:700;color:var(--c-mint);font-size:12px">21-UPLINK NAT &amp; OPS</span>
+                    <span class="c-muted" style="font-size:10px">fw4 persist</span>
+                  </div>
+                  <div id="bp-verify-summary" class="c-sec" style="font-size:10.5px;margin-top:3px">
                     checking system state...
                   </div>
                 </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <button id="btn-reconcile" class="btn-cmd primary">prism apply</button>
-                  <button id="btn-relogin" class="btn-cmd">portal 重登</button>
-                  <button id="btn-toggle-sys" class="btn-cmd">體檢與 UCI 參數 ▾</button>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                  <button id="btn-reconcile" type="button" class="btn-cmd primary">prism apply</button>
+                  <button id="btn-relogin" type="button" class="btn-cmd">portal 重登</button>
+                  <button id="btn-toggle-sys" type="button" class="btn-cmd">體檢與 UCI 參數</button>
                 </div>
               </div>
             </div>
 
           </div>
         </div>
-
-        <!-- Collapsible Doctor Invariants + UCI Params -->
-        <div id="bp-sys-drawer" style="display:none;flex-direction:column;gap:14px">
-          <div class="s-box violet">
-            <div class="panel-head">
-              <span class="panel-title c-violet">DOCTOR · LIVE SYSTEM INVARIANTS</span>
-              <span id="doctor-cap" class="c-sec" style="font-size:11.5px">—</span>
-            </div>
-            <div id="doctor-list" class="doctor-grid"></div>
-          </div>
-
-          <div class="bp-split-2">
-            <div class="s-box amber">
-              <div class="c-amber" style="font-weight:700;margin-bottom:8px">核心架構鎖定項 (IMMUTABLE)</div>
-              <div id="locked-panel"></div>
-            </div>
-            <div class="s-box mint">
-              <div class="c-mint" style="font-weight:700;margin-bottom:8px">運行時可調參數 (UCI)</div>
-              <div id="config-panel"></div>
-            </div>
-          </div>
-        </div>
-
       </section>
 
       <!-- ================================================================
-           PAGE 03: OPTICAL EMISSION HEATMAP, OSCILLOSCOPE & 21-CH LIST
+           PAGE 03: PURE BORDERLESS SQUARE HEATMAP + FULL-HEIGHT OSCILLOSCOPE
            ================================================================ -->
       <section id="page-spectrum" class="page page-contained">
         <div class="spectrum-stage">
 
-          <!-- Left Stacked Charts: Top Optical Heatmap + Bottom Oscilloscope -->
-          <div class="spectrum-left-col">
-
-            <!-- Top-Left: Glow-Intensity Optical Heatmap + 126-Slot Timeline -->
-            <div class="s-box amber">
-              <div class="panel-head">
+          <!-- Left Column: Pure Borderless Square Heatmap + Focused Strand Bar + 126 Slots -->
+          <div class="s-box amber spectrum-left-panel">
+            <div>
+              <div class="panel-head" style="margin-bottom:6px;padding-bottom:6px">
                 <div>
-                  <span class="panel-title c-amber">21-WAVELENGTH EMISSION HEATMAP</span>
-                  <span id="weave-cap" class="c-sec" style="font-size:11px;margin-left:8px">126 slots</span>
+                  <span class="panel-title c-amber">21-WAVELENGTH EMISSION MATRIX</span>
+                  <span id="weave-cap" class="c-sec" style="font-size:10.5px;margin-left:8px">126 slots</span>
                 </div>
-                <span class="c-muted" style="font-size:10.5px">發光強度 = 實時脈衝熱力</span>
+                <span class="c-muted" style="font-size:10px">點擊鎖定 / 懸停預覽</span>
+              </div>
+              <div id="spectrum-heatmap" class="heatmap-grid" role="grid" aria-label="21 波長實時發光強度矩陣"></div>
+            </div>
+
+            <!-- Selected / Hovered Channel Live Telemetry Strip (Replaces Redundant Right Table) -->
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div id="spec-inspector" class="spec-inspector-bar">
+                <div class="spec-inspector-head">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span id="insp-swatch" style="display:inline-block;width:9px;height:9px;background:var(--c-mint);box-shadow:0 0 10px var(--c-mint)"></span>
+                    <strong id="insp-title" class="c-bright" style="font-size:12px">全光譜 21 通道待機</strong>
+                    <span id="insp-badge" class="st-badge charged">READY</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span id="insp-ip" class="c-muted" style="font-size:10.5px">—</span>
+                    <button id="insp-unpin" type="button" class="btn-cmd" style="display:none;padding:1px 6px;font-size:10px">取消鎖定 ✕</button>
+                  </div>
+                </div>
+                <div class="spec-inspector-metrics">
+                  <div class="spec-m-cell"><span class="k">實時下行 / 上行</span><span id="insp-rate" class="v c-mint">—</span></div>
+                  <div class="spec-m-cell"><span class="k">歷史峰值</span><span id="insp-peak" class="v c-blue">—</span></div>
+                  <div class="spec-m-cell"><span class="k">純網路 τ / 丟包</span><span id="insp-rtt" class="v c-bright">—</span></div>
+                  <div class="spec-m-cell"><span class="k">令牌桶 · 槽位</span><span id="insp-tok" class="v c-amber">—</span></div>
+                </div>
               </div>
 
-              <div id="spectrum-heatmap" class="heatmap-grid"></div>
-
               <div class="heatmap-legend">
-                <span>700nm ──▶ 380nm · 暗=滿桶待命 · 光暈=實時高載</span>
+                <span>700nm ──▶ 380nm · 無底色干擾 · 光暈強度 = 實時脈衝</span>
                 <span class="math-formula">Wᵢ ∝ (Bᵢ/Bᶜ)²·(1+0.35Δτᵢ)⁻¹</span>
               </div>
               <div id="pattern" class="slot-ribbon"></div>
             </div>
+          </div>
 
-            <!-- Bottom-Left: Dual-Channel Optical Flux Oscilloscope -->
-            <div class="s-box blue" style="flex:1;display:flex;flex-direction:column;justify-content:space-between">
-              <div class="panel-head">
-                <span class="panel-title c-blue">OPTICAL FLUX OSCILLOSCOPE</span>
-                <div id="chart-range" class="seg-group">
-                  <button class="seg-btn" data-limit="150">5m</button>
-                  <button class="seg-btn on" data-limit="360">12m</button>
-                  <button class="seg-btn" data-limit="720">24m</button>
+          <!-- Right Full-Height Column: Spacious Dual-Channel Optical Flux Oscilloscope Studio -->
+          <div class="spectrum-right-col">
+            <div class="s-box blue spec-scope-panel">
+              <div class="panel-head" style="margin-bottom:4px;padding-bottom:6px">
+                <span class="panel-title c-blue">OPTICAL FLUX OSCILLOSCOPE · 實時總量與上行波形</span>
+                <div id="chart-range" class="seg-group" aria-label="示波器時間窗">
+                  <button type="button" class="seg-btn" data-limit="150">5m</button>
+                  <button type="button" class="seg-btn on" data-limit="360">12m</button>
+                  <button type="button" class="seg-btn" data-limit="720">24m</button>
                 </div>
               </div>
-              <div class="scope-box" style="flex:1;min-height:190px">
-                <svg id="chart" viewBox="0 0 900 210" preserveAspectRatio="none"></svg>
+              <div class="scope-box">
+                <svg id="chart" viewBox="0 0 900 260" preserveAspectRatio="none"></svg>
                 <div id="tip" class="topo-tooltip"></div>
               </div>
               <div id="scope-buckets" class="bucket-summary-strip"></div>
-            </div>
-
-          </div>
-
-          <!-- Right Full-Height Column: Complete 21-Strand Telemetry List -->
-          <div class="spectrum-right-col">
-            <div class="s-box mint spec-right-panel">
-              <div class="panel-head">
-                <span class="panel-title c-mint">STRAND TELEMETRY · 21 CHANNELS</span>
-                <span class="c-muted" style="font-size:11px">1.0 MB burst · loss · τ_net</span>
-              </div>
-              <div class="table-wrap spec-table-scroll">
-                <table class="bp-table compact">
-                  <thead>
-                    <tr>
-                      <th>波長</th>
-                      <th>狀態</th>
-                      <th class="num">τ / 丟包</th>
-                      <th class="num">下行</th>
-                      <th class="num">上行</th>
-                      <th class="num">峰值</th>
-                      <th>令牌桶</th>
-                      <th class="num">槽位</th>
-                    </tr>
-                  </thead>
-                  <tbody id="strands-tbody"></tbody>
-                </table>
-              </div>
             </div>
           </div>
 
@@ -460,27 +417,35 @@
       </section>
 
       <!-- ================================================================
-           PAGE 04: LEFT-RIGHT SECONDARY MENU · TERMINALS & LIVE FLOWS
+           PAGE 04: WIDE MERGED DEVICE POLICY MATRIX LEFT + FULL CONNECTIONS RIGHT
            ================================================================ -->
       <section id="page-clients" class="page page-contained">
         <div class="clients-stage">
 
-          <!-- Left Secondary Navigation Rail -->
+          <!-- Wide Left Rail: Merged Terminal List + Sort Mode + Non-Closing Policy Matrix -->
           <aside class="s-box violet dev-menu-panel">
-            <div class="panel-head">
-              <span class="panel-title c-violet">終端列表 · LAN</span>
+            <div class="panel-head" style="margin-bottom:6px;padding-bottom:6px">
+              <span class="panel-title c-violet">終端列表與分流矩陣 · LAN</span>
               <span id="clients-online-cnt" class="c-mint" style="font-size:11px">0 在線</span>
             </div>
 
-            <input id="dev-menu-q" class="bp-input" type="search" placeholder="篩選設備 / IP / MAC..." style="width:100%;margin-bottom:8px">
+            <div class="dev-toolbar">
+              <input id="dev-menu-q" class="bp-input" type="search" placeholder="篩選設備 / IP / MAC..." aria-label="篩選終端" style="flex:1;min-width:120px">
+              <div id="dev-sort-seg" class="seg-group" title="終端排序方式" aria-label="終端排序方式">
+                <button type="button" class="seg-btn on" data-sort="stable">固定</button>
+                <button type="button" class="seg-btn" data-sort="rate">速率</button>
+                <button type="button" class="seg-btn" data-sort="flows">流數</button>
+                <button type="button" class="seg-btn" data-sort="ip">IP</button>
+              </div>
+            </div>
 
-            <button id="dev-nav-all" class="dev-nav-item active" type="button">
+            <button id="dev-nav-all" class="dev-nav-item active" type="button" style="gap:3px;flex-shrink:0">
               <div class="dev-nav-top">
-                <span class="dev-nav-name">全部終端總覽 · ALL</span>
+                <span class="dev-nav-name">全部終端總覽 · ALL TERMINALS</span>
                 <span id="dev-all-rate" class="c-mint" style="font-size:11px">0 bps</span>
               </div>
               <div class="dev-nav-sub">
-                <span>全局設備策略 &amp; 所有連接</span>
+                <span>顯示全部終端實時連接與聚合速率</span>
                 <span id="dev-all-flows" class="c-blue">0 流</span>
               </div>
             </button>
@@ -488,71 +453,24 @@
             <div id="dev-menu-list" class="dev-menu-list"></div>
           </aside>
 
-          <!-- Right Workspace: Device Overview Matrix / Selected Device Control + Filtered Live Flows -->
+          <!-- Right Full-Height Column: Live Active Connections Explorer -->
           <div class="clients-right-col">
-
-            <!-- View A: All Devices Matrix (Shown when ALL selected) -->
-            <div id="clients-all-panel" class="s-box">
+            <div class="s-box blue" style="flex:1;height:100%;display:flex;flex-direction:column;min-height:0">
               <div class="panel-head">
-                <span class="panel-title c-bright">LAN TERMINALS · DEVICE POLICY MATRIX</span>
-                <span class="c-muted" style="font-size:11px">點擊左側終端或設備名稱查看單設備實時連接</span>
-              </div>
-              <div class="table-wrap" style="max-height:260px;overflow-y:auto">
-                <table class="bp-table compact sticky">
-                  <thead>
-                    <tr>
-                      <th>終端名稱 (MAC)</th>
-                      <th>接入</th>
-                      <th>IP 地址</th>
-                      <th class="num">實時下行</th>
-                      <th class="num">實時上行</th>
-                      <th>分流策略</th>
-                    </tr>
-                  </thead>
-                  <tbody id="devices-tbody"></tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- View B: Focused Single-Device Detail & Instant Policy Switch (Shown when a device selected) -->
-            <div id="clients-dev-panel" class="s-box amber dev-detail-card" style="display:none">
-              <div class="panel-head" style="margin-bottom:4px">
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                  <button id="btn-dev-back" class="btn-cmd" type="button" style="padding:2px 8px;font-size:11px">← 全部</button>
-                  <input id="sel-dev-name" class="bp-input" type="text" placeholder="輸入設備別名..." style="width:190px;font-weight:700">
-                  <button id="btn-dev-save-name" class="btn-cmd" type="button">保存別名</button>
-                </div>
-                <span id="sel-dev-rate" class="bp-live-rate c-mint">↓ 0 bps · ↑ 0 bps</span>
-              </div>
-
-              <div class="dev-detail-bar">
-                <div id="sel-dev-meta" class="c-sec" style="font-size:11.5px">—</div>
-                <div id="sel-dev-policy-seg" class="seg-group">
-                  <button class="seg-btn" data-policy="auto">自動分類</button>
-                  <button class="seg-btn" data-policy="game">@vip_lane 專線</button>
-                  <button class="seg-btn" data-policy="direct">強制直連</button>
-                  <button class="seg-btn" data-policy="tunnel">強制 TW-HOME</button>
-                  <button class="seg-btn" data-policy="block">禁止聯網</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Bottom/Main: Live Connections Table (Filtered Automatically by Selected Left Menu Item) -->
-            <div class="s-box blue" style="flex:1;display:flex;flex-direction:column;min-height:0">
-              <div class="panel-head">
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                   <span class="panel-title c-blue">ACTIVE CONNECTIONS</span>
                   <span id="conn-scope-badge" class="st-badge vip">全局連接</span>
-                  <span id="conn-cap" class="c-sec" style="font-size:11.5px">—</span>
+                  <button id="btn-conn-clear-dev" class="btn-cmd" type="button" style="display:none;padding:2px 7px;font-size:10px">全部終端 ✕</button>
+                  <span id="conn-cap" class="c-sec" style="font-size:11px">—</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                  <div id="conn-route-seg" class="seg-group">
-                    <button class="seg-btn on" data-route="all">全部</button>
-                    <button class="seg-btn" data-route="direct">直連</button>
-                    <button class="seg-btn" data-route="tunnel">TW-HOME</button>
-                    <button class="seg-btn" data-route="vip">VIP專線</button>
+                  <div id="conn-route-seg" class="seg-group" aria-label="過濾路由路徑">
+                    <button type="button" class="seg-btn on" data-route="all">全部</button>
+                    <button type="button" class="seg-btn" data-route="direct">直連</button>
+                    <button type="button" class="seg-btn" data-route="tunnel">TW-HOME</button>
+                    <button type="button" class="seg-btn" data-route="vip">VIP專線</button>
                   </div>
-                  <input id="conn-q" class="bp-input" type="search" placeholder="過濾目標 / 域名 / 端口..." style="width:195px">
+                  <input id="conn-q" class="bp-input" type="search" placeholder="過濾目標 / 域名 / 端口..." aria-label="過濾連接目標" style="width:190px">
                 </div>
               </div>
 
@@ -574,8 +492,8 @@
                 </table>
               </div>
             </div>
-
           </div>
+
         </div>
       </section>
 
@@ -600,8 +518,34 @@
 
   </div>
 
+  <!-- Doctor Invariants & UCI Config Overlay Modal (圖9 Fix: Never Expands Page Height) -->
+  <div id="sys-modal-scrim" class="modal-scrim" role="dialog" aria-modal="true" aria-labelledby="sys-modal-title">
+    <div class="modal-box sys-modal">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line-subtle);padding-bottom:10px">
+        <div>
+          <span id="sys-modal-title" class="c-violet" style="font-weight:700;font-size:13.5px">DOCTOR · LIVE SYSTEM INVARIANTS &amp; UCI PARAMETERS</span>
+          <span id="doctor-cap" class="c-sec" style="font-size:11.5px;margin-left:12px">—</span>
+        </div>
+        <button id="btn-close-sys" class="btn-cmd" type="button" aria-label="關閉體檢視窗">✕ 關閉</button>
+      </div>
+      <div class="sys-modal-body">
+        <div id="doctor-list" class="doctor-grid"></div>
+        <div class="bp-split-2">
+          <div class="s-box amber">
+            <div class="c-amber" style="font-weight:700;margin-bottom:6px;font-size:12px">核心架構鎖定項 (IMMUTABLE)</div>
+            <div id="locked-panel"></div>
+          </div>
+          <div class="s-box mint">
+            <div class="c-mint" style="font-weight:700;margin-bottom:6px;font-size:12px">運行時可調參數 (UCI)</div>
+            <div id="config-panel"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Admin Auth Modal -->
-  <div id="scrim" class="modal-scrim">
+  <div id="scrim" class="modal-scrim" role="dialog" aria-modal="true" aria-labelledby="modal-ver">
     <div class="modal-box">
       <div id="modal-ver" class="c-amber" style="font-weight:700;margin-bottom:4px">PRISM v5.1.0 · 路由器管理驗證</div>
       <div class="c-sec" style="font-size:11.5px;margin-bottom:12px">通過 OpenWrt ubus /rpcd 建立加密管理會話</div>
@@ -625,6 +569,6 @@
 
   <div id="toast" class="toast-bar"></div>
 
-  <script type="module" src="js/main.js?v=5.1.0"></script>
+  <script type="module" src="js/main.js?v=5.3.0"></script>
 </body>
 </html>

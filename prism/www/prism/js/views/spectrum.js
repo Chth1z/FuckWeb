@@ -1,20 +1,157 @@
 /* ============================================================================
- * PRISM — View 03: Optical Emission Heatmap, Oscilloscope & 21-Ch Telemetry
+ * PRISM — View 03: Borderless Square Heatmap, Focused Inspector & Oscilloscope
  * ============================================================================ */
 
-import { S, spectralColor } from '../state.js?v=5.1.0';
-import { $, $$, el, renderSegMeter } from '../dom.js?v=5.1.0';
-import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.1.0';
+import { S, spectralColor } from '../state.js?v=5.3.0';
+import { $, $$, el } from '../dom.js?v=5.3.0';
+import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.3.0';
 
-let highlightedStrandId = null;
+let hoverStrandId = null;
 
-function fmtShortRate(bps) {
-  const b = (bps || 0) * 8;
-  if (b <= 50) return '0';
-  if (b >= 1e9) return `${(b / 1e9).toFixed(1)}G`;
-  if (b >= 1e6) return `${(b / 1e6).toFixed(b >= 10e6 ? 0 : 1)}M`;
-  if (b >= 1e3) return `${Math.round(b / 1e3)}K`;
-  return `${Math.round(b)}b`;
+function fmtBitrate(bytesPerSec) {
+  const b = (bytesPerSec || 0) * 8;
+  if (b <= 50) return '0 bps';
+  if (b >= 1e9) return `${(b / 1e9).toFixed(2)} Gbps`;
+  if (b >= 1e6) return `${(b / 1e6).toFixed(b >= 100e6 ? 0 : 1)} Mbps`;
+  if (b >= 1e3) return `${Math.round(b / 1e3)} Kbps`;
+  return `${Math.round(b)} bps`;
+}
+
+function getActiveStrandId() {
+  return hoverStrandId != null ? hoverStrandId : S.pinnedStrandId;
+}
+
+function syncTileAndTickHighlight() {
+  const activeId = getActiveStrandId();
+  const tiles = $('#spectrum-heatmap')?.children || [];
+  for (const tile of tiles) {
+    const id = Number(tile.dataset.sid);
+    const isPinned = S.pinnedStrandId != null && id === S.pinnedStrandId;
+    tile.classList.toggle('pinned', isPinned);
+    if (activeId == null) {
+      tile.classList.remove('dim', 'hi');
+    } else {
+      tile.classList.toggle('hi', id === activeId);
+      tile.classList.toggle('dim', id !== activeId);
+    }
+  }
+
+  const ticks = $('#pattern')?.children || [];
+  for (const t of ticks) {
+    const id = Number(t.dataset.sid);
+    if (activeId == null) {
+      t.classList.remove('dim', 'hi');
+    } else {
+      t.classList.toggle('hi', id === activeId);
+      t.classList.toggle('dim', id !== activeId);
+    }
+  }
+}
+
+function renderInspector(st) {
+  const strands = st?.strands || [];
+  const w = st?.weave || {};
+  const pat = w.pattern || [];
+  const totalSlots = pat.length || w.slots || 126;
+  const targetId = getActiveStrandId();
+
+  const swatch = $('#insp-swatch');
+  const titleEl = $('#insp-title');
+  const badgeEl = $('#insp-badge');
+  const ipEl = $('#insp-ip');
+  const unpinBtn = $('#insp-unpin');
+  const rateEl = $('#insp-rate');
+  const peakEl = $('#insp-peak');
+  const rttEl = $('#insp-rtt');
+  const tokEl = $('#insp-tok');
+  if (!titleEl) return;
+
+  if (unpinBtn) {
+    unpinBtn.style.display = S.pinnedStrandId != null ? '' : 'none';
+  }
+
+  const idx = targetId != null ? strands.findIndex(s => s.id === targetId) : -1;
+  if (idx >= 0) {
+    const s = strands[idx];
+    const col = spectralColor(idx, Math.max(1, strands.length));
+    const bucketMap = {
+      charged: ['CHARGED', 'charged'],
+      draining: ['DRAINING', 'draining'],
+      cooling: ['COOLING', 'cooling'],
+      depleted: ['DEPLETED', 'depleted']
+    };
+    const [bText, bClass] = !s.healthy
+      ? [s.parked ? 'PARK' : 'DOWN', 'depleted']
+      : (s.vip ? ['VIP*', 'vip'] : (bucketMap[s.bucket] || ['CHARGED', 'charged']));
+
+    const pct = s.healthy ? Math.round(s.tokens_pct ?? 100) : 0;
+    const cd = s.cooldown_rem > 0 ? ` (${s.cooldown_rem}s)` : '';
+    const slotTxt = s.vip ? 'VIP 專線' : `${s.slots ?? 0}/${totalSlots} 槽`;
+
+    if (swatch) {
+      swatch.style.background = col.css;
+      swatch.style.boxShadow = `0 0 12px ${col.css}`;
+    }
+    titleEl.textContent = `${s.dev} · λ=${col.lambda}nm${S.pinnedStrandId === s.id ? ' [已鎖定]' : ''}`;
+    if (badgeEl) {
+      badgeEl.className = `st-badge ${bClass}`;
+      badgeEl.textContent = bText;
+    }
+    if (ipEl) ipEl.textContent = s.ip || '無租約';
+    if (rateEl) rateEl.textContent = `↓ ${fmtBitrate(s.now ?? s.rate)} / ↑ ${fmtBitrate(s.up_now ?? s.up)}`;
+    if (peakEl) peakEl.textContent = fmtBitrate(s.peak);
+    if (rttEl) rttEl.textContent = `${s.ttfb_ms > 0 ? s.ttfb_ms + ' ms' : '—'} · 丟包 ${s.loss_pct ?? 0}%`;
+    if (tokEl) tokEl.textContent = `${pct}%${cd} · ${slotTxt}`;
+    return;
+  }
+
+  // Aggregate mode when no tile is hovered or pinned
+  let downSum = 0;
+  let upSum = 0;
+  let peakSum = 0;
+  let rttSum = 0;
+  let rttCnt = 0;
+  let healthy = 0;
+  strands.forEach(s => {
+    downSum += (s.now ?? s.rate ?? 0);
+    upSum += (s.up_now ?? s.up ?? 0);
+    peakSum += (s.peak ?? 0);
+    if (s.healthy) {
+      healthy++;
+      if ((s.ttfb_ms || 0) > 0) {
+        rttSum += s.ttfb_ms;
+        rttCnt++;
+      }
+    }
+  });
+  const activeHot = (w.draining_count || 0) > 0 || (downSum + upSum) * 8 > 50000;
+
+  if (swatch) {
+    swatch.style.background = activeHot ? 'var(--c-amber)' : 'var(--c-mint)';
+    swatch.style.boxShadow = `0 0 10px ${activeHot ? 'var(--c-amber)' : 'var(--c-mint)'}`;
+  }
+  titleEl.textContent = `全光譜 ${healthy}/${strands.length} 鏈路聚合`;
+  if (badgeEl) {
+    badgeEl.className = `st-badge ${activeHot ? 'draining' : 'charged'}`;
+    badgeEl.textContent = activeHot ? 'ACTIVE' : 'READY';
+  }
+  if (ipEl) ipEl.textContent = '懸停或點擊色塊查看單路細節';
+  if (rateEl) rateEl.textContent = `↓ ${fmtBitrate(downSum)} / ↑ ${fmtBitrate(upSum)}`;
+  if (peakEl) peakEl.textContent = fmtBitrate(peakSum);
+  if (rttEl) rttEl.textContent = rttCnt > 0 ? `均值 ${Math.round(rttSum / rttCnt)} ms` : '—';
+  if (tokEl) tokEl.textContent = `${w.charged_count ?? 0}/${healthy} 滿桶 · ${totalSlots} 槽`;
+}
+
+function setHoverStrand(strandId) {
+  hoverStrandId = strandId;
+  syncTileAndTickHighlight();
+  renderInspector(S.status);
+}
+
+function togglePinStrand(strandId) {
+  S.pinnedStrandId = (S.pinnedStrandId === strandId) ? null : strandId;
+  syncTileAndTickHighlight();
+  renderInspector(S.status);
 }
 
 export function bindSpectrumEvents() {
@@ -25,36 +162,12 @@ export function bindSpectrumEvents() {
       setChartLimit(lim);
     });
   });
-}
 
-function highlightStrand(strandId) {
-  highlightedStrandId = strandId;
-
-  const tiles = $('#spectrum-heatmap')?.children || [];
-  for (const tile of tiles) {
-    const id = Number(tile.dataset.sid);
-    if (strandId == null) tile.classList.remove('dim', 'hi');
-    else {
-      tile.classList.toggle('hi', id === strandId);
-      tile.classList.toggle('dim', id !== strandId);
-    }
-  }
-
-  const ticks = $('#pattern')?.children || [];
-  for (const t of ticks) {
-    const id = Number(t.dataset.sid);
-    if (strandId == null) t.classList.remove('dim', 'hi');
-    else {
-      t.classList.toggle('hi', id === strandId);
-      t.classList.toggle('dim', id !== strandId);
-    }
-  }
-
-  const rows = $('#strands-tbody')?.children || [];
-  for (const tr of rows) {
-    const id = Number(tr.dataset.sid);
-    tr.classList.toggle('hi', strandId != null && id === strandId);
-  }
+  $('#insp-unpin')?.addEventListener('click', () => {
+    S.pinnedStrandId = null;
+    syncTileAndTickHighlight();
+    renderInspector(S.status);
+  });
 }
 
 function buildHeatmapTiles(grid, strands) {
@@ -65,20 +178,23 @@ function buildHeatmapTiles(grid, strands) {
     const shortName = s.dev === 'wan' ? 'wan' : String(s.dev || idx).replace(/^vwan/, 'v');
     const tile = el('div', {
       class: 'heat-tile',
+      role: 'gridcell',
+      tabindex: '0',
       'data-sid': s.id,
+      'aria-label': `${s.dev} 波長 ${col.lambda}nm`,
       style: { '--sc-rgb': col.rgb },
-      onMouseenter: () => highlightStrand(s.id),
-      onMouseleave: () => highlightStrand(null)
+      onMouseenter: () => setHoverStrand(s.id),
+      onMouseleave: () => setHoverStrand(null),
+      onClick: () => togglePinStrand(s.id),
+      onKeydown: (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          togglePinStrand(s.id);
+        }
+      }
     },
-      el('div', { class: 'heat-top' },
-        el('span', { class: 'heat-name' }, shortName),
-        el('span', { class: 'heat-slot' }, '0s')
-      ),
-      el('div', { class: 'heat-rate' }, '0 bps'),
-      el('div', { class: 'heat-foot' },
-        el('span', {}, '—'),
-        el('span', {}, '100%')
-      )
+      el('span', { class: 'heat-name' }, shortName),
+      el('span', { class: 'heat-sub-flag' }, '')
     );
     frag.appendChild(tile);
   });
@@ -112,35 +228,46 @@ function updateHeatmap(strands) {
     const pct = s.healthy ? Math.max(0, Math.min(100, s.tokens_pct ?? 100)) : 0;
     const rateTotal = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
     const mbps = mbpsList[i];
-    const rel = maxMbps > 0.1 ? mbps / maxMbps : 0;
-    const absPulse = Math.min(1, Math.log10(1 + mbps * 5) / 1.7);
-    const bucketFloor = s.bucket === 'cooling' ? 0.06 : (s.bucket === 'depleted' ? 0.04 : 0.12);
-    const heat = s.healthy ? Math.min(1, bucketFloor * (pct / 100) + Math.max(absPulse, rel * 0.85) * 0.88) : 0;
+    const rel = maxMbps > 0.12 ? mbps / maxMbps : 0;
+    const absPulse = Math.min(1, Math.log10(1 + mbps * 6) / 1.45);
+    const activeIntensity = Math.max(absPulse, rel * 0.90);
+
+    // Pure solid contrast: clean dark base when idle/cooling, bright pure color & halo when active
+    const baseContrast = !s.healthy ? 0.06
+      : (s.bucket === 'depleted' ? 0.07
+        : (s.bucket === 'cooling' ? 0.09 : (0.11 + (pct / 100) * 0.05)));
+    const heat = s.healthy ? Math.min(1, activeIntensity * 0.88 + (s.vip ? 0.12 : 0)) : 0;
+    const fillAlpha = !s.healthy ? 0.08 : Math.min(0.96, baseContrast + activeIntensity * 0.80);
 
     tile.classList.toggle('vip', !!s.vip);
     tile.classList.toggle('down', !s.healthy);
-    tile.style.setProperty('--heat-core', (0.06 + heat * 0.56).toFixed(2));
-    tile.style.setProperty('--heat-halo', (0.04 + heat * 0.44).toFixed(2));
-    tile.style.setProperty('--heat-inner', (0.04 + heat * 0.24).toFixed(2));
-    tile.style.setProperty('--heat-blur', `${Math.round(8 + heat * 18)}px`);
-    tile.style.borderColor = !s.healthy
-      ? 'rgba(230, 108, 120, 0.55)'
-      : (s.vip ? 'var(--c-blue)' : `rgba(${col.rgb}, ${(0.28 + heat * 0.70).toFixed(2)})`);
-    tile.title = `${s.dev} (${col.lambda}nm) · ${s.ip || 'no lease'} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}%`;
 
-    const slotEl = tile.children[0].children[1];
-    const rateEl = tile.children[1];
-    const footL = tile.children[2].children[0];
-    const footR = tile.children[2].children[1];
+    tile.style.setProperty('--heat-fill', fillAlpha.toFixed(2));
+    tile.style.setProperty('--heat-halo', (heat > 0.08 ? 0.10 + heat * 0.72 : 0.03).toFixed(2));
+    tile.style.setProperty('--heat-outer', (heat > 0.12 ? 0.04 + heat * 0.36 : 0.00).toFixed(2));
+    tile.style.setProperty('--heat-crest', (0.02 + heat * 0.24).toFixed(2));
+    tile.style.setProperty('--heat-blur', `${Math.round(10 + heat * 18)}px`);
+    tile.style.setProperty('--heat-bloom', `${Math.round(18 + heat * 28)}px`);
+    tile.style.setProperty('--heat-label-op', (!s.healthy ? 0.34 : (0.48 + heat * 0.50)).toFixed(2));
 
-    slotEl.textContent = !s.healthy ? 'DOWN' : (s.vip ? 'VIP*' : `${s.slots ?? 0}s`);
-    rateEl.textContent = s.healthy ? (rateTotal > 50 ? fmtShortRate(rateTotal) : 'idle') : (s.parked ? 'PARK' : 'OFF');
-    rateEl.style.color = !s.healthy
-      ? 'var(--c-crimson)'
-      : (rateTotal > 2000 ? '#ffffff' : 'var(--text-secondary)');
-    footL.textContent = s.ttfb_ms > 0 ? `${s.ttfb_ms}m` : '—';
-    footL.style.color = s.loss_pct >= 15 ? 'var(--c-amber)' : 'var(--text-muted)';
-    footR.textContent = `${Math.round(pct)}%`;
+    tile.title = `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ${rateTotal > 50 ? fmtBitrate(rateTotal) : 'idle'} · τ=${s.ttfb_ms || '—'}ms · tokens ${Math.round(pct)}%`;
+
+    const subFlag = tile.children[1];
+    if (subFlag) {
+      if (!s.healthy) {
+        subFlag.textContent = s.parked ? 'PARK' : 'OFF';
+        subFlag.style.color = 'var(--c-crimson)';
+      } else if (rateTotal * 8 > 500) {
+        const b = rateTotal * 8;
+        subFlag.textContent = b >= 1e6 ? `${(b / 1e6).toFixed(1)}M` : `${Math.round(b / 1e3)}K`;
+        subFlag.style.color = 'rgba(255, 255, 255, 0.94)';
+      } else if (s.cooldown_rem > 0) {
+        subFlag.textContent = `${s.cooldown_rem}s`;
+        subFlag.style.color = 'rgba(255, 255, 255, 0.72)';
+      } else {
+        subFlag.textContent = '';
+      }
+    }
   }
 }
 
@@ -149,18 +276,24 @@ export function renderSpectrum() {
   if (!st) return;
 
   const strands = st.strands || [];
-  const pat = st.weave?.pattern || [];
   const w = st.weave || {};
+  const pat = w.pattern || [];
   const colorById = {};
   strands.forEach((s, idx) => {
     colorById[s.id] = spectralColor(idx, Math.max(1, strands.length));
   });
 
-  // 1. Optical Emission Heatmap
-  $('#weave-cap').textContent = `${w.slots || pat.length || 0} slots · VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`;
-  updateHeatmap(strands);
+  if (S.pinnedStrandId != null && !strands.some(s => s.id === S.pinnedStrandId)) {
+    S.pinnedStrandId = null;
+  }
 
-  // 2. Slim Single-Row 126-Slot Kernel Timeline Ribbon
+  // 1. Borderless Square Emission Matrix + Live Focused Inspector
+  const capEl = $('#weave-cap');
+  if (capEl) capEl.textContent = `${w.slots || pat.length || 126} slots · VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`;
+  updateHeatmap(strands);
+  renderInspector(st);
+
+  // 2. Slim 126-Slot Kernel Timeline Ribbon
   const mat = $('#pattern');
   if (mat) {
     const sig = pat.join(',');
@@ -176,17 +309,18 @@ export function renderSpectrum() {
           title: `slot #${i} → strand ${sid} (λ=${col.lambda}nm)`,
           style: { backgroundColor: col.css, color: col.css }
         });
-        tick.addEventListener('mouseenter', () => highlightStrand(sid));
-        tick.addEventListener('mouseleave', () => highlightStrand(null));
+        tick.addEventListener('mouseenter', () => setHoverStrand(sid));
+        tick.addEventListener('mouseleave', () => setHoverStrand(null));
+        tick.addEventListener('click', () => togglePinStrand(sid));
         frag.appendChild(tick);
       }
       mat.innerHTML = '';
       mat.appendChild(frag);
-      if (highlightedStrandId != null) highlightStrand(highlightedStrandId);
     }
   }
+  syncTileAndTickHighlight();
 
-  // 3. Dual-Channel Oscilloscope + Bucket State Summary Strip
+  // 3. Full-Height Dual-Channel Oscilloscope + Bucket State Footer Strip
   renderOscilloscope();
   $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === getChartLimit()));
 
@@ -213,66 +347,4 @@ export function renderSpectrum() {
       )
     );
   }
-
-  // 4. Right Full-Height 21-Strand Token Capacitor Telemetry Table
-  const tbody = $('#strands-tbody');
-  if (!tbody) return;
-
-  const bucketLabels = {
-    charged: ['CHARGED', 'charged'],
-    draining: ['DRAINING', 'draining'],
-    cooling: ['COOLING', 'cooling'],
-    depleted: ['DEPLETED', 'depleted']
-  };
-
-  const frag = document.createDocumentFragment();
-  strands.forEach((s, idx) => {
-    const col = spectralColor(idx, Math.max(1, strands.length));
-    const [bText, bClass] = s.vip ? ['VIP*', 'vip'] : (bucketLabels[s.bucket] || [s.bucket || 'CHARGED', 'charged']);
-    const meterColor = s.vip ? 'blue' : (s.bucket === 'charged' ? 'mint' : (s.bucket === 'cooling' ? 'violet' : 'amber'));
-    const meterWrap = el('div', { style: { display: 'flex', alignItems: 'center', gap: '5px' } });
-    const seg = el('span', { class: 'seg-meter' });
-    renderSegMeter(seg, (s.tokens_pct ?? 100) / 100, 6, meterColor);
-    const kbTxt = s.cooldown_rem > 0
-      ? `${s.tokens_pct ?? 100}%(${s.cooldown_rem}s)`
-      : `${s.tokens_pct ?? 100}%`;
-    meterWrap.append(seg, el('span', { class: 'c-sec', style: { fontSize: '10px' } }, kbTxt));
-
-    const rttNode = s.loss_pct > 0
-      ? el('span', { class: s.loss_pct >= 15 ? 'c-amber' : 'c-sec', title: `packet loss ${s.loss_pct}%` }, `${s.ttfb_ms > 0 ? s.ttfb_ms + 'm' : '—'}·${s.loss_pct}%`)
-      : el('span', {}, s.ttfb_ms > 0 ? `${s.ttfb_ms}m` : '—');
-
-    const tr = el('tr', {
-      'data-sid': s.id,
-      class: highlightedStrandId === s.id ? 'hi' : '',
-      style: { cursor: 'pointer' },
-      onMouseenter: () => highlightStrand(s.id),
-      onMouseleave: () => highlightStrand(null)
-    },
-      el('td', {},
-        el('div', { style: { display: 'flex', alignItems: 'center', gap: '5px' } },
-          el('span', { style: { display: 'inline-block', width: '7px', height: '7px', background: col.css, boxShadow: `0 0 6px ${col.css}` } }),
-          el('strong', { class: 'c-bright' }, `${s.dev}`),
-          el('span', { class: 'c-muted', style: { fontSize: '10px' } }, `${col.lambda}`)
-        )
-      ),
-      el('td', {},
-        s.healthy
-          ? el('span', { class: `st-badge ${bClass}` }, bText)
-          : el('span', { class: 'st-badge depleted' }, s.parked ? 'PARK' : 'DOWN')
-      ),
-      el('td', { class: 'num' }, rttNode),
-      el('td', { class: 'num c-mint' }, fmtShortRate(s.now ?? s.rate)),
-      el('td', { class: 'num c-blue' }, fmtShortRate(s.up_now ?? s.up)),
-      el('td', { class: 'num c-sec' }, fmtShortRate(s.peak)),
-      el('td', {}, meterWrap),
-      el('td', { class: 'num' },
-        s.vip ? el('span', { class: 'c-blue' }, 'VIP') : el('strong', { class: s.slots > 0 ? 'c-bright' : 'c-muted' }, `${s.slots ?? 0}`)
-      )
-    );
-    frag.appendChild(tr);
-  });
-
-  tbody.innerHTML = '';
-  tbody.appendChild(frag);
 }

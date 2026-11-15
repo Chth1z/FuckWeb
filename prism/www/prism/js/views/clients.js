@@ -1,19 +1,60 @@
 /* ============================================================================
- * PRISM — View 04: Left-Right Secondary Menu Device & Live Connections Explorer
+ * PRISM — View 04: Merged Wide Device Policy Matrix & Live Flows Explorer
  * ============================================================================ */
 
-import { S, fmtRate, fmtBytes } from '../state.js?v=5.1.0';
-import { $, $$, el } from '../dom.js?v=5.1.0';
-import { write } from '../api.js?v=5.1.0';
+import { S, fmtRate, fmtBytes } from '../state.js?v=5.3.0';
+import { $, $$, el } from '../dom.js?v=5.3.0';
+import { write, openLoginModal } from '../api.js?v=5.3.0';
 
 const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
 const POLICY_META = {
-  auto:   { label: '自動分類',     cls: 'c-sec' },
-  game:   { label: '@vip_lane 專線', cls: 'c-blue' },
-  direct: { label: '強制直連',     cls: 'c-mint' },
-  tunnel: { label: '強制 TW-HOME', cls: 'c-violet' },
-  block:  { label: '禁止聯網',     cls: 'c-crimson' }
+  auto:   { short: '自動', label: '自動分類' },
+  game:   { short: 'VIP',  label: '@vip_lane 專線' },
+  direct: { short: '直連', label: '強制直連' },
+  tunnel: { short: '隧道', label: '強制 TW-HOME' },
+  block:  { short: '禁網', label: '禁止聯網' }
 };
+
+let editingMac = null;
+let pointerInsideDevList = false;
+let forceReorder = false;
+
+function ipToNum(ip) {
+  if (!ip) return Infinity;
+  const parts = String(ip).split('.');
+  if (parts.length !== 4) return Infinity;
+  let n = 0;
+  for (let i = 0; i < 4; i++) {
+    const v = Number(parts[i]);
+    if (!Number.isInteger(v) || v < 0 || v > 255) return Infinity;
+    n = (n * 256) + v;
+  }
+  return n;
+}
+
+function compareStableTie(a, b) {
+  const ia = ipToNum(a.ip);
+  const ib = ipToNum(b.ip);
+  if (ia !== ib) return ia - ib;
+  return String(a.mac || '').localeCompare(String(b.mac || ''));
+}
+
+function compareDevices(a, b, mode, byIp) {
+  if (mode === 'ip') {
+    return compareStableTie(a, b);
+  }
+  if (a.online !== b.online) return a.online ? -1 : 1;
+  if (mode === 'rate') {
+    const ra = (byIp[a.ip]?.down || 0) + (byIp[a.ip]?.up || 0);
+    const rb = (byIp[b.ip]?.down || 0) + (byIp[b.ip]?.up || 0);
+    if (rb !== ra) return rb - ra;
+  } else if (mode === 'flows') {
+    const fa = byIp[a.ip]?.count || 0;
+    const fb = byIp[b.ip]?.count || 0;
+    if (fb !== fa) return fb - fa;
+  }
+  return compareStableTie(a, b);
+}
 
 function computeFlowDeltas() {
   const conns = S.connections?.connections || [];
@@ -55,31 +96,24 @@ export function bindClientsEvents() {
     renderClients();
   });
 
-  $('#dev-nav-all')?.addEventListener('click', () => selectDevice('all'));
-  $('#btn-dev-back')?.addEventListener('click', () => selectDevice('all'));
-
-  const saveSelectedAlias = () => {
-    const devs = S.devices?.devices || [];
-    const dev = devs.find(d => d.mac === S.selectedDeviceMac);
-    const inp = $('#sel-dev-name');
-    if (!dev || !inp) return;
-    write('device', { mac: dev.mac, name: inp.value.trim(), policy: dev.policy || 'auto' }, '終端別名已儲存');
-  };
-
-  $('#btn-dev-save-name')?.addEventListener('click', saveSelectedAlias);
-  $('#sel-dev-name')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') saveSelectedAlias();
-  });
-
-  $$('#sel-dev-policy-seg .seg-btn').forEach(btn => {
+  $$('#dev-sort-seg .seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const devs = S.devices?.devices || [];
-      const dev = devs.find(d => d.mac === S.selectedDeviceMac);
-      if (!dev) return;
-      const policy = btn.dataset.policy;
-      write('device', { mac: dev.mac, name: dev.name || '', policy }, `${dev.name || dev.mac} 策略已設為 ${POLICY_META[policy]?.label || policy}`);
+      S.devSort = btn.dataset.sort || 'stable';
+      $$('#dev-sort-seg .seg-btn').forEach(b => b.classList.toggle('on', b.dataset.sort === S.devSort));
+      forceReorder = true;
+      renderClients();
     });
   });
+
+  const devList = $('#dev-menu-list');
+  devList?.addEventListener('mouseenter', () => { pointerInsideDevList = true; });
+  devList?.addEventListener('mouseleave', () => {
+    pointerInsideDevList = false;
+    renderClients();
+  });
+
+  $('#dev-nav-all')?.addEventListener('click', () => selectDevice('all'));
+  $('#btn-conn-clear-dev')?.addEventListener('click', () => selectDevice('all'));
 
   $$('#conn-route-seg .seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -95,6 +129,153 @@ export function bindClientsEvents() {
   });
 }
 
+function createDeviceCard(mac) {
+  const dotEl = el('span', { class: 'run-dot' });
+  const nameEl = el('span', { class: 'dev-nav-name' });
+  const renameInput = el('input', {
+    type: 'text',
+    class: 'bp-input',
+    style: { display: 'none', padding: '1px 6px', fontSize: '11.5px', width: '138px' },
+    placeholder: '輸入設備別名...'
+  });
+  const renameBtn = el('button', {
+    type: 'button',
+    class: 'dev-rename-btn',
+    title: '修改終端別名'
+  }, '✎');
+
+  const linkEl = el('span', { class: 'c-sec', style: { fontSize: '10.5px', flexShrink: '0' } });
+  const flowsEl = el('span', { class: 'c-blue', style: { fontSize: '10.5px', fontWeight: '600', flexShrink: '0' } });
+  const ipRateEl = el('span', { class: 'c-muted', style: { fontSize: '10.5px', fontVariantNumeric: 'tabular-nums' } });
+
+  const pillBtns = {};
+  const pillBar = el('div', { class: 'policy-pill-bar' });
+  for (const p of POLICIES) {
+    const b = el('button', {
+      type: 'button',
+      class: `policy-pill ${p}`,
+      'data-policy': p,
+      title: POLICY_META[p].label
+    }, POLICY_META[p].short);
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const d = card._dev;
+      if (!d) return;
+      if (!S.session) {
+        openLoginModal();
+        return;
+      }
+      if ((d.policy || 'auto') === p) return;
+      d.policy = p; // optimistic UI state
+      syncDeviceCard(card, d, card._dr, S.selectedDeviceMac === mac);
+      write('device', { mac: d.mac, name: d.name || '', policy: p }, `${d.name || d.mac} 策略已設為 ${POLICY_META[p].label}`);
+    });
+    pillBtns[p] = b;
+    pillBar.appendChild(b);
+  }
+
+  const card = el('div', {
+    class: 'dev-nav-item',
+    'data-mac': mac,
+    role: 'button',
+    tabindex: '0'
+  },
+    el('div', { class: 'dev-nav-top' },
+      el('div', { class: 'dev-title-group' }, dotEl, nameEl, renameInput, renameBtn),
+      el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: '0' } }, linkEl, flowsEl)
+    ),
+    el('div', { class: 'dev-nav-sub' }, ipRateEl, pillBar)
+  );
+
+  card.addEventListener('click', () => {
+    if (editingMac === mac) return;
+    selectDevice(mac);
+  });
+  card.addEventListener('keydown', (e) => {
+    if (e.target !== card) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (editingMac !== mac) selectDevice(mac);
+    }
+  });
+
+  renameBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!S.session) {
+      openLoginModal();
+      return;
+    }
+    const d = card._dev;
+    if (!d) return;
+    editingMac = mac;
+    nameEl.style.display = 'none';
+    renameBtn.style.display = 'none';
+    renameInput.style.display = 'inline-block';
+    renameInput.value = d.name || '';
+    renameInput.placeholder = d.host || d.mac;
+    renameInput.focus();
+    renameInput.select();
+  });
+
+  renameInput.addEventListener('click', (e) => e.stopPropagation());
+  const finishRename = (commit) => {
+    if (editingMac !== mac) return;
+    editingMac = null;
+    nameEl.style.display = '';
+    renameBtn.style.display = '';
+    renameInput.style.display = 'none';
+    const d = card._dev;
+    if (commit && d) {
+      const nextName = renameInput.value.trim();
+      if (nextName !== (d.name || '')) {
+        d.name = nextName;
+        nameEl.textContent = nextName || d.host || d.mac.slice(-8);
+        write('device', { mac: d.mac, name: nextName, policy: d.policy || 'auto' }, '終端別名已儲存');
+      }
+    }
+  };
+  renameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finishRename(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finishRename(false); }
+  });
+  renameInput.addEventListener('blur', () => finishRename(true));
+
+  card._refs = { dotEl, nameEl, renameInput, renameBtn, linkEl, flowsEl, ipRateEl, pillBtns };
+  return card;
+}
+
+function syncDeviceCard(card, d, dr, isSelected) {
+  card._dev = d;
+  card._dr = dr;
+  const r = card._refs;
+  const label = d.name || d.host || d.mac.slice(-8);
+  const policy = d.policy || 'auto';
+
+  card.className = `dev-nav-item ${d.online ? 'online' : 'offline'} ${isSelected ? 'active' : ''}`;
+  r.dotEl.className = d.online ? 'run-dot mint' : 'run-dot off';
+
+  if (editingMac !== d.mac) {
+    r.nameEl.textContent = label;
+    r.nameEl.title = `${label} (${d.mac})`;
+  }
+
+  const radio = d.signal ? ` ${d.signal}dBm` : '';
+  r.linkEl.textContent = `${d.link || 'wired'}${radio}`;
+  r.flowsEl.textContent = S.session && dr.count > 0 ? `${dr.count} 流` : (d.online ? '在線' : '離線');
+  r.flowsEl.className = S.session && dr.count > 0 ? 'c-blue' : (d.online ? 'c-mint' : 'c-muted');
+
+  const rateStr = S.session && (dr.down + dr.up > 50)
+    ? ` · ↓${fmtRate(dr.down).full} ↑${fmtRate(dr.up).full}`
+    : '';
+  r.ipRateEl.textContent = `${d.ip || d.mac.slice(-8)}${rateStr}`;
+  r.ipRateEl.className = rateStr ? 'c-mint' : 'c-muted';
+
+  for (const p of POLICIES) {
+    r.pillBtns[p].classList.toggle('on', p === policy);
+  }
+}
+
+// Keyed in-place reconciliation: preserves DOM nodes & open inputs across 2s polls (Fixes 圖8)
 function renderDeviceMenu(devs, byIp, totalFlows) {
   const onlineCnt = devs.filter(d => d.online).length;
   if ($('#clients-online-cnt')) $('#clients-online-cnt').textContent = `${onlineCnt} 在線 / ${devs.length} 台`;
@@ -117,153 +298,80 @@ function renderDeviceMenu(devs, byIp, totalFlows) {
     return text.includes(q);
   });
 
-  const sorted = [...filtered].sort((a, b) => {
-    if (a.online !== b.online) return a.online ? -1 : 1;
-    const ra = (byIp[a.ip]?.down || 0) + (byIp[a.ip]?.up || 0);
-    const rb = (byIp[b.ip]?.down || 0) + (byIp[b.ip]?.up || 0);
-    if (rb !== ra) return rb - ra;
-    return (a.name || a.host || a.mac).localeCompare(b.name || b.host || b.mac);
-  });
+  const sortMode = S.devSort || 'stable';
+  $$('#dev-sort-seg .seg-btn').forEach(b => b.classList.toggle('on', b.dataset.sort === sortMode));
 
-  const frag = document.createDocumentFragment();
-  if (!sorted.length) {
-    frag.appendChild(el('div', { class: 'c-muted', style: { padding: '14px', textAlign: 'center', fontSize: '11.5px' } }, '無匹配終端'));
-  } else {
-    for (const d of sorted) {
-      const dr = byIp[d.ip] || { down: 0, up: 0, count: 0 };
-      const pm = POLICY_META[d.policy || 'auto'] || POLICY_META.auto;
-      const isSelected = S.selectedDeviceMac === d.mac;
-      const label = d.name || d.host || d.mac.slice(-8);
-      const rightStat = S.session && dr.down + dr.up > 50
-        ? fmtRate(dr.down).full
-        : (d.policy && d.policy !== 'auto' ? pm.label : (d.online ? '在線' : '離線'));
-      const rightCls = S.session && dr.down + dr.up > 50 ? 'c-mint' : (d.policy && d.policy !== 'auto' ? pm.cls : (d.online ? 'c-mint' : 'c-muted'));
+  const sorted = [...filtered].sort((a, b) => compareDevices(a, b, sortMode, byIp));
 
-      const item = el('button', {
-        type: 'button',
-        class: `dev-nav-item ${d.online ? 'online' : 'offline'} ${isSelected ? 'active' : ''}`,
-        onClick: () => selectDevice(d.mac)
-      },
-        el('div', { class: 'dev-nav-top' },
-          el('span', { class: 'dev-nav-name', title: `${label} (${d.mac})` }, label),
-          el('span', { class: rightCls, style: { fontSize: '10.5px', fontWeight: '600', flexShrink: '0' } }, rightStat)
-        ),
-        el('div', { class: 'dev-nav-sub' },
-          el('span', {}, `${d.ip || d.mac.slice(-8)} · ${d.link || 'wired'}`),
-          el('span', { class: 'c-muted' }, S.session && dr.count > 0 ? `${dr.count} 流` : (d.policy || 'auto'))
-        )
-      );
-      frag.appendChild(item);
+  const existingByMac = new Map();
+  const domOrder = [];
+  const empties = [];
+  for (const child of Array.from(list.children)) {
+    const m = child.dataset.mac;
+    if (m) {
+      existingByMac.set(m, child);
+      domOrder.push(m);
+    } else {
+      empties.push(child);
     }
   }
-  list.innerHTML = '';
-  list.appendChild(frag);
-}
-
-function renderRightWorkspace(devs, byIp) {
-  const allPanel = $('#clients-all-panel');
-  const devPanel = $('#clients-dev-panel');
-  const selected = S.selectedDeviceMac !== 'all'
-    ? devs.find(d => d.mac === S.selectedDeviceMac)
-    : null;
-
-  if (S.selectedDeviceMac !== 'all' && !selected) {
-    S.selectedDeviceMac = 'all';
-  }
-
-  if (!selected) {
-    if (allPanel) allPanel.style.display = 'block';
-    if (devPanel) devPanel.style.display = 'none';
-    renderAllDevicesMatrix(devs, byIp);
-    return null;
-  }
-
-  if (allPanel) allPanel.style.display = 'none';
-  if (devPanel) devPanel.style.display = 'flex';
-
-  const dr = byIp[selected.ip] || { down: 0, up: 0, count: 0 };
-  const nameInp = $('#sel-dev-name');
-  if (nameInp && document.activeElement !== nameInp && nameInp.dataset.mac !== selected.mac) {
-    nameInp.value = selected.name || '';
-    nameInp.placeholder = selected.host || selected.mac;
-    nameInp.dataset.mac = selected.mac;
-  }
-  const rateEl = $('#sel-dev-rate');
-  if (rateEl) {
-    rateEl.textContent = S.session
-      ? `↓ ${fmtRate(dr.down).full} · ↑ ${fmtRate(dr.up).full}`
-      : (selected.online ? '在線' : '離線');
-  }
-  const metaEl = $('#sel-dev-meta');
-  if (metaEl) {
-    const radio = selected.signal ? ` (${selected.signal} dBm)` : '';
-    metaEl.textContent = `MAC ${selected.mac} · IP ${selected.ip || '無租約'} · ${selected.link || 'wired'}${radio}`;
-  }
-  $$('#sel-dev-policy-seg .seg-btn').forEach(btn => {
-    btn.classList.toggle('on', btn.dataset.policy === (selected.policy || 'auto'));
-  });
-  return selected;
-}
-
-function renderAllDevicesMatrix(devs, byIp) {
-  const dtb = $('#devices-tbody');
-  if (!dtb) return;
-  const frag = document.createDocumentFragment();
-
-  const sorted = [...devs].sort((a, b) => {
-    if (a.online !== b.online) return a.online ? -1 : 1;
-    const ra = (byIp[a.ip]?.down || 0) + (byIp[a.ip]?.up || 0);
-    const rb = (byIp[b.ip]?.down || 0) + (byIp[b.ip]?.up || 0);
-    if (rb !== ra) return rb - ra;
-    return (a.name || a.host || a.mac).localeCompare(b.name || b.host || b.mac);
-  });
+  for (const emp of empties) emp.remove();
 
   if (!sorted.length) {
-    frag.appendChild(el('tr', {}, el('td', { colspan: 6, class: 'c-muted', style: { textAlign: 'center', padding: '16px' } }, '暫無局域網終端記錄')));
-  } else {
-    for (const d of sorted) {
-      const dr = byIp[d.ip] || { down: 0, up: 0 };
-      const dot = el('span', { class: d.online ? 'run-dot mint' : '' });
-      if (!d.online) Object.assign(dot.style, { display: 'inline-block', width: '6px', height: '6px', background: '#4b556b' });
-
-      const nameBtn = el('button', {
-        type: 'button',
-        class: 'btn-cmd',
-        style: { padding: '2px 7px', fontSize: '11px', borderColor: 'transparent', background: 'transparent' },
-        title: `點擊查看 ${d.name || d.host || d.mac} 的連接`,
-        onClick: () => selectDevice(d.mac)
-      }, d.name || d.host || d.mac.slice(-8), el('span', { class: 'c-blue', style: { marginLeft: '4px' } }, '→'));
-
-      const sel = el('select', {
-        class: 'bp-input',
-        style: { fontSize: '11px', padding: '2px 6px' },
-        onChange: (e) => {
-          write('device', { mac: d.mac, name: d.name || '', policy: e.target.value }, `${d.name || d.mac} 策略已設為 ${e.target.value}`);
-        }
-      }, ...POLICIES.map(p => {
-        const opt = el('option', { value: p }, POLICY_META[p]?.label || p);
-        if ((d.policy || 'auto') === p) opt.selected = true;
-        return opt;
-      }));
-
-      frag.appendChild(el('tr', { style: d.online ? {} : { opacity: '0.55' } },
-        el('td', {}, el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, dot, nameBtn)),
-        el('td', {}, el('span', { class: 'c-sec' }, d.link || 'wired'), d.signal ? el('span', { class: 'c-muted', style: { marginLeft: '4px', fontSize: '10.5px' } }, `${d.signal}dBm`) : null),
-        el('td', { class: 'c-sec' }, d.ip || '—'),
-        el('td', { class: 'num c-mint' }, S.session ? fmtRate(dr.down).full : '—'),
-        el('td', { class: 'num c-blue' }, S.session ? fmtRate(dr.up).full : '—'),
-        el('td', {}, sel)
-      ));
-    }
+    existingByMac.forEach(node => node.remove());
+    list.appendChild(el('div', { class: 'c-muted', style: { padding: '14px', textAlign: 'center', fontSize: '11.5px' } }, '無匹配終端'));
+    forceReorder = false;
+    return;
   }
-  dtb.innerHTML = '';
-  dtb.appendChild(frag);
+
+  const wantedMacs = new Set(sorted.map(d => d.mac));
+  existingByMac.forEach((node, mac) => {
+    if (!wantedMacs.has(mac)) node.remove();
+  });
+
+  // Freeze permutation while pointer hovers or user edits an alias so rows never shift mid-click
+  const freezeOrder = !forceReorder && (pointerInsideDevList || !!editingMac) && domOrder.length > 0;
+  let ordered = sorted;
+  if (freezeOrder) {
+    const byMac = new Map(sorted.map(d => [d.mac, d]));
+    const kept = [];
+    const seen = new Set();
+    for (const m of domOrder) {
+      if (byMac.has(m)) {
+        kept.push(byMac.get(m));
+        seen.add(m);
+      }
+    }
+    for (const d of sorted) {
+      if (!seen.has(d.mac)) kept.push(d);
+    }
+    ordered = kept;
+  }
+
+  ordered.forEach((d, idx) => {
+    const dr = byIp[d.ip] || { down: 0, up: 0, count: 0 };
+    let card = existingByMac.get(d.mac);
+    if (!card) card = createDeviceCard(d.mac);
+    syncDeviceCard(card, d, dr, S.selectedDeviceMac === d.mac);
+
+    if (!freezeOrder || card.parentNode !== list) {
+      const curAtIdx = list.children[idx];
+      if (curAtIdx !== card) {
+        list.insertBefore(card, curAtIdx || null);
+      }
+    }
+  });
+  forceReorder = false;
 }
 
 function renderConnections(devs, selectedDev, rows) {
   const scopeBadge = $('#conn-scope-badge');
+  const clearBtn = $('#btn-conn-clear-dev');
   if (scopeBadge) {
     scopeBadge.textContent = selectedDev ? `${selectedDev.name || selectedDev.host || selectedDev.ip}` : '全局連接';
+  }
+  if (clearBtn) {
+    clearBtn.style.display = selectedDev ? 'inline-flex' : 'none';
   }
 
   const empty = $('#conn-empty');
@@ -312,7 +420,7 @@ function renderConnections(devs, selectedDev, rows) {
   if (wrap) wrap.style.display = 'block';
 
   const frag = document.createDocumentFragment();
-  for (const f of filtered.slice(0, 120)) {
+  for (const f of filtered.slice(0, 140)) {
     let badgeClass = f.route === 'tunnel' ? 'cooling' : 'charged';
     let routeText = f.route === 'tunnel' ? `TW-HOME · ${f.via || 'proxy'}` : `直連 · ${f.via || 'wan'}`;
     if (f.vip) {
@@ -322,7 +430,7 @@ function renderConnections(devs, selectedDev, rows) {
 
     frag.appendChild(el('tr', {},
       el('td', {}, el('div', { class: 'c-bright' }, devNameByIp[f.src] || f.src), el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, f.src)),
-      el('td', { style: { maxWidth: '280px', wordBreak: 'break-all' } }, f.dst),
+      el('td', { style: { maxWidth: '300px', wordBreak: 'break-all' } }, f.dst),
       el('td', { class: 'c-sec' }, `${f.port} / ${String(f.proto || '').toUpperCase()}`),
       el('td', {}, el('span', { class: `st-badge ${badgeClass}` }, routeText)),
       el('td', { class: 'num c-mint' }, f.rDown > 50 ? fmtRate(f.rDown).full : '—'),
@@ -338,8 +446,13 @@ function renderConnections(devs, selectedDev, rows) {
 
 export function renderClients() {
   const devs = S.devices?.devices || [];
+  const selectedDev = S.selectedDeviceMac !== 'all'
+    ? devs.find(d => d.mac === S.selectedDeviceMac)
+    : null;
+  if (S.selectedDeviceMac !== 'all' && !selectedDev) {
+    S.selectedDeviceMac = 'all';
+  }
   const { byIp, rows } = computeFlowDeltas();
   renderDeviceMenu(devs, byIp, rows.length);
-  const selectedDev = renderRightWorkspace(devs, byIp);
   renderConnections(devs, selectedDev, rows);
 }

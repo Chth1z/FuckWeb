@@ -2,14 +2,14 @@
  * PRISM 5.0 — Bootstrap, 4-Tab Router & Differential Polling Engine
  * ============================================================================ */
 
-import { S, UI_VERSION, fmtRate } from './state.js?v=5.1.0';
-import { $, $$, toast } from './dom.js?v=5.1.0';
-import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.1.0';
-import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=5.1.0';
-import { renderOverview } from './views/overview.js?v=5.1.0';
-import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.1.0';
-import { renderSpectrum, bindSpectrumEvents } from './views/spectrum.js?v=5.1.0';
-import { renderClients, bindClientsEvents } from './views/clients.js?v=5.1.0';
+import { S, UI_VERSION, fmtRate } from './state.js?v=5.3.0';
+import { $, $$, toast } from './dom.js?v=5.3.0';
+import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.3.0';
+import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=5.3.0';
+import { renderOverview } from './views/overview.js?v=5.3.0';
+import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.3.0';
+import { renderSpectrum, bindSpectrumEvents } from './views/spectrum.js?v=5.3.0';
+import { renderClients, bindClientsEvents } from './views/clients.js?v=5.3.0';
 
 let fastTimer = null;
 let slowTimer = null;
@@ -113,7 +113,7 @@ async function pollSlow() {
     const reqs = [];
     reqs.push(S.tab === 'overview' || S.tab === 'blueprint' ? call('tunnel') : null);
     reqs.push(S.tab === 'blueprint' ? call('rules') : null);
-    reqs.push(S.tab === 'blueprint' ? call('events', { limit: 15 }) : null);
+    reqs.push(S.tab === 'blueprint' ? call('events', { limit: 40 }) : null);
     reqs.push(S.tab === 'blueprint' ? call('doctor') : null);
     reqs.push(S.tab === 'spectrum' ? call('series', { limit: 720 }) : null);
     reqs.push(S.tab === 'blueprint' && S.session ? call('config') : null);
@@ -134,7 +134,14 @@ function bindGlobalEvents() {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
-  $('#health-pill')?.addEventListener('click', () => switchTab('blueprint'));
+  const healthPill = $('#health-pill');
+  healthPill?.addEventListener('click', () => switchTab('blueprint'));
+  healthPill?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      switchTab('blueprint');
+    }
+  });
 
   $('#btn-auth')?.addEventListener('click', () => {
     if (S.session) {
