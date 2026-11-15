@@ -2,7 +2,7 @@
  * PRISM 5.0 — DOM Builders, Segmented Block Meters & Log Renderers
  * ============================================================================ */
 
-import { fmtClock } from './state.js?v=503';
+import { fmtClock } from './state.js?v=5.1.0';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -92,8 +92,7 @@ export function renderSessionLog(container, events, limit = 6) {
     container.appendChild(el('div', { class: 'log-row' },
       el('span', { class: 'log-ts' }, fmtClock(ev.ts)),
       el('span', { class: `log-tag ${colorClass}` }, tag),
-      el('span', { class: 'log-msg' }, body),
-      el('span', { class: 'log-meta' }, meta)
+      el('span', { class: 'log-msg', title: body }, body)
     ));
   }
 }

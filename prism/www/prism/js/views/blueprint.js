@@ -1,16 +1,15 @@
 /* ============================================================================
- * PRISM 5.0 — View 02: Kernel Packet Routing Blueprint & Data-Driven Light Flow
+ * PRISM — View 02: Kernel Routing Blueprint, Nftables Classify & Light Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, fmtRate } from '../state.js?v=503';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=503';
-import { write, call } from '../api.js?v=503';
+import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate } from '../state.js?v=5.1.0';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.1.0';
+import { write, call } from '../api.js?v=5.1.0';
 
 let drawerOpen = false;
 let rafId = null;
 let lastFrameTs = 0;
 
-// Real delta rule traffic snapshot for packet-flow velocity calculation
 let prevRuleSample = null;
 const liveFlow = {
   totPkts: 0,
@@ -22,64 +21,53 @@ const liveFlow = {
   tunShare: 0
 };
 
-// Continuous phase state for the 3 data-plane optical paths [0: VIP, 1: TW-HOME, 2: Harvest]
-const branchState = [
-  { phase: 0.10, vel: 0.12, targetVel: 0.12, opacity: 0.35, targetOpacity: 0.35, railOp: 0.25 },
-  { phase: 0.42, vel: 0.16, targetVel: 0.16, opacity: 0.35, targetOpacity: 0.35, railOp: 0.25 },
-  { phase: 0.74, vel: 0.18, targetVel: 0.18, opacity: 0.35, targetOpacity: 0.35, railOp: 0.25 }
-];
-
-function buildPoly(points) {
-  const segs = [];
-  let totalLen = 0;
-  for (let i = 0; i < points.length - 1; i++) {
-    const [x0, y0] = points[i];
-    const [x1, y1] = points[i + 1];
-    const len = Math.hypot(x1 - x0, y1 - y0);
-    const deg = Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI;
-    segs.push({ x0, y0, x1, y1, len, deg, start: totalLen });
-    totalLen += len;
-  }
-  return { segs, totalLen };
-}
-
-const POLY_PATHS = {
-  f0: buildPoly([[450, 0], [450, 24], [146, 24], [146, 54]]),
-  f1: buildPoly([[450, 0], [450, 54]]),
-  f2: buildPoly([[450, 0], [450, 24], [754, 24], [754, 54]]),
-  m0: buildPoly([[146, 0], [146, 28], [450, 28], [450, 54]]),
-  m1: buildPoly([[450, 0], [450, 54]]),
-  m2: buildPoly([[754, 0], [754, 28], [450, 28], [450, 54]])
+const RULE_LABELS = {
+  'device-block': '設備禁網',
+  'relay': '中繼直連',
+  'quic': 'QUIC攔截',
+  'device-direct': '設備直連',
+  'device-tunnel': '設備隧道',
+  'device-game': '遊戲專線',
+  'tunnel-range': '強制IP段',
+  'tunnel-domain': 'SmartDNS釘選',
+  'domestic': '國內直連',
+  'domestic-domain': 'SmartDNS國內',
+  'tunnel-port': '海外UDP端口',
+  'rest-tunnel': '其餘→TW-HOME',
+  'rest-direct': '其餘→直連'
 };
 
-function samplePoly(poly, tNorm) {
-  const dist = ((tNorm % 1) + 1) % 1 * poly.totalLen;
-  for (let i = 0; i < poly.segs.length; i++) {
-    const s = poly.segs[i];
-    if (dist <= s.start + s.len || i === poly.segs.length - 1) {
-      const u = s.len > 0 ? Math.min(1, Math.max(0, (dist - s.start) / s.len)) : 0;
-      return {
-        x: s.x0 + (s.x1 - s.x0) * u,
-        y: s.y0 + (s.y1 - s.y0) * u,
-        deg: s.deg
-      };
-    }
-  }
-  const last = poly.segs[poly.segs.length - 1];
-  return { x: last.x1, y: last.y1, deg: last.deg };
-}
+// Continuous light-ribbon waveguide physics (0..100 normalized pathLength)
+const ribbonState = [
+  { phase: 8,  vel: 14, targetVel: 14, op: 0.36, targetOp: 0.36, haloOp: 0.14, coreOp: 0.34, width: 3.6 },
+  { phase: 41, vel: 18, targetVel: 18, op: 0.36, targetOp: 0.36, haloOp: 0.14, coreOp: 0.34, width: 3.6 },
+  { phase: 74, vel: 22, targetVel: 22, op: 0.36, targetOp: 0.36, haloOp: 0.14, coreOp: 0.34, width: 3.6 }
+];
 
-function setPhotonPose(elNode, poly, phase, opacity) {
-  if (!elNode) return;
-  if (opacity <= 0.02) {
-    elNode.setAttribute('opacity', '0');
-    return;
+function updateWaveguideDom(prefix, k, b, phaseOffset) {
+  const halo = $(`#halo-${prefix}${k}`);
+  const core = $(`#core-${prefix}${k}`);
+  const band = $(`#band-${prefix}${k}`);
+  const crest = $(`#crest-${prefix}${k}`);
+  const off = -((b.phase + phaseOffset) % 100);
+  const crestOff = -((b.phase + phaseOffset + 10) % 100);
+
+  if (halo) {
+    halo.style.opacity = b.haloOp.toFixed(2);
+    halo.style.strokeWidth = (b.width * 2.5).toFixed(1);
   }
-  // Fade smoothly in at t=[0..0.1] and out at t=[0.9..1.0] so streaks enter/exit boxes cleanly
-  const edgeFade = phase < 0.1 ? phase / 0.1 : (phase > 0.9 ? (1 - phase) / 0.1 : 1);
-  const { x, y, deg } = samplePoly(poly, phase);
-  elNode.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${deg.toFixed(1)})`);
-  elNode.setAttribute('opacity', (opacity * edgeFade).toFixed(2));
+  if (core) {
+    core.style.opacity = b.coreOp.toFixed(2);
+  }
+  if (band) {
+    band.setAttribute('stroke-dashoffset', off.toFixed(2));
+    band.style.opacity = b.op.toFixed(2);
+    band.style.strokeWidth = b.width.toFixed(1);
+  }
+  if (crest) {
+    crest.setAttribute('stroke-dashoffset', crestOff.toFixed(2));
+    crest.style.opacity = (b.op * 0.72).toFixed(2);
+  }
 }
 
 function stepAnimation(now) {
@@ -93,22 +81,13 @@ function stepAnimation(now) {
   lastFrameTs = now;
 
   for (let k = 0; k < 3; k++) {
-    const b = branchState[k];
-    b.vel += (b.targetVel - b.vel) * 0.12;
-    b.opacity += (b.targetOpacity - b.opacity) * 0.12;
-    b.phase = (b.phase + b.vel * dt) % 1;
+    const b = ribbonState[k];
+    b.vel += (b.targetVel - b.vel) * 0.1;
+    b.op += (b.targetOp - b.op) * 0.1;
+    b.phase = (b.phase + b.vel * dt) % 100;
 
-    const pA = b.phase;
-    const pB = (b.phase + 0.5) % 1;
-
-    setPhotonPose($(`#ph-f${k}a`), POLY_PATHS[`f${k}`], pA, b.opacity);
-    setPhotonPose($(`#ph-f${k}b`), POLY_PATHS[`f${k}`], pB, b.opacity * 0.72);
-
-    // Merge rail continues after short phase lag behind sub-node processing
-    const mA = (b.phase + 0.18) % 1;
-    const mB = (b.phase + 0.68) % 1;
-    setPhotonPose($(`#ph-m${k}a`), POLY_PATHS[`m${k}`], mA, b.opacity);
-    setPhotonPose($(`#ph-m${k}b`), POLY_PATHS[`m${k}`], mB, b.opacity * 0.72);
+    updateWaveguideDom('f', k, b, 0);
+    updateWaveguideDom('m', k, b, 18);
   }
 
   rafId = requestAnimationFrame(stepAnimation);
@@ -181,28 +160,87 @@ function updateFlowPhysics(st) {
 
   for (let k = 0; k < 3; k++) {
     const bps = rates[k];
-    const b = branchState[k];
+    const b = ribbonState[k];
     if (bps < 0) {
       b.targetVel = 0;
-      b.targetOpacity = 0;
-      b.railOp = 0.12;
+      b.targetOp = 0;
+      b.haloOp = 0.04;
+      b.coreOp = 0.12;
+      b.width = 2.4;
     } else {
       const mbps = (bps * 8) / 1e6;
       if (mbps < 0.01) {
-        // Alive idle standby trickle (~12s slow optical heartbeat)
-        b.targetVel = 0.08;
-        b.targetOpacity = 0.24;
-        b.railOp = 0.22;
+        b.targetVel = 14;
+        b.targetOp = 0.34;
+        b.haloOp = 0.14;
+        b.coreOp = 0.32;
+        b.width = 3.2;
       } else {
-        b.targetVel = Math.min(2.4, 0.28 + Math.log10(1 + mbps * 12) * 0.65);
-        b.targetOpacity = Math.min(1.0, 0.56 + Math.log10(1 + mbps * 4) * 0.30);
-        b.railOp = Math.min(0.82, 0.30 + Math.log10(1 + mbps * 4) * 0.28);
+        const logF = Math.log10(1 + mbps * 6);
+        b.targetVel = Math.min(92, 22 + logF * 34);
+        b.targetOp = Math.min(0.98, 0.56 + logF * 0.24);
+        b.haloOp = Math.min(0.45, 0.20 + logF * 0.14);
+        b.coreOp = Math.min(0.82, 0.42 + logF * 0.22);
+        b.width = Math.min(6.0, 3.6 + logF * 1.2);
       }
     }
-    const rf = $(`#rail-f${k}`);
-    const rm = $(`#rail-m${k}`);
-    if (rf) rf.style.opacity = b.railOp.toFixed(2);
-    if (rm) rm.style.opacity = b.railOp.toFixed(2);
+  }
+}
+
+function renderClassifyStrip() {
+  const grid = $('#bp-classify-grid');
+  if (!grid) return;
+  const rules = S.rules?.rules || [];
+  if (!rules.length) {
+    grid.innerHTML = '<span class="c-muted" style="font-size:11px">等待 nftables classify 計數...</span>';
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  for (const r of rules) {
+    const label = RULE_LABELS[r.tag] || r.tag;
+    const isTun = r.tag.includes('tunnel') || r.tag === 'rest-tunnel';
+    const isLit = (r.packets || 0) > 0;
+    const cls = isTun && isLit ? 'tun' : (isLit ? 'lit' : '');
+    const pkts = r.packets >= 100000 ? `${(r.packets / 1000).toFixed(1)}k` : `${r.packets}`;
+    frag.appendChild(el('div', { class: `classify-pill ${cls}` },
+      el('span', { class: 'c-sec' }, label),
+      el('strong', { class: isLit ? (isTun ? 'c-violet' : 'c-mint') : 'c-muted', style: { fontVariantNumeric: 'tabular-nums' } }, `${pkts}`)
+    ));
+  }
+  grid.innerHTML = '';
+  grid.appendChild(frag);
+}
+
+function renderMiniSpectrum(strands) {
+  const bar = $('#bp-mini-spectrum');
+  if (!bar || !strands.length) return;
+  if (bar.children.length !== strands.length) {
+    bar.innerHTML = '';
+    strands.forEach((s, idx) => {
+      const col = spectralColor(idx, strands.length);
+      bar.appendChild(el('span', {
+        class: 'mini-sp-cell',
+        style: { backgroundColor: col.css }
+      }));
+    });
+  }
+  for (let i = 0; i < strands.length; i++) {
+    const s = strands[i];
+    const cell = bar.children[i];
+    if (!cell) continue;
+    const col = spectralColor(i, strands.length);
+    if (!s.healthy) {
+      cell.style.backgroundColor = 'rgba(230, 108, 120, 0.35)';
+      cell.style.boxShadow = 'none';
+      cell.style.opacity = '0.45';
+    } else {
+      cell.style.backgroundColor = col.css;
+      const pct = (s.tokens_pct ?? 100) / 100;
+      const active = (s.now ?? s.rate ?? 0) > 2000;
+      cell.style.opacity = String(0.32 + pct * 0.68);
+      cell.style.boxShadow = active ? `0 0 6px ${col.css}` : 'none';
+    }
   }
 }
 
@@ -252,11 +290,25 @@ export function renderBlueprint() {
   const tun = S.tunnel;
   const nH = Math.max(1, st.healthy_count || st.strand_count || 21);
   const totalRate = (st.rate || 0) + (st.rate_up || 0);
+  const strands = st.strands || [];
 
-  // Left Guard Advisor Column
+  // Top Legend MPTCP Status Pill
+  const mptcpBadge = $('#bp-mptcp-badge');
+  if (mptcpBadge) {
+    const mp = st.mptcp;
+    if (mp?.enabled) {
+      mptcpBadge.className = 'st-badge charged';
+      mptcpBadge.textContent = `MPTCP · ${mp.subflows} subflows · ${mp.endpoints?.length || 0} ep`;
+    } else {
+      mptcpBadge.className = 'st-badge draining';
+      mptcpBadge.textContent = 'MPTCP · standby';
+    }
+  }
+
+  // Left Guard Rail
   const canaryMs = st.tunnel?.canary_ms || 0;
   $('#adv-verdict').textContent = st.ok ? 'zero-leak verified' : (st.fail?.join(', ') || 'check failed');
-  $('#adv-verdict').className = st.ok ? 'c-mint' : 'c-crimson';
+  $('#adv-verdict').className = `v ${st.ok ? 'c-mint' : 'c-crimson'}`;
   $('#adv-canary').textContent = canaryMs > 0 ? `${canaryMs} ms` : (st.tunnel?.on ? 'active' : 'off');
   $('#adv-ct').textContent = `${st.sys?.conntrack?.count ?? 0}`;
   $('#adv-strands').textContent = `${st.healthy_count ?? 0}/${st.strand_count ?? 21}`;
@@ -264,13 +316,18 @@ export function renderBlueprint() {
   const dnsEl = $('#adv-dns');
   if (dnsEl) {
     dnsEl.textContent = st.dns?.smartdns ? `53 → ${st.dns.port || 6053}` : 'offline';
-    dnsEl.className = st.dns?.smartdns ? 'c-mint' : 'c-crimson';
+    dnsEl.className = `v ${st.dns?.smartdns ? 'c-mint' : 'c-crimson'}`;
   }
   $('#adv-doctor').textContent = st.ok
     ? `all ${S.doctor?.checks?.length || 24} invariants ok`
     : `${st.fail?.length || 1} fail · ${st.warn?.length || 0} warn`;
 
-  // Top Ingress & Classify Gate
+  // Left Session Log
+  const evList = S.events?.events || [];
+  if ($('#log-count')) $('#log-count').textContent = `${evList.length} 條`;
+  renderSessionLog($('#ov-session-log'), evList, 12);
+
+  // Stage 1: Ingress + Classify Split
   $('#bp-ingress-rate').textContent = fmtRate(totalRate).full;
   const chargedRatio = (w.charged_count || 0) / nH;
   renderSegMeter($('#bp-harvest-meter'), chargedRatio, 10, 'amber');
@@ -293,43 +350,54 @@ export function renderBlueprint() {
     }
   }
 
-  $('#bp-dns-st').textContent = `SmartDNS :${st.dns?.port || 6053} · tunnel4_dns: ${S.rules?.sizes?.tunnel4_dns ?? 0} ips · domestic4: ${S.rules?.sizes?.domestic4 ?? 0} nets`;
-  $('#bp-ingress-pkts').textContent = `classify pkts: ${(liveFlow.totPkts / 1000).toFixed(1)}k`;
+  const sz = S.rules?.sizes || {};
+  $('#bp-dns-st').textContent = `SmartDNS :${st.dns?.port || 6053} · domestic4: ${sz.domestic4 ?? 0} · cn_dns: ${sz.domestic4_dns ?? 0} · tun_dns: ${sz.tunnel4_dns ?? 0}`;
+  $('#bp-ingress-pkts').textContent = `classify: ${(liveFlow.totPkts / 1000).toFixed(1)}k pkts`;
+  renderClassifyStrip();
 
-  // Branch 0: @vip_lane
-  const vipS = (st.strands || []).find(s => s.vip);
+  // Stage 2 · Branch 0: @vip_lane
+  const vipS = strands.find(s => s.vip);
   $('#bp-vip-rate').textContent = vipS ? fmtRate(liveFlow.vipBps).full : '0 bps';
   const vipTok = vipS ? (vipS.tokens_pct ?? 100) / 100 : 0;
   renderSegMeter($('#bp-vip-meter'), vipTok, 10, 'blue');
   $('#bp-vip-pct').textContent = vipS ? `${Math.round(vipTok * 100)}%` : 'none';
   $('#bp-vip-desc').textContent = vipS
-    ? `${vipS.dev} · τ=${vipS.ttfb_ms || '—'}ms · ↓${fmtRate(vipS.now ?? vipS.rate).full}`
+    ? `${vipS.dev} · τ=${vipS.ttfb_ms || '—'}ms · loss ${vipS.loss_pct ?? 0}%`
     : 'auto selecting lowest RTT strand...';
   $('#bp-vip-st').textContent = vipS && vipS.healthy ? 'dedicated lane pinned' : 'standby';
 
-  // Branch 1: TW-HOME Mihomo TProxy
+  // Stage 2 · Branch 1: TW-HOME Mihomo + MPTCP + Zashboard
   const mihomoOk = !!st.tunnel?.running;
   $('#bp-tun-rate').textContent = mihomoOk ? fmtRate(liveFlow.tunBps).full : '0 bps';
   renderSegMeter($('#bp-tun-meter'), mihomoOk ? Math.max(0.08, liveFlow.tunShare) : 0, 10, mihomoOk ? 'violet' : 'amber');
   $('#bp-tun-pct').textContent = mihomoOk ? `${Math.round(liveFlow.tunShare * 100)}%` : '0%';
   $('#bp-tun-desc').textContent = `${(tun?.tw_home || tun?.selected || 'TW-HOME').slice(0, 26)} · ${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts`;
+  const mptcpEl = $('#bp-tun-mptcp');
+  if (mptcpEl) {
+    mptcpEl.textContent = st.mptcp?.enabled
+      ? `MPTCP ${st.mptcp.subflows} subflows pool active`
+      : 'MPTCP single-path';
+  }
   $('#bp-tun-st').textContent = mihomoOk ? (canaryMs > 0 ? `canary ${canaryMs} ms ok` : 'cage encrypted') : 'offline / direct';
+  const zBtn = $('#zashboard-link');
+  if (zBtn) {
+    zBtn.href = tun?.dashboard || `http://${st.lan_ip || location.hostname || '192.168.16.1'}:9090/ui/`;
+  }
 
-  // Branch 2: Domestic Direct & 21-Strand Burst-Harvest Weave
+  // Stage 2 · Branch 2: Domestic Direct + Burst-Harvest
   const directShare = Math.max(0, 1 - liveFlow.tunShare);
   const weaveRate = Math.max(liveFlow.domBps, Math.max(0, totalRate - liveFlow.vipBps));
   $('#bp-dom-rate').textContent = fmtRate(weaveRate).full;
   renderSegMeter($('#bp-dom-meter'), chargedRatio, 10, 'mint');
   $('#bp-dom-pct').textContent = `${w.charged_count ?? 0}/${nH}`;
+  renderMiniSpectrum(strands);
   $('#bp-dom-desc').textContent = `slots ${w.slots ?? 126} (${w.affinity || 'flow'}) · direct ${(liveFlow.domPkts / 1000).toFixed(1)}k (${Math.round(directShare * 100)}%)`;
   $('#bp-dom-st').textContent = `${w.draining_count ?? 0} draining · ${(w.cooling_count || 0) + (w.depleted_count || 0)} cooling`;
 
-  // Bottom QoS & Verify Box + Session Log
+  // Stage 3: QoS & Verify
   $('#bp-verify-summary').textContent = st.ok
     ? `上次調諧正常 · 可用內存 ${Math.round((st.sys?.mem_available_kb || 0) / 1024)} MB · load ${st.sys?.load1 ?? 0}`
     : `異常項目: ${(st.fail || []).join(', ')}`;
-
-  renderSessionLog($('#ov-session-log'), S.events?.events || [], 6);
 
   if (drawerOpen) renderBlueprintDrawer();
 }

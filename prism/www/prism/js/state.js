@@ -2,6 +2,8 @@
  * PRISM 5.0 — Central State Store, DSOTM Spectral Color Math & Formatters
  * ============================================================================ */
 
+export const UI_VERSION = '5.1.0';
+
 export const S = {
   tab: 'overview',
   session: localStorage.getItem('prism_session') || '',
@@ -16,6 +18,8 @@ export const S = {
   config: null,
   connections: null,
   hoverStrand: null,
+  selectedDeviceMac: 'all',
+  devMenuQuery: '',
   connFilter: { route: 'all', q: '' },
   flowSnapshot: {},
   flowSnapshotTs: 0,

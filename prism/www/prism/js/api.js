@@ -2,8 +2,8 @@
  * PRISM 5.0 — OpenWrt ubus JSON-RPC 2.0 Client & Session Auth
  * ============================================================================ */
 
-import { S } from './state.js?v=503';
-import { $, toast } from './dom.js?v=503';
+import { S } from './state.js?v=5.1.0';
+import { $, toast } from './dom.js?v=5.1.0';
 
 const ANON_TOKEN = '00000000000000000000000000000000';
 let rpcSeq = 1;

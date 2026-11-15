@@ -1,16 +1,16 @@
 /* ============================================================================
- * PRISM 5.0 — View 03: 21-Wavelength Optical Spectrometer, Timeline & Scope
+ * PRISM — View 03: Optical Emission Heatmap, Oscilloscope & 21-Ch Telemetry
  * ============================================================================ */
 
-import { S, spectralColor, fmtRate } from '../state.js?v=503';
-import { $, $$, el, renderSegMeter } from '../dom.js?v=503';
-import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=503';
+import { S, spectralColor } from '../state.js?v=5.1.0';
+import { $, $$, el, renderSegMeter } from '../dom.js?v=5.1.0';
+import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.1.0';
 
 let highlightedStrandId = null;
 
 function fmtShortRate(bps) {
   const b = (bps || 0) * 8;
-  if (b <= 50) return '—';
+  if (b <= 50) return '0';
   if (b >= 1e9) return `${(b / 1e9).toFixed(1)}G`;
   if (b >= 1e6) return `${(b / 1e6).toFixed(b >= 10e6 ? 0 : 1)}M`;
   if (b >= 1e3) return `${Math.round(b / 1e3)}K`;
@@ -30,13 +30,13 @@ export function bindSpectrumEvents() {
 function highlightStrand(strandId) {
   highlightedStrandId = strandId;
 
-  const eqCols = $('#spectrum-eq')?.children || [];
-  for (const col of eqCols) {
-    const id = Number(col.dataset.sid);
-    if (strandId == null) col.classList.remove('dim', 'hi');
+  const tiles = $('#spectrum-heatmap')?.children || [];
+  for (const tile of tiles) {
+    const id = Number(tile.dataset.sid);
+    if (strandId == null) tile.classList.remove('dim', 'hi');
     else {
-      col.classList.toggle('hi', id === strandId);
-      col.classList.toggle('dim', id !== strandId);
+      tile.classList.toggle('hi', id === strandId);
+      tile.classList.toggle('dim', id !== strandId);
     }
   }
 
@@ -57,83 +57,90 @@ function highlightStrand(strandId) {
   }
 }
 
-function buildEqualizerColumns(eq, strands) {
+function buildHeatmapTiles(grid, strands) {
   const frag = document.createDocumentFragment();
   const total = Math.max(1, strands.length);
   strands.forEach((s, idx) => {
     const col = spectralColor(idx, total);
     const shortName = s.dev === 'wan' ? 'wan' : String(s.dev || idx).replace(/^vwan/, 'v');
-    const stack = el('div', { class: 'spec-stack' });
-    for (let c = 0; c < 10; c++) {
-      stack.appendChild(el('div', { class: 'spec-cell' }));
-    }
-
-    const colEl = el('div', {
-      class: 'spec-col',
+    const tile = el('div', {
+      class: 'heat-tile',
       'data-sid': s.id,
-      style: { '--sc-rgb': col.rgb, '--sc-css': col.css },
+      style: { '--sc-rgb': col.rgb },
       onMouseenter: () => highlightStrand(s.id),
       onMouseleave: () => highlightStrand(null)
     },
-      el('div', { class: 'spec-slots' }, '0s'),
-      stack,
-      el('div', { class: 'spec-name' }, shortName),
-      el('div', { class: 'spec-rtt' }, '—'),
-      el('div', { class: 'spec-rate' }, '—')
+      el('div', { class: 'heat-top' },
+        el('span', { class: 'heat-name' }, shortName),
+        el('span', { class: 'heat-slot' }, '0s')
+      ),
+      el('div', { class: 'heat-rate' }, '0 bps'),
+      el('div', { class: 'heat-foot' },
+        el('span', {}, '—'),
+        el('span', {}, '100%')
+      )
     );
-    frag.appendChild(colEl);
+    frag.appendChild(tile);
   });
-  eq.innerHTML = '';
-  eq.appendChild(frag);
-  eq.dataset.count = String(strands.length);
+  grid.innerHTML = '';
+  grid.appendChild(frag);
+  grid.dataset.count = String(strands.length);
 }
 
-function updateEqualizer(strands) {
-  const eq = $('#spectrum-eq');
-  if (!eq || !strands.length) return;
-  if (Number(eq.dataset.count) !== strands.length) {
-    buildEqualizerColumns(eq, strands);
+function updateHeatmap(strands) {
+  const grid = $('#spectrum-heatmap');
+  if (!grid || !strands.length) return;
+  if (Number(grid.dataset.count) !== strands.length) {
+    buildHeatmapTiles(grid, strands);
   }
 
   const total = Math.max(1, strands.length);
-  const cols = eq.children;
+  let maxMbps = 0.05;
+  const mbpsList = strands.map(s => {
+    const m = ((s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0)) * 8 / 1e6;
+    if (m > maxMbps) maxMbps = m;
+    return m;
+  });
+
+  const tiles = grid.children;
   for (let i = 0; i < strands.length; i++) {
     const s = strands[i];
-    const colEl = cols[i];
-    if (!colEl) continue;
+    const tile = tiles[i];
+    if (!tile) continue;
+
     const col = spectralColor(i, total);
     const pct = s.healthy ? Math.max(0, Math.min(100, s.tokens_pct ?? 100)) : 0;
-    const litCount = s.healthy ? Math.round(pct / 10) : 0;
     const rateTotal = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
+    const mbps = mbpsList[i];
+    const rel = maxMbps > 0.1 ? mbps / maxMbps : 0;
+    const absPulse = Math.min(1, Math.log10(1 + mbps * 5) / 1.7);
+    const bucketFloor = s.bucket === 'cooling' ? 0.06 : (s.bucket === 'depleted' ? 0.04 : 0.12);
+    const heat = s.healthy ? Math.min(1, bucketFloor * (pct / 100) + Math.max(absPulse, rel * 0.85) * 0.88) : 0;
 
-    colEl.classList.toggle('vip', !!s.vip);
-    colEl.title = `${s.dev} (${col.lambda}nm) · ${s.ip || 'no lease'} · τ=${s.ttfb_ms || '—'}ms · tokens ${Math.round(pct)}%`;
+    tile.classList.toggle('vip', !!s.vip);
+    tile.classList.toggle('down', !s.healthy);
+    tile.style.setProperty('--heat-core', (0.06 + heat * 0.56).toFixed(2));
+    tile.style.setProperty('--heat-halo', (0.04 + heat * 0.44).toFixed(2));
+    tile.style.setProperty('--heat-inner', (0.04 + heat * 0.24).toFixed(2));
+    tile.style.setProperty('--heat-blur', `${Math.round(8 + heat * 18)}px`);
+    tile.style.borderColor = !s.healthy
+      ? 'rgba(230, 108, 120, 0.55)'
+      : (s.vip ? 'var(--c-blue)' : `rgba(${col.rgb}, ${(0.28 + heat * 0.70).toFixed(2)})`);
+    tile.title = `${s.dev} (${col.lambda}nm) · ${s.ip || 'no lease'} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}%`;
 
-    const slotEl = colEl.children[0];
-    const stackEl = colEl.children[1];
-    const rttEl = colEl.children[3];
-    const rateEl = colEl.children[4];
+    const slotEl = tile.children[0].children[1];
+    const rateEl = tile.children[1];
+    const footL = tile.children[2].children[0];
+    const footR = tile.children[2].children[1];
 
-    slotEl.textContent = s.vip ? 'VIP*' : `${s.slots ?? 0}s`;
-    rttEl.textContent = s.ttfb_ms > 0 ? `${s.ttfb_ms}m` : '—';
-    rateEl.textContent = fmtShortRate(rateTotal);
-    rateEl.style.color = rateTotal > 1000 ? col.css : 'var(--text-muted)';
-
-    const cells = stackEl.children;
-    const bucketDim = s.bucket === 'cooling' ? 0.58 : (s.bucket === 'draining' ? 0.85 : 1.0);
-    for (let c = 0; c < 10; c++) {
-      const cell = cells[c];
-      if (!s.healthy) {
-        cell.className = c === 0 ? 'spec-cell down' : 'spec-cell';
-        cell.style.opacity = '';
-      } else if (c < litCount) {
-        cell.className = 'spec-cell lit';
-        cell.style.opacity = String(bucketDim);
-      } else {
-        cell.className = 'spec-cell';
-        cell.style.opacity = '';
-      }
-    }
+    slotEl.textContent = !s.healthy ? 'DOWN' : (s.vip ? 'VIP*' : `${s.slots ?? 0}s`);
+    rateEl.textContent = s.healthy ? (rateTotal > 50 ? fmtShortRate(rateTotal) : 'idle') : (s.parked ? 'PARK' : 'OFF');
+    rateEl.style.color = !s.healthy
+      ? 'var(--c-crimson)'
+      : (rateTotal > 2000 ? '#ffffff' : 'var(--text-secondary)');
+    footL.textContent = s.ttfb_ms > 0 ? `${s.ttfb_ms}m` : '—';
+    footL.style.color = s.loss_pct >= 15 ? 'var(--c-amber)' : 'var(--text-muted)';
+    footR.textContent = `${Math.round(pct)}%`;
   }
 }
 
@@ -149,9 +156,9 @@ export function renderSpectrum() {
     colorById[s.id] = spectralColor(idx, Math.max(1, strands.length));
   });
 
-  // 1. 21-Column Optical Spectrometer Equalizer
-  $('#weave-cap').textContent = `${w.slots || pat.length || 0} slots · VIP=${w.vip_dev || '—'} · ${w.interval || 2}s sweep`;
-  updateEqualizer(strands);
+  // 1. Optical Emission Heatmap
+  $('#weave-cap').textContent = `${w.slots || pat.length || 0} slots · VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`;
+  updateHeatmap(strands);
 
   // 2. Slim Single-Row 126-Slot Kernel Timeline Ribbon
   const mat = $('#pattern');
@@ -162,7 +169,7 @@ export function renderSpectrum() {
       const frag = document.createDocumentFragment();
       for (let i = 0; i < pat.length; i++) {
         const sid = pat[i];
-        const col = colorById[sid] || { css: '#64a8ef', lambda: 520 };
+        const col = colorById[sid] || { css: '#64aef5', lambda: 520 };
         const tick = el('div', {
           class: 'slot-tick',
           'data-sid': sid,
@@ -207,7 +214,7 @@ export function renderSpectrum() {
     );
   }
 
-  // 4. Compact 21-Strand Token Capacitor Table
+  // 4. Right Full-Height 21-Strand Token Capacitor Telemetry Table
   const tbody = $('#strands-tbody');
   if (!tbody) return;
 
@@ -223,37 +230,41 @@ export function renderSpectrum() {
     const col = spectralColor(idx, Math.max(1, strands.length));
     const [bText, bClass] = s.vip ? ['VIP*', 'vip'] : (bucketLabels[s.bucket] || [s.bucket || 'CHARGED', 'charged']);
     const meterColor = s.vip ? 'blue' : (s.bucket === 'charged' ? 'mint' : (s.bucket === 'cooling' ? 'violet' : 'amber'));
-    const meterWrap = el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } });
+    const meterWrap = el('div', { style: { display: 'flex', alignItems: 'center', gap: '5px' } });
     const seg = el('span', { class: 'seg-meter' });
-    renderSegMeter(seg, (s.tokens_pct ?? 100) / 100, 8, meterColor);
+    renderSegMeter(seg, (s.tokens_pct ?? 100) / 100, 6, meterColor);
     const kbTxt = s.cooldown_rem > 0
-      ? `${Math.round((s.tokens || 0) / 1000)}K (${s.cooldown_rem}s)`
-      : `${Math.round((s.tokens || 0) / 1000)}K`;
-    meterWrap.append(seg, el('span', { class: 'c-sec', style: { fontSize: '10.5px' } }, kbTxt));
+      ? `${s.tokens_pct ?? 100}%(${s.cooldown_rem}s)`
+      : `${s.tokens_pct ?? 100}%`;
+    meterWrap.append(seg, el('span', { class: 'c-sec', style: { fontSize: '10px' } }, kbTxt));
+
+    const rttNode = s.loss_pct > 0
+      ? el('span', { class: s.loss_pct >= 15 ? 'c-amber' : 'c-sec', title: `packet loss ${s.loss_pct}%` }, `${s.ttfb_ms > 0 ? s.ttfb_ms + 'm' : '—'}·${s.loss_pct}%`)
+      : el('span', {}, s.ttfb_ms > 0 ? `${s.ttfb_ms}m` : '—');
 
     const tr = el('tr', {
       'data-sid': s.id,
       class: highlightedStrandId === s.id ? 'hi' : '',
-      style: { cursor: 'default' },
+      style: { cursor: 'pointer' },
       onMouseenter: () => highlightStrand(s.id),
       onMouseleave: () => highlightStrand(null)
     },
       el('td', {},
-        el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
-          el('span', { style: { display: 'inline-block', width: '8px', height: '8px', borderRadius: '1px', background: col.css, boxShadow: `0 0 6px ${col.css}` } }),
+        el('div', { style: { display: 'flex', alignItems: 'center', gap: '5px' } },
+          el('span', { style: { display: 'inline-block', width: '7px', height: '7px', background: col.css, boxShadow: `0 0 6px ${col.css}` } }),
           el('strong', { class: 'c-bright' }, `${s.dev}`),
-          el('span', { class: 'c-muted', style: { fontSize: '10.5px' } }, `${col.lambda}nm`)
+          el('span', { class: 'c-muted', style: { fontSize: '10px' } }, `${col.lambda}`)
         )
       ),
       el('td', {},
         s.healthy
           ? el('span', { class: `st-badge ${bClass}` }, bText)
-          : el('span', { class: 'st-badge depleted' }, s.parked ? 'PARKED' : 'DOWN')
+          : el('span', { class: 'st-badge depleted' }, s.parked ? 'PARK' : 'DOWN')
       ),
-      el('td', { class: 'num' }, s.ttfb_ms > 0 ? `${s.ttfb_ms}ms` : '—'),
-      el('td', { class: 'num c-mint' }, fmtRate(s.now ?? s.rate).full),
-      el('td', { class: 'num c-blue' }, fmtRate(s.up_now ?? s.up).full),
-      el('td', { class: 'num c-sec' }, fmtRate(s.peak).full),
+      el('td', { class: 'num' }, rttNode),
+      el('td', { class: 'num c-mint' }, fmtShortRate(s.now ?? s.rate)),
+      el('td', { class: 'num c-blue' }, fmtShortRate(s.up_now ?? s.up)),
+      el('td', { class: 'num c-sec' }, fmtShortRate(s.peak)),
       el('td', {}, meterWrap),
       el('td', { class: 'num' },
         s.vip ? el('span', { class: 'c-blue' }, 'VIP') : el('strong', { class: s.slots > 0 ? 'c-bright' : 'c-muted' }, `${s.slots ?? 0}`)

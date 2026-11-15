@@ -1,73 +1,106 @@
 /* ============================================================================
- * PRISM 5.0 — Design Tokens & Luminous Dark Color System
+ * PRISM — Unified Dark Optical Design Tokens & Scrollbar System
  * ============================================================================ */
 
 :root {
-  /* Edge-to-Edge Obsidian Canvas */
-  --bg-void: #040509;
-  --bg-surface: #0a0d14;
-  --bg-panel: rgba(13, 17, 26, 0.88);
-  --bg-panel-alt: #080b11;
-  --bg-hover: rgba(255, 255, 255, 0.04);
+  /* Deep Optical Space & Glass Panels (圖1 sharp luminous dark aesthetic) */
+  --bg-void:       #040509;
+  --bg-surface:    #06080f;
+  --bg-panel:      rgba(6, 8, 15, 0.94);
+  --bg-panel-alt:  rgba(10, 13, 22, 0.92);
+  --bg-glass:      rgba(7, 9, 16, 0.96);
 
-  /* Structural Hairlines */
-  --line-window: #1c2231;
-  --line-subtle: #141925;
-  --line-dashed: #2d364d;
+  /* Crisp Sharp Geometry & Luminous Hairlines */
+  --frame-radius:  0px;
+  --frame-w:       1.5px;
+  --line-window:   #243048;
+  --line-subtle:   #151c2c;
+  --line-dashed:   #242c40;
 
-  /* 5 Semantic Luminous Accents */
-  --c-amber: #e8965c;
-  --c-amber-dim: rgba(232, 150, 92, 0.14);
-  --c-amber-glow: rgba(232, 150, 92, 0.28);
+  /* Crisp Monochrome Typography */
+  --text-bright:   #f4f7fc;
+  --text-primary:  #d5dfee;
+  --text-secondary:#8c9ab5;
+  --text-muted:    #58657e;
 
-  --c-mint: #57ca8e;
-  --c-mint-dim: rgba(87, 202, 142, 0.14);
-  --c-mint-glow: rgba(87, 202, 142, 0.28);
-  --c-mint-bar: #70daa2;
+  /* Luminous Spectral Accents */
+  --c-amber:       #eb9a5e;
+  --c-amber-dim:   rgba(235, 154, 94, 0.14);
+  --c-amber-glow:  rgba(235, 154, 94, 0.34);
 
-  --c-blue: #64a8ef;
-  --c-blue-dim: rgba(100, 168, 239, 0.15);
-  --c-blue-glow: rgba(100, 168, 239, 0.30);
-  --c-blue-bar: #7ab9f5;
+  --c-mint:        #57d192;
+  --c-mint-bar:    #57d192;
+  --c-mint-dim:    rgba(87, 209, 146, 0.14);
+  --c-mint-glow:   rgba(87, 209, 146, 0.34);
 
-  --c-violet: #a689eb;
-  --c-violet-dim: rgba(166, 137, 235, 0.15);
-  --c-violet-glow: rgba(166, 137, 235, 0.30);
+  --c-blue:        #64aef5;
+  --c-blue-bar:    #64aef5;
+  --c-blue-dim:    rgba(100, 174, 245, 0.15);
+  --c-blue-glow:   rgba(100, 174, 245, 0.36);
 
-  --c-gold: #efc766;
-  --c-gold-dim: rgba(239, 199, 102, 0.14);
+  --c-violet:      #aa8ef0;
+  --c-violet-dim:  rgba(170, 142, 240, 0.15);
+  --c-violet-glow: rgba(170, 142, 240, 0.36);
 
-  --c-crimson: #e46c75;
-  --c-crimson-dim: rgba(228, 108, 117, 0.16);
+  --c-gold:        #f0ca68;
+  --c-gold-dim:    rgba(240, 202, 104, 0.14);
+  --c-gold-glow:   rgba(240, 202, 104, 0.32);
 
-  /* Typography Hierarchy */
-  --text-bright: #f0f4fa;
-  --text-primary: #cad2e0;
-  --text-secondary: #8590a6;
-  --text-muted: #525c72;
+  --c-crimson:     #e66c78;
+  --c-crimson-dim: rgba(230, 108, 120, 0.14);
+  --c-crimson-glow:rgba(230, 108, 120, 0.34);
 
-  /* Font Stacks */
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Mono', 'Consolas',
-               'PingFang TC', 'Microsoft JhengHei', monospace;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'PingFang TC',
-               'Microsoft JhengHei', system-ui, sans-serif;
-  --font-math: 'Times New Roman', 'STIX Two Math', 'Cambria Math', Georgia, serif;
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'SF Mono', 'Consolas', 'Noto Sans Mono CJK TC', monospace;
+  --font-sans: 'Inter', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --font-math: 'Cambria Math', 'Latin Modern Math', 'Times New Roman', serif;
 }
 
-*, *::before, *::after {
+* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 174, 245, 0.38) #06080e;
+}
+
+/* Unified Dark Optical Scrollbar Across All Browsers & Sub-Panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #06080e;
+  border-left: 1px solid var(--line-subtle);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 174, 245, 0.28);
+  border: 1px solid rgba(100, 174, 245, 0.48);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 174, 245, 0.52);
+  box-shadow: 0 0 8px rgba(100, 174, 245, 0.45);
+}
+
+::-webkit-scrollbar-corner {
+  background: #06080e;
 }
 
 html, body {
-  background-color: var(--bg-void);
+  min-height: 100%;
+  background: var(--bg-void);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  min-height: 100vh;
   overflow-x: hidden;
 }
+
+a { color: var(--c-blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre { font-family: var(--font-mono); }

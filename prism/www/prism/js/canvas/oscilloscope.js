@@ -2,8 +2,8 @@
  * PRISM 5.0 — Dual-Channel SVG Throughput Oscilloscope
  * ============================================================================ */
 
-import { S, fmtRate, fmtClock } from '../state.js?v=503';
-import { $, svgEl } from '../dom.js?v=503';
+import { S, fmtRate, fmtClock } from '../state.js?v=5.1.0';
+import { $, svgEl } from '../dom.js?v=5.1.0';
 
 let lastSig = '';
 let chartLimit = 360;
@@ -85,11 +85,13 @@ export function renderOscilloscope() {
     dUp += `${cmd}${x},${toY(up[i] || 0).toFixed(1)}`;
   }
 
-  // Area fill under download trace
+  // Area fill + glowing dual-channel waveforms
   const dArea = dDown + ` L${toX(n - 1).toFixed(1)},${(padT + plotH).toFixed(1)} L${padL},${(padT + plotH).toFixed(1)} Z`;
   svg.appendChild(svgEl('path', { d: dArea, fill: 'url(#scopeDownG)' }));
-  svg.appendChild(svgEl('path', { d: dUp, fill: 'none', stroke: '#68a3dc', 'stroke-width': '1.2', opacity: '0.8' }));
-  svg.appendChild(svgEl('path', { d: dDown, fill: 'none', stroke: '#5bc28c', 'stroke-width': '1.6' }));
+  svg.appendChild(svgEl('path', { d: dUp, fill: 'none', stroke: '#64aef5', 'stroke-width': '3.8', opacity: '0.22' }));
+  svg.appendChild(svgEl('path', { d: dUp, fill: 'none', stroke: '#64aef5', 'stroke-width': '1.4', opacity: '0.88' }));
+  svg.appendChild(svgEl('path', { d: dDown, fill: 'none', stroke: '#57d192', 'stroke-width': '4.6', opacity: '0.24' }));
+  svg.appendChild(svgEl('path', { d: dDown, fill: 'none', stroke: '#57d192', 'stroke-width': '1.8' }));
 
   const cursorLine = svgEl('line', {
     x1: -10, y1: padT, x2: -10, y2: padT + plotH,

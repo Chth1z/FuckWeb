@@ -2,14 +2,14 @@
  * PRISM 5.0 — Bootstrap, 4-Tab Router & Differential Polling Engine
  * ============================================================================ */
 
-import { S, fmtRate } from './state.js?v=503';
-import { $, $$, toast } from './dom.js?v=503';
-import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=503';
-import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=503';
-import { renderOverview } from './views/overview.js?v=503';
-import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=503';
-import { renderSpectrum, bindSpectrumEvents } from './views/spectrum.js?v=503';
-import { renderClients, bindClientsEvents } from './views/clients.js?v=503';
+import { S, UI_VERSION, fmtRate } from './state.js?v=5.1.0';
+import { $, $$, toast } from './dom.js?v=5.1.0';
+import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.1.0';
+import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=5.1.0';
+import { renderOverview } from './views/overview.js?v=5.1.0';
+import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.1.0';
+import { renderSpectrum, bindSpectrumEvents } from './views/spectrum.js?v=5.1.0';
+import { renderClients, bindClientsEvents } from './views/clients.js?v=5.1.0';
 
 let fastTimer = null;
 let slowTimer = null;
@@ -18,8 +18,12 @@ function renderChrome() {
   const st = S.status;
   if (!st) return;
 
+  const ver = st.version || UI_VERSION;
   $('#hdr-ip').textContent = st.lan_ip || location.hostname;
-  $('#hdr-ver').textContent = `v${st.version || '5.0.0'}`;
+  $('#hdr-ver').textContent = `v${ver}`;
+  if ($('#ov-ver')) $('#ov-ver').textContent = `PRISM v${ver} · DISPERSION FLUX`;
+  if ($('#modal-ver')) $('#modal-ver').textContent = `PRISM v${ver} · 路由器管理驗證`;
+  document.title = `PRISM v${ver} · Optical Spectrum & Privacy Router`;
 
   $('#n-strands').textContent = st.strand_count || (st.strands || []).length || 21;
   const devs = S.devices?.devices || [];
@@ -107,9 +111,9 @@ async function pollSlow() {
   if (document.visibilityState === 'hidden') return;
   try {
     const reqs = [];
-    reqs.push(S.tab === 'overview' || S.tab === 'blueprint' || S.tab === 'clients' ? call('tunnel') : null);
-    reqs.push(S.tab === 'blueprint' || S.tab === 'clients' ? call('rules') : null);
-    reqs.push(S.tab === 'blueprint' ? call('events', { limit: 12 }) : null);
+    reqs.push(S.tab === 'overview' || S.tab === 'blueprint' ? call('tunnel') : null);
+    reqs.push(S.tab === 'blueprint' ? call('rules') : null);
+    reqs.push(S.tab === 'blueprint' ? call('events', { limit: 15 }) : null);
     reqs.push(S.tab === 'blueprint' ? call('doctor') : null);
     reqs.push(S.tab === 'spectrum' ? call('series', { limit: 720 }) : null);
     reqs.push(S.tab === 'blueprint' && S.session ? call('config') : null);

@@ -1,238 +1,345 @@
 /* ============================================================================
- * PRISM 5.0 — View 04: Terminals, TW-HOME Relay Cage & Active Flows
+ * PRISM — View 04: Left-Right Secondary Menu Device & Live Connections Explorer
  * ============================================================================ */
 
-import { S, fmtRate, fmtBytes } from '../state.js?v=503';
-import { $, $$, el } from '../dom.js?v=503';
-import { write } from '../api.js?v=503';
+import { S, fmtRate, fmtBytes } from '../state.js?v=5.1.0';
+import { $, $$, el } from '../dom.js?v=5.1.0';
+import { write } from '../api.js?v=5.1.0';
 
-const POLICIES = [
-  ['auto',   '自動'],
-  ['game',   'VIP電競'],
-  ['direct', '直連'],
-  ['tunnel', '強制隧道'],
-  ['block',  '禁網']
-];
-
-const RULE_LABELS = {
-  'device-block': '設備禁網',
-  'relay': '中繼直連',
-  'quic': 'QUIC攔截',
-  'device-direct': '設備直連',
-  'device-tunnel': '設備隧道',
-  'tunnel-range': '強制IP段',
-  'tunnel-domain': 'SmartDNS釘選',
-  'domestic': '國內直連',
-  'domestic-domain': 'SmartDNS國內',
-  'tunnel-port': '海外UDP端口',
-  'rest-tunnel': '其餘→TW-HOME',
-  'rest-direct': '其餘直連'
+const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
+const POLICY_META = {
+  auto:   { label: '自動分類',     cls: 'c-sec' },
+  game:   { label: '@vip_lane 專線', cls: 'c-blue' },
+  direct: { label: '強制直連',     cls: 'c-mint' },
+  tunnel: { label: '強制 TW-HOME', cls: 'c-violet' },
+  block:  { label: '禁止聯網',     cls: 'c-crimson' }
 };
 
+function computeFlowDeltas() {
+  const conns = S.connections?.connections || [];
+  const now = performance.now();
+  const dt = S.flowSnapshotTs ? (now - S.flowSnapshotTs) / 1000 : 0;
+  const nextSnap = {};
+  const byIp = {};
+  const rows = [];
+
+  for (const f of conns) {
+    const prev = S.flowSnapshot[f.key];
+    let rDown = 0, rUp = 0;
+    if (prev && dt > 0.4 && f.down >= prev.down && f.up >= prev.up) {
+      rDown = (f.down - prev.down) / dt;
+      rUp = (f.up - prev.up) / dt;
+    }
+    nextSnap[f.key] = { down: f.down || 0, up: f.up || 0 };
+    if (f.src) {
+      if (!byIp[f.src]) byIp[f.src] = { down: 0, up: 0, count: 0 };
+      byIp[f.src].down += rDown;
+      byIp[f.src].up += rUp;
+      byIp[f.src].count++;
+    }
+    rows.push({ ...f, rDown, rUp });
+  }
+  S.flowSnapshot = nextSnap;
+  S.flowSnapshotTs = now;
+  return { byIp, rows };
+}
+
+function selectDevice(mac) {
+  S.selectedDeviceMac = mac || 'all';
+  renderClients();
+}
+
 export function bindClientsEvents() {
+  $('#dev-menu-q')?.addEventListener('input', (e) => {
+    S.devMenuQuery = e.target.value.trim().toLowerCase();
+    renderClients();
+  });
+
+  $('#dev-nav-all')?.addEventListener('click', () => selectDevice('all'));
+  $('#btn-dev-back')?.addEventListener('click', () => selectDevice('all'));
+
+  const saveSelectedAlias = () => {
+    const devs = S.devices?.devices || [];
+    const dev = devs.find(d => d.mac === S.selectedDeviceMac);
+    const inp = $('#sel-dev-name');
+    if (!dev || !inp) return;
+    write('device', { mac: dev.mac, name: inp.value.trim(), policy: dev.policy || 'auto' }, '終端別名已儲存');
+  };
+
+  $('#btn-dev-save-name')?.addEventListener('click', saveSelectedAlias);
+  $('#sel-dev-name')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveSelectedAlias();
+  });
+
+  $$('#sel-dev-policy-seg .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const devs = S.devices?.devices || [];
+      const dev = devs.find(d => d.mac === S.selectedDeviceMac);
+      if (!dev) return;
+      const policy = btn.dataset.policy;
+      write('device', { mac: dev.mac, name: dev.name || '', policy }, `${dev.name || dev.mac} 策略已設為 ${POLICY_META[policy]?.label || policy}`);
+    });
+  });
+
   $$('#conn-route-seg .seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       S.connFilter.route = btn.dataset.route;
       $$('#conn-route-seg .seg-btn').forEach(b => b.classList.toggle('on', b.dataset.route === S.connFilter.route));
-      renderConnectionsTable();
+      renderClients();
     });
   });
 
   $('#conn-q')?.addEventListener('input', (e) => {
-    S.connFilter.q = (e.target.value || '').trim().toLowerCase();
-    renderConnectionsTable();
+    S.connFilter.q = e.target.value.trim().toLowerCase();
+    renderClients();
   });
 }
 
-function renderRelaysAndRules() {
-  const tun = S.tunnel;
-  const rg = $('#relays-grid');
-  if (tun && rg) {
-    $('#tunnel-summary').textContent = tun.reachable
-      ? `策略組 ${tun.selected || 'TW-HOME'} · 活躍節點 ${tun.tw_home || tun.auto || '—'}`
-      : 'Mihomo 未連接';
-    const zLink = $('#zashboard-link');
-    if (zLink && tun.dashboard) zLink.href = tun.dashboard;
+function renderDeviceMenu(devs, byIp, totalFlows) {
+  const onlineCnt = devs.filter(d => d.online).length;
+  if ($('#clients-online-cnt')) $('#clients-online-cnt').textContent = `${onlineCnt} 在線 / ${devs.length} 台`;
 
-    const relays = tun.relays || [];
-    const sig = `${tun.selected}|${tun.tw_home}|` + relays.map(r => `${r.name}:${r.delay}`).join(',');
-    if (rg.dataset.sig !== sig) {
-      rg.dataset.sig = sig;
-      const frag = document.createDocumentFragment();
-      for (const r of relays) {
-        const active = r.name === tun.selected;
-        const delayTxt = r.delay > 0 ? `${r.delay}ms` : '—';
-        frag.appendChild(el('button', {
-          class: `relay-pill ${active ? 'active' : ''}`,
-          onClick: () => write('select', { name: r.name }, `已切換出口為 ${r.name}`)
-        },
-          el('span', { class: active ? 'c-mint' : 'c-bright' }, r.name),
-          el('span', { class: 'c-muted' }, delayTxt)
-        ));
-      }
-      rg.innerHTML = '';
-      rg.appendChild(frag);
-    }
-  }
+  let totDown = 0;
+  for (const ip of Object.keys(byIp)) totDown += byIp[ip].down;
+  if ($('#dev-all-rate')) $('#dev-all-rate').textContent = S.session ? fmtRate(totDown).full : `${onlineCnt} 台`;
+  if ($('#dev-all-flows')) $('#dev-all-flows').textContent = S.session ? `${totalFlows} 條活躍流` : '全局檢視';
 
-  const rs = S.rules;
-  const rf = $('#rules-flow');
-  if (rs && rf) {
-    const sz = rs.sizes || {};
-    $('#rules-sizes').textContent = `domestic=${sz.domestic4 || 0} tunnel4=${sz.tunnel4 || 0} dns=${sz.tunnel4_dns || 0} relay=${sz.relay4 || 0}`;
-    const sig = (rs.rules || []).map(r => `${r.tag}:${r.packets}`).join('|');
-    if (rf.dataset.sig !== sig) {
-      rf.dataset.sig = sig;
-      const frag = document.createDocumentFragment();
-      for (const r of rs.rules || []) {
-        frag.appendChild(el('div', { class: 'rule-chip' },
-          el('span', { class: 'c-sec' }, RULE_LABELS[r.tag] || r.tag),
-          el('strong', { class: r.packets > 0 ? 'c-mint' : 'c-muted' }, `${r.packets} pkts`)
-        ));
-      }
-      rf.innerHTML = '';
-      rf.appendChild(frag);
-    }
-  }
-}
+  const navAll = $('#dev-nav-all');
+  if (navAll) navAll.classList.toggle('active', S.selectedDeviceMac === 'all');
 
-function renderDevicesTable() {
-  const tbody = $('#devices-tbody');
-  if (!tbody) return;
-  // Never stomp active inline text editing
-  if (document.activeElement?.dataset?.deviceInput === '1') return;
+  const list = $('#dev-menu-list');
+  if (!list) return;
 
-  const list = [...(S.devices?.devices || [])].sort((a, b) => {
-    if (a.online !== b.online) return b.online - a.online;
-    return (b.down + b.up) - (a.down + a.up);
+  const q = S.devMenuQuery || '';
+  const filtered = devs.filter(d => {
+    if (!q) return true;
+    const text = `${d.name || ''} ${d.host || ''} ${d.ip || ''} ${d.mac || ''}`.toLowerCase();
+    return text.includes(q);
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (a.online !== b.online) return a.online ? -1 : 1;
+    const ra = (byIp[a.ip]?.down || 0) + (byIp[a.ip]?.up || 0);
+    const rb = (byIp[b.ip]?.down || 0) + (byIp[b.ip]?.up || 0);
+    if (rb !== ra) return rb - ra;
+    return (a.name || a.host || a.mac).localeCompare(b.name || b.host || b.mac);
   });
 
   const frag = document.createDocumentFragment();
-  for (const d of list) {
-    const inp = el('input', {
-      class: 'bp-input',
-      value: d.named ? d.name : (d.name || d.host || ''),
-      placeholder: d.host || d.mac,
-      'data-device-input': '1',
-      style: { width: '165px', opacity: d.online ? '1' : '0.65' }
-    });
-    const commitAlias = () => {
-      const val = inp.value.trim();
-      const orig = d.named ? d.name : (d.name || d.host || '');
-      if (val !== orig) {
-        write('device', { mac: d.mac, name: val, policy: d.policy || 'auto' }, `終端 ${val || d.mac} 名稱已儲存`);
-      }
-    };
-    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
-    inp.addEventListener('blur', commitAlias);
+  if (!sorted.length) {
+    frag.appendChild(el('div', { class: 'c-muted', style: { padding: '14px', textAlign: 'center', fontSize: '11.5px' } }, '無匹配終端'));
+  } else {
+    for (const d of sorted) {
+      const dr = byIp[d.ip] || { down: 0, up: 0, count: 0 };
+      const pm = POLICY_META[d.policy || 'auto'] || POLICY_META.auto;
+      const isSelected = S.selectedDeviceMac === d.mac;
+      const label = d.name || d.host || d.mac.slice(-8);
+      const rightStat = S.session && dr.down + dr.up > 50
+        ? fmtRate(dr.down).full
+        : (d.policy && d.policy !== 'auto' ? pm.label : (d.online ? '在線' : '離線'));
+      const rightCls = S.session && dr.down + dr.up > 50 ? 'c-mint' : (d.policy && d.policy !== 'auto' ? pm.cls : (d.online ? 'c-mint' : 'c-muted'));
 
-    const seg = el('div', { class: 'seg-group' });
-    for (const [pol, label] of POLICIES) {
-      const btn = el('button', {
-        class: `seg-btn ${(d.policy || 'auto') === pol ? 'on' : ''}`,
-        onClick: () => write('device', { mac: d.mac, name: d.named ? d.name : '', policy: pol }, `已設 ${d.name || d.mac} → ${label}`)
-      }, label);
-      seg.appendChild(btn);
+      const item = el('button', {
+        type: 'button',
+        class: `dev-nav-item ${d.online ? 'online' : 'offline'} ${isSelected ? 'active' : ''}`,
+        onClick: () => selectDevice(d.mac)
+      },
+        el('div', { class: 'dev-nav-top' },
+          el('span', { class: 'dev-nav-name', title: `${label} (${d.mac})` }, label),
+          el('span', { class: rightCls, style: { fontSize: '10.5px', fontWeight: '600', flexShrink: '0' } }, rightStat)
+        ),
+        el('div', { class: 'dev-nav-sub' },
+          el('span', {}, `${d.ip || d.mac.slice(-8)} · ${d.link || 'wired'}`),
+          el('span', { class: 'c-muted' }, S.session && dr.count > 0 ? `${dr.count} 流` : (d.policy || 'auto'))
+        )
+      );
+      frag.appendChild(item);
     }
-
-    const linkBadge = d.link === 'wired'
-      ? el('span', { class: 'c-blue' }, 'Wired')
-      : el('span', { class: 'c-mint' }, `${d.link} ${d.signal ? d.signal + 'dBm' : ''}`);
-
-    frag.appendChild(el('tr', {},
-      el('td', {},
-        inp,
-        el('div', { class: 'c-muted', style: { fontSize: '11px', marginTop: '2px' } }, `${d.online ? '● ' : '○ '}${d.mac}`)
-      ),
-      el('td', {}, linkBadge),
-      el('td', { class: 'c-bright' }, d.ip || '—'),
-      el('td', { class: 'num c-mint' }, d.down > 0 ? fmtRate(d.down).full : '—'),
-      el('td', { class: 'num c-blue' }, d.up > 0 ? fmtRate(d.up).full : '—'),
-      el('td', {}, seg)
-    ));
   }
-
-  tbody.innerHTML = '';
-  tbody.appendChild(frag);
+  list.innerHTML = '';
+  list.appendChild(frag);
 }
 
-export function renderConnectionsTable() {
+function renderRightWorkspace(devs, byIp) {
+  const allPanel = $('#clients-all-panel');
+  const devPanel = $('#clients-dev-panel');
+  const selected = S.selectedDeviceMac !== 'all'
+    ? devs.find(d => d.mac === S.selectedDeviceMac)
+    : null;
+
+  if (S.selectedDeviceMac !== 'all' && !selected) {
+    S.selectedDeviceMac = 'all';
+  }
+
+  if (!selected) {
+    if (allPanel) allPanel.style.display = 'block';
+    if (devPanel) devPanel.style.display = 'none';
+    renderAllDevicesMatrix(devs, byIp);
+    return null;
+  }
+
+  if (allPanel) allPanel.style.display = 'none';
+  if (devPanel) devPanel.style.display = 'flex';
+
+  const dr = byIp[selected.ip] || { down: 0, up: 0, count: 0 };
+  const nameInp = $('#sel-dev-name');
+  if (nameInp && document.activeElement !== nameInp && nameInp.dataset.mac !== selected.mac) {
+    nameInp.value = selected.name || '';
+    nameInp.placeholder = selected.host || selected.mac;
+    nameInp.dataset.mac = selected.mac;
+  }
+  const rateEl = $('#sel-dev-rate');
+  if (rateEl) {
+    rateEl.textContent = S.session
+      ? `↓ ${fmtRate(dr.down).full} · ↑ ${fmtRate(dr.up).full}`
+      : (selected.online ? '在線' : '離線');
+  }
+  const metaEl = $('#sel-dev-meta');
+  if (metaEl) {
+    const radio = selected.signal ? ` (${selected.signal} dBm)` : '';
+    metaEl.textContent = `MAC ${selected.mac} · IP ${selected.ip || '無租約'} · ${selected.link || 'wired'}${radio}`;
+  }
+  $$('#sel-dev-policy-seg .seg-btn').forEach(btn => {
+    btn.classList.toggle('on', btn.dataset.policy === (selected.policy || 'auto'));
+  });
+  return selected;
+}
+
+function renderAllDevicesMatrix(devs, byIp) {
+  const dtb = $('#devices-tbody');
+  if (!dtb) return;
+  const frag = document.createDocumentFragment();
+
+  const sorted = [...devs].sort((a, b) => {
+    if (a.online !== b.online) return a.online ? -1 : 1;
+    const ra = (byIp[a.ip]?.down || 0) + (byIp[a.ip]?.up || 0);
+    const rb = (byIp[b.ip]?.down || 0) + (byIp[b.ip]?.up || 0);
+    if (rb !== ra) return rb - ra;
+    return (a.name || a.host || a.mac).localeCompare(b.name || b.host || b.mac);
+  });
+
+  if (!sorted.length) {
+    frag.appendChild(el('tr', {}, el('td', { colspan: 6, class: 'c-muted', style: { textAlign: 'center', padding: '16px' } }, '暫無局域網終端記錄')));
+  } else {
+    for (const d of sorted) {
+      const dr = byIp[d.ip] || { down: 0, up: 0 };
+      const dot = el('span', { class: d.online ? 'run-dot mint' : '' });
+      if (!d.online) Object.assign(dot.style, { display: 'inline-block', width: '6px', height: '6px', background: '#4b556b' });
+
+      const nameBtn = el('button', {
+        type: 'button',
+        class: 'btn-cmd',
+        style: { padding: '2px 7px', fontSize: '11px', borderColor: 'transparent', background: 'transparent' },
+        title: `點擊查看 ${d.name || d.host || d.mac} 的連接`,
+        onClick: () => selectDevice(d.mac)
+      }, d.name || d.host || d.mac.slice(-8), el('span', { class: 'c-blue', style: { marginLeft: '4px' } }, '→'));
+
+      const sel = el('select', {
+        class: 'bp-input',
+        style: { fontSize: '11px', padding: '2px 6px' },
+        onChange: (e) => {
+          write('device', { mac: d.mac, name: d.name || '', policy: e.target.value }, `${d.name || d.mac} 策略已設為 ${e.target.value}`);
+        }
+      }, ...POLICIES.map(p => {
+        const opt = el('option', { value: p }, POLICY_META[p]?.label || p);
+        if ((d.policy || 'auto') === p) opt.selected = true;
+        return opt;
+      }));
+
+      frag.appendChild(el('tr', { style: d.online ? {} : { opacity: '0.55' } },
+        el('td', {}, el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, dot, nameBtn)),
+        el('td', {}, el('span', { class: 'c-sec' }, d.link || 'wired'), d.signal ? el('span', { class: 'c-muted', style: { marginLeft: '4px', fontSize: '10.5px' } }, `${d.signal}dBm`) : null),
+        el('td', { class: 'c-sec' }, d.ip || '—'),
+        el('td', { class: 'num c-mint' }, S.session ? fmtRate(dr.down).full : '—'),
+        el('td', { class: 'num c-blue' }, S.session ? fmtRate(dr.up).full : '—'),
+        el('td', {}, sel)
+      ));
+    }
+  }
+  dtb.innerHTML = '';
+  dtb.appendChild(frag);
+}
+
+function renderConnections(devs, selectedDev, rows) {
+  const scopeBadge = $('#conn-scope-badge');
+  if (scopeBadge) {
+    scopeBadge.textContent = selectedDev ? `${selectedDev.name || selectedDev.host || selectedDev.ip}` : '全局連接';
+  }
+
   const empty = $('#conn-empty');
   const wrap = $('#conn-table-wrap');
-  const tbody = $('#connections-tbody');
-  if (!tbody) return;
-
+  const ctb = $('#connections-tbody');
   if (!S.session) {
-    empty.style.display = 'block';
-    wrap.style.display = 'none';
-    $('#conn-cap').textContent = '需要管理驗證';
+    if (empty) {
+      empty.textContent = '請點擊右上角「管理登入」查看實時連接流表';
+      empty.style.display = 'block';
+    }
+    if (wrap) wrap.style.display = 'none';
+    if ($('#conn-cap')) $('#conn-cap').textContent = '未認證';
     return;
   }
 
-  empty.style.display = 'none';
-  wrap.style.display = 'block';
-
-  const now = performance.now();
-  const prev = S.flowSnapshot || {};
-  const dt = S.flowSnapshotTs > 0 ? Math.max(0.5, (now - S.flowSnapshotTs) / 1000) : 0;
-  const list = S.connections?.connections || [];
-
-  const ipNames = {};
-  for (const d of S.devices?.devices || []) {
-    if (d.ip) ipNames[d.ip] = d.name || d.host || d.ip;
+  const devNameByIp = {};
+  for (const d of devs) {
+    if (d.ip) devNameByIp[d.ip] = d.name || d.host || d.ip;
   }
 
-  const nextSnap = {};
-  const enriched = [];
-  for (const c of list) {
-    nextSnap[c.key] = { down: c.down, up: c.up };
-    const old = prev[c.key];
-    const rDown = (old && dt > 0 && c.down >= old.down) ? (c.down - old.down) / dt : 0;
-    const rUp = (old && dt > 0 && c.up >= old.up) ? (c.up - old.up) / dt : 0;
-    enriched.push({ ...c, rDown, rUp, srcName: ipNames[c.src] || c.src });
-  }
-  S.flowSnapshot = nextSnap;
-  S.flowSnapshotTs = now;
-
-  const { route, q } = S.connFilter;
-  const filtered = enriched.filter(c => {
-    if (route === 'direct' && c.route !== 'direct') return false;
-    if (route === 'tunnel' && c.route !== 'tunnel') return false;
-    if (route === 'vip' && !c.vip) return false;
+  const q = S.connFilter.q;
+  const filtered = rows.filter(f => {
+    if (selectedDev && (!selectedDev.ip || f.src !== selectedDev.ip)) return false;
+    if (S.connFilter.route === 'direct' && (f.route !== 'direct' || f.vip)) return false;
+    if (S.connFilter.route === 'tunnel' && f.route !== 'tunnel') return false;
+    if (S.connFilter.route === 'vip' && !f.vip) return false;
     if (q) {
-      const hay = `${c.src} ${c.srcName} ${c.dst} ${c.port} ${c.via}`.toLowerCase();
+      const hay = `${f.src} ${devNameByIp[f.src] || ''} ${f.dst} ${f.port} ${f.via} ${f.proto}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   }).sort((a, b) => (b.rDown + b.rUp) - (a.rDown + a.rUp) || (b.down + b.up) - (a.down + a.up));
 
-  $('#conn-cap').textContent = `顯示 ${Math.min(120, filtered.length)} / 共 ${list.length} 條流`;
+  if ($('#conn-cap')) $('#conn-cap').textContent = `${filtered.length} 條活躍流`;
 
-  const frag = document.createDocumentFragment();
-  for (const c of filtered.slice(0, 120)) {
-    const viaBadge = c.vip
-      ? el('span', { class: 'st-badge vip' }, `VIP · ${c.via}`)
-      : (c.route === 'tunnel'
-        ? el('span', { class: 'st-badge cooling' }, c.via || 'TW-HOME')
-        : el('span', { class: 'st-badge charged' }, c.via || 'direct'));
-
-    frag.appendChild(el('tr', {},
-      el('td', {}, el('span', { class: 'c-bright' }, c.srcName), el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, c.src)),
-      el('td', { style: { maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, c.dst),
-      el('td', {}, `${c.proto?.toUpperCase()} :${c.port}`),
-      el('td', {}, viaBadge),
-      el('td', { class: 'num c-mint' }, c.rDown > 100 ? fmtRate(c.rDown).full : '—'),
-      el('td', { class: 'num c-blue' }, c.rUp > 100 ? fmtRate(c.rUp).full : '—'),
-      el('td', { class: 'num c-sec' }, fmtBytes((c.down || 0) + (c.up || 0)))
-    ));
+  if (!filtered.length) {
+    if (empty) {
+      empty.textContent = selectedDev ? `${selectedDev.name || selectedDev.ip} 暫無匹配連接` : '暫無匹配的活躍連接';
+      empty.style.display = 'block';
+    }
+    if (wrap) wrap.style.display = 'none';
+    return;
   }
 
-  tbody.innerHTML = '';
-  tbody.appendChild(frag);
+  if (empty) empty.style.display = 'none';
+  if (wrap) wrap.style.display = 'block';
+
+  const frag = document.createDocumentFragment();
+  for (const f of filtered.slice(0, 120)) {
+    let badgeClass = f.route === 'tunnel' ? 'cooling' : 'charged';
+    let routeText = f.route === 'tunnel' ? `TW-HOME · ${f.via || 'proxy'}` : `直連 · ${f.via || 'wan'}`;
+    if (f.vip) {
+      badgeClass = 'vip';
+      routeText = `VIP專線 · ${f.via || 'vip'}`;
+    }
+
+    frag.appendChild(el('tr', {},
+      el('td', {}, el('div', { class: 'c-bright' }, devNameByIp[f.src] || f.src), el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, f.src)),
+      el('td', { style: { maxWidth: '280px', wordBreak: 'break-all' } }, f.dst),
+      el('td', { class: 'c-sec' }, `${f.port} / ${String(f.proto || '').toUpperCase()}`),
+      el('td', {}, el('span', { class: `st-badge ${badgeClass}` }, routeText)),
+      el('td', { class: 'num c-mint' }, f.rDown > 50 ? fmtRate(f.rDown).full : '—'),
+      el('td', { class: 'num c-blue' }, f.rUp > 50 ? fmtRate(f.rUp).full : '—'),
+      el('td', { class: 'num c-sec' }, fmtBytes((f.down || 0) + (f.up || 0)))
+    ));
+  }
+  if (ctb) {
+    ctb.innerHTML = '';
+    ctb.appendChild(frag);
+  }
 }
 
 export function renderClients() {
-  renderRelaysAndRules();
-  renderDevicesTable();
-  renderConnectionsTable();
+  const devs = S.devices?.devices || [];
+  const { byIp, rows } = computeFlowDeltas();
+  renderDeviceMenu(devs, byIp, rows.length);
+  const selectedDev = renderRightWorkspace(devs, byIp);
+  renderConnections(devs, selectedDev, rows);
 }
