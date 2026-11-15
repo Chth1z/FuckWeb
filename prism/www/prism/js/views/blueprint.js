@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtBytes } from '../state.js?v=5.5.0';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.5.0';
-import { write, call } from '../api.js?v=5.5.0';
+import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtBytes } from '../state.js?v=5.6.0';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.0';
+import { write, call } from '../api.js?v=5.6.0';
 
 let drawerOpen = false;
 let rafId = null;
@@ -68,6 +68,13 @@ function mixWhiteRgb(rgb, whiteMix = 0.60) {
   return `${mix(parts[0])}, ${mix(parts[1])}, ${mix(parts[2])}`;
 }
 
+function blendDarkCss(rgb, alpha, bg = 5) {
+  const parts = String(rgb).split(',').map(v => Number(v.trim()) || 0);
+  const a = Math.max(0, Math.min(1, alpha));
+  const c = (v) => Math.round(bg * (1 - a) + v * a);
+  return `rgb(${c(parts[0])}, ${c(parts[1])}, ${c(parts[2])})`;
+}
+
 function clipHalfPlane(ctx, ax, ay, bx, by, sideSign, W, H) {
   const dx = bx - ax;
   const dy = (by - ay) || 1;
@@ -91,25 +98,6 @@ function clipHalfPlane(ctx, ax, ay, bx, by, sideSign, W, H) {
   }
   ctx.closePath();
   ctx.clip();
-}
-
-function drawFeatheredRect(ctx, x0, y0, x1, y1, nx, ny, dist, rgb, alpha) {
-  if (alpha <= 0.004 || dist <= 0.5) return;
-  const mx = (x0 + x1) * 0.5;
-  const my = (y0 + y1) * 0.5;
-  const grad = ctx.createLinearGradient(mx, my, mx + nx * dist, my + ny * dist);
-  grad.addColorStop(0, `rgba(${rgb}, ${alpha.toFixed(3)})`);
-  grad.addColorStop(0.32, `rgba(${rgb}, ${(alpha * 0.42).toFixed(3)})`);
-  grad.addColorStop(0.68, `rgba(${rgb}, ${(alpha * 0.12).toFixed(3)})`);
-  grad.addColorStop(1, `rgba(${rgb}, 0)`);
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.lineTo(x1 + nx * dist, y1 + ny * dist);
-  ctx.lineTo(x0 + nx * dist, y0 + ny * dist);
-  ctx.closePath();
-  ctx.fill();
 }
 
 function drawLinkTag(ctx, x, y, text, rgb) {
@@ -138,15 +126,68 @@ function drawLinkTag(ctx, x, y, text, rgb) {
   ctx.restore();
 }
 
-function fillRibbonQuad(ctx, x0, y0, x1, y1, nx, ny, o0, o1, fillStyle) {
-  ctx.fillStyle = fillStyle;
+function cleanOrthoPts(pts) {
+  const out = [];
+  for (const p of pts) {
+    const prev = out[out.length - 1];
+    if (!prev || Math.hypot(p.x - prev.x, p.y - prev.y) > 0.5) {
+      out.push({ x: p.x, y: p.y });
+    }
+  }
+  return out;
+}
+
+function orthoStepPts(x0, y0, xTurn, y1, x1) {
+  if (Math.abs(y1 - y0) < 2) {
+    const ym = (y0 + y1) * 0.5;
+    return [{ x: x0, y: ym }, { x: x1, y: ym }];
+  }
+  return [
+    { x: x0, y: y0 },
+    { x: xTurn, y: y0 },
+    { x: xTurn, y: y1 },
+    { x: x1, y: y1 },
+  ];
+}
+
+function segDir(a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const l = Math.hypot(dx, dy) || 1;
+  return { nx: -dy / l, ny: dx / l };
+}
+
+function offsetOrthoPts(pts, dist) {
+  if (pts.length < 2 || Math.abs(dist) < 1e-4) return pts;
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    if (i === 0) {
+      const d0 = segDir(pts[0], pts[1]);
+      out.push({ x: pts[0].x + d0.nx * dist, y: pts[0].y + d0.ny * dist });
+    } else if (i === pts.length - 1) {
+      const dn = segDir(pts[i - 1], pts[i]);
+      out.push({ x: pts[i].x + dn.nx * dist, y: pts[i].y + dn.ny * dist });
+    } else {
+      const dPrev = segDir(pts[i - 1], pts[i]);
+      const dNext = segDir(pts[i], pts[i + 1]);
+      const denom = 1 + (dPrev.nx * dNext.nx + dPrev.ny * dNext.ny);
+      if (denom < 0.25) {
+        out.push({ x: pts[i].x + dPrev.nx * dist, y: pts[i].y + dPrev.ny * dist });
+      } else {
+        out.push({
+          x: pts[i].x + ((dPrev.nx + dNext.nx) / denom) * dist,
+          y: pts[i].y + ((dPrev.ny + dNext.ny) / denom) * dist,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function tracePts(ctx, pArr) {
   ctx.beginPath();
-  ctx.moveTo(x0 + nx * o0, y0 + ny * o0);
-  ctx.lineTo(x1 + nx * o0, y1 + ny * o0);
-  ctx.lineTo(x1 + nx * o1, y1 + ny * o1);
-  ctx.lineTo(x0 + nx * o1, y0 + ny * o1);
-  ctx.closePath();
-  ctx.fill();
+  ctx.moveTo(pArr[0].x, pArr[0].y);
+  for (let i = 1; i < pArr.length; i++) ctx.lineTo(pArr[i].x, pArr[i].y);
 }
 
 function makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, rgb, maxAlpha) {
@@ -161,122 +202,135 @@ function makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, rgb, maxA
   return grad;
 }
 
-// Unified Figure-3 Straight Optical Ribbon: rich luminous band + feathered atmospheric aura (Zero curves, zero stark white core)
-function drawStraightOpticalRibbon(ctx, x0, y0, x1, y1, rgb, st, phaseOffset = 0, tag = '') {
-  const dx = x1 - x0;
-  const dy = y1 - y0;
-  const len = Math.hypot(dx, dy);
+// Unified Figure-3 Strictly Horizontal/Vertical Mitered Optical Bus
+function drawOrthoOpticalRibbon(ctx, rawPts, rgb, st, phaseOffset = 0, tag = '', tagAt = null) {
+  const pts = cleanOrthoPts(rawPts);
+  if (pts.length < 2) return;
+
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) {
+    len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  }
   if (len < 2) return;
 
-  const ux = dx / len;
-  const uy = dy / len;
-  const nx = -uy;
-  const ny = ux;
+  const p0 = pts[0];
+  const pLast = pts[pts.length - 1];
   const g = st.glow;
   const active = st.vel > 0.01;
   const isSpec = rgb === 'spectrum';
 
   ctx.save();
-  if (isSpec) {
-    // 7 parallel dispersed rainbow strands matching Figure-3 multi-wavelength band
-    const totalHalf = Math.max(4.0, st.width * 1.85);
-    const nStripes = 7;
-    const bandAlpha = 0.56 + g * 0.34;
-    const outerReach = 9 + g * 10;
-    const outerAlpha = 0.14 + g * 0.18;
+  ctx.lineJoin = 'miter';
+  ctx.lineCap = 'butt';
+  ctx.miterLimit = 6;
 
+  if (isSpec) {
+    // Seamless 7-strand opaque-composited rainbow bus + soft chromatic outer edge halo
+    const nStripes = 7;
+    const totalHalf = Math.max(4.0, st.width * 1.85);
+    const bandAlpha = 0.58 + g * 0.34;
+    const redRgb = spectralColor(0, nStripes).rgb;
+    const vioRgb = spectralColor(nStripes - 1, nStripes).rgb;
+
+    const topAura = offsetOrthoPts(pts, -totalHalf * 0.55);
+    const botAura = offsetOrthoPts(pts, totalHalf * 0.55);
+    const edgeGlows = [
+      { addW: 16 + g * 10, a: 0.025 + g * 0.032 },
+      { addW: 9 + g * 6,   a: 0.052 + g * 0.055 },
+      { addW: 4 + g * 3,   a: 0.088 + g * 0.080 },
+    ];
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    drawFeatheredRect(
-      ctx,
-      x0 - nx * totalHalf, y0 - ny * totalHalf,
-      x1 - nx * totalHalf, y1 - ny * totalHalf,
-      -nx, -ny, outerReach, spectralColor(0, nStripes).rgb, outerAlpha
-    );
-    drawFeatheredRect(
-      ctx,
-      x0 + nx * totalHalf, y0 + ny * totalHalf,
-      x1 + nx * totalHalf, y1 + ny * totalHalf,
-      nx, ny, outerReach, spectralColor(nStripes - 1, nStripes).rgb, outerAlpha
-    );
+    for (const eg of edgeGlows) {
+      ctx.lineWidth = totalHalf + eg.addW;
+      ctx.strokeStyle = `rgba(${redRgb}, ${eg.a.toFixed(3)})`;
+      tracePts(ctx, topAura);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(${vioRgb}, ${eg.a.toFixed(3)})`;
+      tracePts(ctx, botAura);
+      ctx.stroke();
+    }
     ctx.restore();
 
+    const bandW = (totalHalf * 2) / nStripes;
     for (let i = 0; i < nStripes; i++) {
-      const f0 = -1 + (2 * i) / nStripes;
-      const f1 = -1 + (2 * (i + 1)) / nStripes;
-      fillRibbonQuad(
-        ctx, x0, y0, x1, y1, nx, ny,
-        f0 * totalHalf - 0.18, f1 * totalHalf + 0.18,
-        `rgba(${spectralColor(i, nStripes).rgb}, ${bandAlpha.toFixed(3)})`
-      );
+      const offset = (-1 + (2 * (i + 0.5)) / nStripes) * totalHalf;
+      ctx.strokeStyle = blendDarkCss(spectralColor(i, nStripes).rgb, bandAlpha);
+      ctx.lineWidth = bandW + 0.45;
+      tracePts(ctx, offsetOrthoPts(pts, offset));
+      ctx.stroke();
     }
 
     if (active && g > 0.10) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      fillRibbonQuad(
-        ctx, x0, y0, x1, y1, nx, ny,
-        -totalHalf * 0.72, totalHalf * 0.72,
-        makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, '255, 255, 255', 0.18)
+      ctx.strokeStyle = makeFlowShimmerGradient(
+        ctx, p0.x, p0.y, pLast.x, pLast.y, st, phaseOffset, '255, 255, 255', 0.16
       );
+      ctx.lineWidth = totalHalf * 1.42;
+      tracePts(ctx, pts);
+      ctx.stroke();
       ctx.restore();
     }
   } else {
-    // Monochrome Figure-3 luminous band (rich chromatic core + smooth perpendicular feather aura)
-    const bandHalf = 1.9 + g * 1.15;
-    const bloomReach = 10 + g * 11;
-    const edgeAlpha = 0.14 + g * 0.21;
-    const bodyAlpha = 0.62 + g * 0.30;
+    // Monochrome Figure-3 mitered H/V bus (smooth concentric aura + rich saturated core)
+    const bandW = 3.8 + g * 2.2;
+    const haloPasses = [
+      { addW: 20 + g * 14, a: 0.024 + g * 0.032 },
+      { addW: 13 + g * 9,  a: 0.048 + g * 0.056 },
+      { addW: 7 + g * 5,   a: 0.088 + g * 0.095 },
+      { addW: 3 + g * 2,   a: 0.145 + g * 0.125 },
+    ];
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    drawFeatheredRect(
-      ctx,
-      x0 + nx * bandHalf, y0 + ny * bandHalf,
-      x1 + nx * bandHalf, y1 + ny * bandHalf,
-      nx, ny, bloomReach, rgb, edgeAlpha
-    );
-    drawFeatheredRect(
-      ctx,
-      x0 - nx * bandHalf, y0 - ny * bandHalf,
-      x1 - nx * bandHalf, y1 - ny * bandHalf,
-      -nx, -ny, bloomReach, rgb, edgeAlpha
-    );
+    tracePts(ctx, pts);
+    for (const hp of haloPasses) {
+      ctx.strokeStyle = `rgba(${rgb}, ${hp.a.toFixed(3)})`;
+      ctx.lineWidth = bandW + hp.addW;
+      ctx.stroke();
+    }
     ctx.restore();
 
-    fillRibbonQuad(ctx, x0, y0, x1, y1, nx, ny, -bandHalf, bandHalf, `rgba(${rgb}, ${bodyAlpha.toFixed(3)})`);
+    ctx.strokeStyle = `rgba(${rgb}, ${(0.64 + g * 0.30).toFixed(3)})`;
+    ctx.lineWidth = bandW;
+    tracePts(ctx, pts);
+    ctx.stroke();
 
-    // Gentle pure-color inner boost (stays saturated color matching Figure 3)
-    const innerHalf = Math.max(0.8, bandHalf * 0.46);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    fillRibbonQuad(
-      ctx, x0, y0, x1, y1, nx, ny, -innerHalf, innerHalf,
-      `rgba(${mixWhiteRgb(rgb, 0.24)}, ${(0.22 + g * 0.24).toFixed(3)})`
-    );
+    ctx.strokeStyle = `rgba(${mixWhiteRgb(rgb, 0.25)}, ${(0.22 + g * 0.24).toFixed(3)})`;
+    ctx.lineWidth = Math.max(1.5, bandW * 0.44);
+    tracePts(ctx, pts);
+    ctx.stroke();
 
     if (active && g > 0.10) {
-      fillRibbonQuad(
-        ctx, x0, y0, x1, y1, nx, ny, -bandHalf, bandHalf,
-        makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, mixWhiteRgb(rgb, 0.38), 0.24)
+      ctx.strokeStyle = makeFlowShimmerGradient(
+        ctx, p0.x, p0.y, pLast.x, pLast.y,
+        st, phaseOffset, mixWhiteRgb(rgb, 0.38), 0.24
       );
+      ctx.lineWidth = bandW * 0.90;
+      tracePts(ctx, pts);
+      ctx.stroke();
     }
     ctx.restore();
   }
   ctx.restore();
 
-  if (tag && len >= 22) {
-    drawLinkTag(ctx, (x0 + x1) * 0.5, (y0 + y1) * 0.5, tag, rgb);
+  if (tag && len >= 18) {
+    const tp = tagAt || { x: (p0.x + pLast.x) * 0.5, y: (p0.y + pLast.y) * 0.5 };
+    drawLinkTag(ctx, tp.x, tp.y, tag, rgb);
   }
 }
 
 function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom) {
-  const gapW = Math.min(vip.x, tun.x, dom.x) - ing.right;
-  if (gapW < 24) return;
+  const rightEdgeEnd = Math.min(vip.x, tun.x, dom.x);
+  const gapW = rightEdgeEnd - ing.right;
+  if (gapW < 30) return;
 
-  const focalX = ing.right + gapW * 0.44;
+  const focalX = ing.right + gapW * 0.34;
   const focalY = tun.cy;
-  const side = Math.max(28, Math.min(48, gapW * 0.56));
+  const side = Math.max(26, Math.min(40, gapW * 0.36));
   const triH = (side * Math.sqrt(3)) / 2;
 
   const topX = focalX;
@@ -286,47 +340,45 @@ function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom) {
   const rightX = focalX + side * 0.5;
   const rightY = topY + triH;
 
-  // Left incident entry & right 1->3 exit points on sloped crystal faces
-  const entryX = topX + (leftX - topX) * 0.48;
-  const entryY = topY + (leftY - topY) * 0.48;
-  const ingStartY = Math.max(ing.y + 20, Math.min(ing.bottom - 20, entryY + 12));
+  const tMid = (focalY - topY) / triH;
+  const entryX = topX + (leftX - topX) * tMid;
+  const entryY = focalY;
+
+  const splitDy = Math.min(7, triH * 0.17);
+  const splitBaseX = rightX + (rightEdgeEnd - rightX) * 0.48;
 
   const exits = [
-    { t: 0.25, tx: vip.x + 2, ty: vip.cy, rgb: '100, 174, 245', st: waveState[0], phase: 0.00 },
-    { t: 0.50, tx: tun.x + 2, ty: tun.cy, rgb: '170, 142, 240', st: waveState[1], phase: 0.16 },
-    { t: 0.75, tx: dom.x + 2, ty: dom.cy, rgb: '87, 209, 146',  st: waveState[2], phase: 0.32 },
+    { dy: -splitDy, xTurn: splitBaseX - 6, tx: vip.x + 2, ty: vip.cy, rgb: '100, 174, 245', st: waveState[0], phase: 0.00 },
+    { dy: 0,        xTurn: splitBaseX,     tx: tun.x + 2, ty: tun.cy, rgb: '170, 142, 240', st: waveState[1], phase: 0.16 },
+    { dy: splitDy,  xTurn: splitBaseX + 6, tx: dom.x + 2, ty: dom.cy, rgb: '87, 209, 146',  st: waveState[2], phase: 0.32 },
   ].map((e) => {
-    const ex = topX + (rightX - topX) * e.t;
-    const ey = topY + (rightY - topY) * e.t;
-    const dx = e.tx - ex;
-    const dy = e.ty - ey;
-    const l = Math.hypot(dx, dy) || 1;
-    return { ...e, ex, ey, bx: ex - (dx / l) * 32, by: ey - (dy / l) * 32 };
+    const ey = focalY + e.dy;
+    const tOut = (ey - topY) / triH;
+    const ex = topX + (rightX - topX) * tOut;
+    return { ...e, ex, ey };
   });
 
-  // 1. Straight Ingress -> Focal Prism Left Bevel (clipped flush to left slope)
-  const inDx = entryX - (ing.right - 2);
-  const inDy = entryY - ingStartY;
-  const inLen = Math.hypot(inDx, inDy) || 1;
+  // 1. Strictly Horizontal Ingress -> Focal Prism Left Bevel (with H-V-H guard on extreme viewports)
+  const ingY = Math.max(ing.y + 14, Math.min(ing.bottom - 14, focalY));
+  const inPts = Math.abs(ingY - focalY) < 2
+    ? [{ x: ing.right - 2, y: focalY }, { x: entryX + 16, y: focalY }]
+    : orthoStepPts(ing.right - 2, ingY, ing.right + (leftX - ing.right) * 0.42, focalY, entryX + 16);
+
   ctx.save();
   clipHalfPlane(ctx, topX, topY, leftX, leftY, -1, W, H);
-  drawStraightOpticalRibbon(
-    ctx,
-    ing.right - 2, ingStartY,
-    entryX + (inDx / inLen) * 32, entryY + (inDy / inLen) * 32,
-    'spectrum', waveState[4], 0.05
-  );
+  drawOrthoOpticalRibbon(ctx, inPts, 'spectrum', waveState[4], 0.05);
   ctx.restore();
 
-  // 2. Straight 1->3 Dispersed Branches (clipped flush to right slope)
+  // 2. Strictly Horizontal/Vertical 1 -> 3 Dispersed Optical Branches from Focal Prism Right Bevel
   ctx.save();
   clipHalfPlane(ctx, topX, topY, rightX, rightY, 1, W, H);
   for (const e of exits) {
-    drawStraightOpticalRibbon(ctx, e.bx, e.by, e.tx, e.ty, e.rgb, e.st, e.phase);
+    const branchPts = orthoStepPts(e.ex - 16, e.ey, e.xTurn, e.ty, e.tx);
+    drawOrthoOpticalRibbon(ctx, branchPts, e.rgb, e.st, e.phase);
   }
   ctx.restore();
 
-  // 3. Focal Equilateral Crystal Prism (Dark glass + subtle internal scatter wedge + luminous edge)
+  // 3. Focal Crystal Prism (dark optical glass + soft radial dispersion + uniform rim)
   ctx.fillStyle = '#04060a';
   ctx.beginPath();
   ctx.moveTo(topX, topY);
@@ -343,10 +395,12 @@ function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom) {
   ctx.closePath();
   ctx.clip();
 
-  const wGrad = ctx.createLinearGradient(entryX, entryY, exits[1].ex, exits[1].ey);
+  const innerR = Math.max(12, Math.hypot(exits[1].ex - entryX, exits[1].ey - entryY) * 1.15);
+  const wGrad = ctx.createRadialGradient(entryX, entryY, 0, entryX + innerR * 0.25, entryY, innerR);
   wGrad.addColorStop(0.00, 'rgba(244, 249, 255, 0.72)');
-  wGrad.addColorStop(0.45, 'rgba(195, 222, 252, 0.24)');
-  wGrad.addColorStop(1.00, 'rgba(155, 190, 232, 0.04)');
+  wGrad.addColorStop(0.32, 'rgba(204, 226, 252, 0.28)');
+  wGrad.addColorStop(0.68, 'rgba(165, 198, 238, 0.08)');
+  wGrad.addColorStop(1.00, 'rgba(140, 175, 220, 0)');
   ctx.fillStyle = wGrad;
   ctx.beginPath();
   ctx.moveTo(entryX, entryY - 3);
@@ -358,10 +412,10 @@ function drawFocalPrismAndFan(ctx, W, H, ing, vip, tun, dom) {
   ctx.restore();
 
   ctx.save();
-  ctx.shadowColor = 'rgba(180, 214, 250, 0.35)';
-  ctx.shadowBlur = 9;
-  ctx.strokeStyle = 'rgba(232, 242, 255, 0.90)';
-  ctx.lineWidth = 1.6;
+  ctx.shadowColor = 'rgba(180, 214, 250, 0.30)';
+  ctx.shadowBlur = 7;
+  ctx.strokeStyle = 'rgba(232, 242, 255, 0.88)';
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(topX, topY);
   ctx.lineTo(rightX, rightY);
@@ -406,31 +460,49 @@ function renderWaveguidesCanvas() {
 
   // Stage 1 Vertical Conduit: Pre-Gate -> Nftables Classify Engine
   if (ing.y - pre.bottom > 6) {
-    drawStraightOpticalRibbon(ctx, pre.cx, pre.bottom - 2, ing.cx, ing.y + 2, 'spectrum', waveState[4], 0.00, 'QUIC→TCP');
+    drawOrthoOpticalRibbon(
+      ctx,
+      [{ x: pre.cx, y: pre.bottom - 2 }, { x: pre.cx, y: ing.y + 2 }],
+      'spectrum', waveState[4], 0.00, 'QUIC→TCP'
+    );
   }
 
-  // Inter-Engine Cross-Feed: TW-HOME (TProxy weave_out) -> Burst-Harvest Pool
+  // Inter-Engine Vertical Cross-Feed: TW-HOME (TProxy weave_out) -> Burst-Harvest Pool
   if (dom.y - tun.bottom > 6) {
-    drawStraightOpticalRibbon(ctx, tun.cx, tun.bottom - 2, dom.cx, dom.y + 2, '170, 142, 240', waveState[3], 0.12, 'weave_out');
+    drawOrthoOpticalRibbon(
+      ctx,
+      [{ x: tun.cx, y: tun.bottom - 2 }, { x: tun.cx, y: dom.y + 2 }],
+      '170, 142, 240', waveState[3], 0.12, 'weave_out'
+    );
   }
 
   // Stage 3 Vertical Convergence: 3-Band HTB QoS -> 21-Uplink NAT & Egress
   if (up.y - qos.bottom > 6) {
-    drawStraightOpticalRibbon(ctx, qos.cx, qos.bottom - 2, up.cx, up.y + 2, 'spectrum', waveState[4], 0.30, '21 WAN NAT');
+    drawOrthoOpticalRibbon(
+      ctx,
+      [{ x: qos.cx, y: qos.bottom - 2 }, { x: qos.cx, y: up.y + 2 }],
+      'spectrum', waveState[4], 0.30, '21 WAN NAT'
+    );
   }
 
-  // Horizontal/Straight Optical Channels + Focal Prism (1 -> 3 Dispersion)
-  if (vip.x - ing.right > 24) {
+  // Strictly Horizontal/Vertical Optical Channels + Focal Prism (1 -> 3 Dispersion)
+  if (Math.min(vip.x, tun.x, dom.x) - ing.right > 30) {
     drawFocalPrismAndFan(ctx, rect.width, rect.height, ing, vip, tun, dom);
 
-    if (qos.x - tun.right > 16) {
+    const rightS2 = Math.max(vip.right, tun.right, dom.right);
+    const gap2W = qos.x - rightS2;
+    if (gap2W > 18) {
       const y10 = q10 ? q10.cy : (qos.y + qos.h * 0.30);
       const y20 = q20 ? q20.cy : (qos.y + qos.h * 0.55);
       const y30 = q30 ? q30.cy : (qos.y + qos.h * 0.80);
 
-      drawStraightOpticalRibbon(ctx, vip.right - 2, vip.cy, qos.x + 2, y10, '100, 174, 245', waveState[0], 0.24);
-      drawStraightOpticalRibbon(ctx, tun.right - 2, tun.cy, qos.x + 2, y20, '170, 142, 240', waveState[1], 0.38);
-      drawStraightOpticalRibbon(ctx, dom.right - 2, dom.cy, qos.x + 2, y30, '87, 209, 146',  waveState[2], 0.52);
+      const xLane0 = vip.right + (qos.x - vip.right) * 0.28;
+      const xLane1 = tun.right + (qos.x - tun.right) * 0.50;
+      const xLane2 = dom.right + (qos.x - dom.right) * 0.72;
+
+      drawOrthoOpticalRibbon(ctx, orthoStepPts(vip.right - 2, vip.cy, xLane0, y10, qos.x + 2), '100, 174, 245', waveState[0], 0.24);
+      drawOrthoOpticalRibbon(ctx, orthoStepPts(tun.right - 2, tun.cy, xLane1, y20, qos.x + 2), '170, 142, 240', waveState[1], 0.38);
+      drawOrthoOpticalRibbon(ctx, orthoStepPts(dom.right - 2, dom.cy, xLane2, y30, qos.x + 2), '87, 209, 146',  waveState[2], 0.52);
     }
   }
 
@@ -577,23 +649,23 @@ function renderClassifyStrip() {
     const share = (pkts / tot) * 100;
     const fillPct = pkts > 0 ? Math.min(100, Math.max(6, Math.pow(share / 100, 0.58) * 100)) : 0;
 
-    let colorHex = 'var(--c-mint)';
+    let colorName = 'mint';
     let colorRgb = '87, 209, 146';
     let textCls = 'c-mint';
     if (r.tag.includes('tunnel') || r.tag === 'rest-tunnel') {
-      colorHex = 'var(--c-violet)';
+      colorName = 'violet';
       colorRgb = '170, 142, 240';
       textCls = 'c-violet';
     } else if (r.tag === 'device-game') {
-      colorHex = 'var(--c-blue)';
+      colorName = 'blue';
       colorRgb = '100, 174, 245';
       textCls = 'c-blue';
     } else if (r.tag === 'quic') {
-      colorHex = 'var(--c-amber)';
+      colorName = 'amber';
       colorRgb = '235, 154, 94';
       textCls = 'c-amber';
     } else if (r.tag === 'device-block') {
-      colorHex = 'var(--c-crimson)';
+      colorName = 'crimson';
       colorRgb = '230, 108, 120';
       textCls = 'c-crimson';
     }
@@ -601,14 +673,8 @@ function renderClassifyStrip() {
     const pktTxt = pkts >= 1000 ? `${(pkts / 1000).toFixed(1)}k` : `${pkts}`;
     const pctTxt = pkts > 0 ? (share >= 1 ? `${Math.round(share)}%` : `${share.toFixed(1)}%`) : '0%';
 
-    const fillEl = el('div', {
-      class: 'classify-bar-fill',
-      style: {
-        width: `${fillPct.toFixed(1)}%`,
-        background: colorHex,
-        boxShadow: pkts > 0 ? `0 0 10px rgba(${colorRgb}, 0.72), 0 0 22px rgba(${colorRgb}, 0.34)` : 'none'
-      }
-    });
+    const segEl = el('span', { class: `seg-meter compact${pkts > 0 ? ' active' : ''}` });
+    renderSegMeter(segEl, fillPct / 100, 10, colorName, true);
 
     frag.appendChild(el('div', {
       class: `classify-bar-card ${pkts > 0 ? 'active' : ''}`,
@@ -618,7 +684,7 @@ function renderClassifyStrip() {
         el('span', { class: pkts > 0 ? 'c-bright' : 'c-muted', style: { fontWeight: pkts > 0 ? '600' : '400', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label),
         el('span', { class: pkts > 0 ? textCls : 'c-muted', style: { fontVariantNumeric: 'tabular-nums', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '9.5px' } }, `${pktTxt}·${pctTxt}`)
       ),
-      el('div', { class: 'classify-bar-track' }, fillEl)
+      segEl
     ));
   }
   grid.innerHTML = '';
@@ -814,31 +880,32 @@ export function renderBlueprint() {
   $('#bp-dom-desc').textContent = `slots ${w.slots ?? 126} (${w.affinity || 'flow'}) · direct ${(liveFlow.domPkts / 1000).toFixed(1)}k (${Math.round(directShare * 100)}%)`;
   $('#bp-dom-st').textContent = `${w.charged_count ?? 0} charged · ${w.draining_count ?? 0} drain · ${(w.cooling_count || 0) + (w.depleted_count || 0)} cool`;
 
-  // Tier 3: Stage 3 Full-Height HTB QoS + 21-Uplink Egress Telemetry & Meters
-  const setMeter = (sel, pct, active) => {
+  // Tier 3: Stage 3 Full-Height HTB QoS + 21-Uplink Egress Unified Segmented Meters
+  const setSegMeter = (sel, ratio, count, colorName, compact = false, active = false) => {
     const node = $(sel);
     if (!node) return;
-    node.style.width = `${Math.max(0, Math.min(100, pct)).toFixed(1)}%`;
+    renderSegMeter(node, ratio, count, colorName, compact);
     node.classList.toggle('active', !!active);
   };
 
   if ($('#bp-qos-meta')) $('#bp-qos-meta').textContent = `MSS ${st.settings?.['main.mss'] ?? 1440}`;
   const qosDomBps = Math.max(liveFlow.domBps, Math.max(0, totalRate - liveFlow.vipBps - liveFlow.tunBps));
   const qosTotBps = Math.max(1, liveFlow.vipBps + liveFlow.tunBps + qosDomBps);
-  const shareBar = (bps) => (bps > 0 ? Math.max(6, (bps / qosTotBps) * 100) : 0);
+  const shareRatio = (bps) => (bps > 0 ? Math.max(1 / 14, bps / qosTotBps) : 0);
 
   if ($('#bp-qos-10-rate')) $('#bp-qos-10-rate').textContent = fmtRate(liveFlow.vipBps).full;
   if ($('#bp-qos-20-rate')) $('#bp-qos-20-rate').textContent = fmtRate(liveFlow.tunBps).full;
   if ($('#bp-qos-30-rate')) $('#bp-qos-30-rate').textContent = fmtRate(qosDomBps).full;
-  setMeter('#bp-qos-10-bar', shareBar(liveFlow.vipBps), liveFlow.vipBps > 400);
-  setMeter('#bp-qos-20-bar', shareBar(liveFlow.tunBps), liveFlow.tunBps > 400);
-  setMeter('#bp-qos-30-bar', shareBar(qosDomBps), qosDomBps > 400);
+  setSegMeter('#bp-qos-10-bar', shareRatio(liveFlow.vipBps), 14, 'blue',   true, liveFlow.vipBps > 400);
+  setSegMeter('#bp-qos-20-bar', shareRatio(liveFlow.tunBps), 14, 'violet', true, liveFlow.tunBps > 400);
+  setSegMeter('#bp-qos-30-bar', shareRatio(qosDomBps),       14, 'mint',   true, qosDomBps > 400);
 
   const ewmaDown = st.rate_ewma ?? st.rate ?? 0;
   const ewmaUp = st.rate_up_ewma ?? st.rate_up ?? 0;
   const ewmaMbps = ((ewmaDown + ewmaUp) * 8) / 1e6;
   if ($('#bp-qos-tx-txt')) $('#bp-qos-tx-txt').textContent = `↑ ${fmtRate(ewmaUp).full} · ↓ ${fmtRate(ewmaDown).full}`;
-  setMeter('#bp-qos-tx-bar', ewmaMbps > 0 ? Math.min(100, Math.max(6, Math.log10(1 + ewmaMbps * 3.5) * 44)) : 0, ewmaMbps > 0.02);
+  const ewmaRatio = ewmaMbps > 0 ? Math.min(1, Math.max(1 / 18, Math.log10(1 + ewmaMbps * 3.5) * 0.44)) : 0;
+  setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', true, ewmaMbps > 0.02);
 
   const upSec = st.sys?.uptime || 0;
   const upDays = Math.floor(upSec / 86400);
@@ -847,17 +914,18 @@ export function renderBlueprint() {
 
   const nTotal = Math.max(1, st.strand_count || 21);
   if ($('#bp-up-pool-txt')) $('#bp-up-pool-txt').textContent = `${w.charged_count ?? 0}/${nTotal} charged · ${st.healthy_count ?? 0} up`;
-  setMeter('#bp-up-pool-bar', ((w.charged_count ?? 0) / nTotal) * 100, (w.charged_count ?? 0) > 0 && totalRate > 2000);
+  setSegMeter('#bp-up-pool-bar', (w.charged_count ?? 0) / nTotal, 16, 'spectrum', false, (w.charged_count ?? 0) > 0 && totalRate > 2000);
 
   const ctCount = st.sys?.conntrack?.count ?? 0;
   const ctMax = Math.max(1, st.sys?.conntrack?.max ?? 131072);
   if ($('#bp-up-ct-txt')) $('#bp-up-ct-txt').textContent = `${ctCount.toLocaleString()} / ${ctMax.toLocaleString()}`;
-  setMeter('#bp-up-ct-bar', Math.max(ctCount > 0 ? 3 : 0, (ctCount / ctMax) * 100), ctCount > 0);
+  const ctRatio = ctCount > 0 ? Math.max(1 / 16, ctCount / ctMax) : 0;
+  setSegMeter('#bp-up-ct-bar', ctRatio, 16, 'blue', false, ctCount > 0);
 
   const memMb = Math.round((st.sys?.mem_available_kb || 0) / 1024);
   const load1 = st.sys?.load1 ?? 0;
   if ($('#bp-up-mem-txt')) $('#bp-up-mem-txt').textContent = `${memMb} MB free · load ${load1}`;
-  setMeter('#bp-up-mem-bar', Math.max(10, Math.min(100, (memMb / 256) * 100)), load1 > 0.5);
+  setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / 256)), 16, 'gold', false, load1 > 0.5);
 
   $('#bp-verify-summary').textContent = st.ok
     ? `累計 ↓ ${fmtBytes(st.down_bytes)} · ↑ ${fmtBytes(st.up_bytes)} · ${nTotal}/${nTotal} kernel ok`

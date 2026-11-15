@@ -200,11 +200,11 @@
   position: relative;
   display: grid;
   grid-template-columns:
-    minmax(228px, 0.88fr)
-    minmax(88px, 0.34fr)
-    minmax(275px, 1.08fr)
-    minmax(58px, 0.22fr)
-    minmax(265px, 1.04fr);
+    minmax(240px, 0.94fr)
+    minmax(94px, 0.36fr)
+    minmax(282px, 1.10fr)
+    minmax(74px, 0.28fr)
+    minmax(268px, 1.04fr);
   align-items: stretch;
   height: 100%;
   min-width: 0;
@@ -226,25 +226,24 @@
   z-index: 2;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between;
   min-width: 0;
   min-height: 0;
 }
 
 .bp-col-ingress {
   grid-column: 1;
-  gap: 26px;
+  gap: 28px;
 }
 
 .bp-col-engines {
   grid-column: 3;
-  gap: 24px;
+  gap: 26px;
 }
 
 .bp-col-egress {
   grid-column: 5;
-  gap: 26px;
-  justify-content: space-between;
+  gap: 28px;
 }
 
 .bp-stage-card {
@@ -367,6 +366,11 @@
     grid-column: 1;
     gap: 12px;
   }
+  #bp-card-pregate,
+  #bp-card-ingress,
+  #bp-card-vip,
+  #bp-card-tun,
+  #bp-card-dom,
   #bp-card-qos,
   #bp-card-uplink {
     flex: 0 0 auto;

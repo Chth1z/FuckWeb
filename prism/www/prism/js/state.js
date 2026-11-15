@@ -2,7 +2,7 @@
  * PRISM 5.0 — Central State Store, DSOTM Spectral Color Math & Formatters
  * ============================================================================ */
 
-export const UI_VERSION = '5.5.0';
+export const UI_VERSION = '5.6.0';
 
 export const S = {
   tab: 'overview',
@@ -48,15 +48,15 @@ export const EDITABLE_SPECS = [
   { key: 'main.mss',               label: 'TCP MSS 鉗制', type: 'number', min: 0, max: 1460 }
 ];
 
-// Classic Pink Floyd "The Dark Side of the Moon" 6-stop dispersion spectrum:
-// Top (idx=0, least refracted, 700nm) = Red -> Orange -> Yellow -> Green -> Cyan/Blue -> Violet (idx=N-1, most refracted, 380nm)
+// Standard 7-stop Optical Rainbow Spectrum (Red -> Orange -> Yellow -> Green -> Cyan -> Blue -> Violet)
 const DSOTM_STOPS = [
-  [238,  52,  46], // Red
-  [244, 124,  38], // Orange
-  [247, 212,  46], // Yellow
-  [ 68, 198,  92], // Green
-  [ 48, 166, 238], // Blue
-  [144,  82, 228]  // Violet
+  [239,  68,  68], // Red    (700nm)
+  [249, 115,  22], // Orange (620nm)
+  [250, 204,  21], // Yellow (580nm)
+  [ 34, 197,  94], // Green  (530nm)
+  [  6, 182, 212], // Cyan   (490nm)
+  [ 59, 130, 246], // Blue   (450nm)
+  [139,  92, 246]  // Violet (380nm)
 ];
 
 export function spectralColor(idx, total) {

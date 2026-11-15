@@ -2,9 +2,9 @@
  * PRISM — View 03: Pure Square Emission Matrix, Oscilloscope & 21-Ch Telemetry
  * ============================================================================ */
 
-import { S, spectralColor } from '../state.js?v=5.5.0';
-import { $, $$, el, renderSegMeter } from '../dom.js?v=5.5.0';
-import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.5.0';
+import { S, spectralColor } from '../state.js?v=5.6.0';
+import { $, $$, el, renderSegMeter } from '../dom.js?v=5.6.0';
+import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.6.0';
 
 let hoverStrandId = null;
 
@@ -258,13 +258,13 @@ export function renderSpectrum() {
   strands.forEach((s, idx) => {
     const col = spectralColor(idx, Math.max(1, strands.length));
     const meterColor = s.vip ? 'blue' : (s.bucket === 'charged' ? 'mint' : (s.bucket === 'cooling' ? 'violet' : 'amber'));
-    const meterWrap = el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } });
-    const seg = el('span', { class: 'seg-meter' });
-    renderSegMeter(seg, (s.tokens_pct ?? 100) / 100, 6, meterColor);
+    const meterWrap = el('div', { class: 'bp-meter-row', style: { gap: '6px' } });
+    const seg = el('span', { class: 'seg-meter compact' });
+    renderSegMeter(seg, (s.tokens_pct ?? 100) / 100, 6, meterColor, true);
     const kbTxt = s.cooldown_rem > 0
       ? `${s.tokens_pct ?? 100}%(${s.cooldown_rem}s)`
       : `${s.tokens_pct ?? 100}%`;
-    meterWrap.append(seg, el('span', { class: 'c-sec', style: { fontSize: '10.5px' } }, kbTxt));
+    meterWrap.append(seg, el('span', { class: 'c-sec', style: { fontSize: '10.5px', whiteSpace: 'nowrap', flexShrink: '0' } }, kbTxt));
 
     const rttNode = s.loss_pct > 0
       ? el('span', { class: s.loss_pct >= 15 ? 'c-amber' : 'c-sec', title: `packet loss ${s.loss_pct}%` }, `${s.ttfb_ms > 0 ? s.ttfb_ms + 'm' : '—'}·${s.loss_pct}%`)

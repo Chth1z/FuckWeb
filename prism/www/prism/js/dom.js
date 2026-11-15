@@ -2,7 +2,7 @@
  * PRISM 5.0 — DOM Builders, Segmented Block Meters & Log Renderers
  * ============================================================================ */
 
-import { fmtClock } from './state.js?v=5.5.0';
+import { fmtClock, spectralColor } from './state.js?v=5.6.0';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -39,44 +39,24 @@ export function svgEl(tag, attrs = {}, ...children) {
   return node;
 }
 
-const SEG_SPECTRUM_STOPS = [
-  [232, 93, 80],
-  [235, 154, 94],
-  [240, 202, 104],
-  [87, 209, 146],
-  [100, 174, 245],
-  [170, 142, 240],
-];
-
-function sampleSpectrumRgb(t) {
-  const scaled = Math.max(0, Math.min(1, t)) * (SEG_SPECTRUM_STOPS.length - 1);
-  const idx = Math.min(SEG_SPECTRUM_STOPS.length - 2, Math.floor(scaled));
-  const frac = scaled - idx;
-  const a = SEG_SPECTRUM_STOPS[idx];
-  const b = SEG_SPECTRUM_STOPS[idx + 1];
-  return [
-    Math.round(a[0] + (b[0] - a[0]) * frac),
-    Math.round(a[1] + (b[1] - a[1]) * frac),
-    Math.round(a[2] + (b[2] - a[2]) * frac),
-  ].join(', ');
-}
-
-export function renderSegMeter(container, ratio, count = 12, colorClass = 'mint') {
+export function renderSegMeter(container, ratio, count = 12, colorClass = 'mint', compact = false) {
   if (!container) return;
   const active = Math.round(Math.max(0, Math.min(1, ratio)) * count);
-  const sig = `${active}/${count}/${colorClass}`;
+  const sig = `${active}/${count}/${colorClass}/${compact ? 1 : 0}`;
   if (container.dataset.sig === sig) return;
   container.dataset.sig = sig;
+  container.style.setProperty('--seg-count', String(count));
+  container.classList.toggle('compact', !!compact);
   container.innerHTML = '';
   for (let i = 0; i < count; i++) {
     const isOn = i < active;
     if (isOn && colorClass === 'spectrum') {
-      const rgb = sampleSpectrumRgb(count > 1 ? i / (count - 1) : 0);
+      const col = spectralColor(i, count);
       container.appendChild(el('span', {
         class: 'seg-cell on',
         style: {
-          background: `rgb(${rgb})`,
-          boxShadow: `0 0 8px rgba(${rgb}, 0.65), 0 0 14px rgba(${rgb}, 0.25)`,
+          background: col.css,
+          boxShadow: `0 0 8px rgba(${col.rgb}, 0.65), 0 0 14px rgba(${col.rgb}, 0.25)`,
         },
       }));
     } else {

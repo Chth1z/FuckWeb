@@ -5,8 +5,8 @@
  * bands (no curves, no core lines, no particles), zero shadowBlur lag.
  * ============================================================================ */
 
-import { S, spectralColor, fmtRate } from '../state.js?v=5.5.0';
-import { $ } from '../dom.js?v=5.5.0';
+import { S, spectralColor, fmtRate } from '../state.js?v=5.6.0';
+import { $ } from '../dom.js?v=5.6.0';
 
 let rafId = null;
 let needsRedraw = true;
@@ -206,10 +206,15 @@ function drawFeatheredEdge(ctx, x0, y0, x1, y1, nx, ny, dist, rgb, alpha) {
   const mx = (x0 + x1) * 0.5;
   const my = (y0 + y1) * 0.5;
   const g = ctx.createLinearGradient(mx, my, mx + nx * dist, my + ny * dist);
-  g.addColorStop(0, `rgba(${rgb}, ${alpha.toFixed(3)})`);
-  g.addColorStop(0.32, `rgba(${rgb}, ${(alpha * 0.42).toFixed(3)})`);
-  g.addColorStop(0.68, `rgba(${rgb}, ${(alpha * 0.12).toFixed(3)})`);
-  g.addColorStop(1, `rgba(${rgb}, 0)`);
+  // 8-stop smooth Gaussian falloff (eliminates hard gradient knees & boxy bloom contours)
+  g.addColorStop(0.00, `rgba(${rgb}, ${alpha.toFixed(3)})`);
+  g.addColorStop(0.14, `rgba(${rgb}, ${(alpha * 0.72).toFixed(3)})`);
+  g.addColorStop(0.28, `rgba(${rgb}, ${(alpha * 0.46).toFixed(3)})`);
+  g.addColorStop(0.44, `rgba(${rgb}, ${(alpha * 0.24).toFixed(3)})`);
+  g.addColorStop(0.60, `rgba(${rgb}, ${(alpha * 0.11).toFixed(3)})`);
+  g.addColorStop(0.76, `rgba(${rgb}, ${(alpha * 0.04).toFixed(3)})`);
+  g.addColorStop(0.90, `rgba(${rgb}, ${(alpha * 0.01).toFixed(3)})`);
+  g.addColorStop(1.00, `rgba(${rgb}, 0)`);
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.moveTo(x0, y0);
@@ -285,7 +290,7 @@ function drawPrismFrame() {
   const startX = 0;
   const startY = entryY + entryX * Math.tan(incidentAngle);
   const beamHalf = Math.min(4.8, 1.5 + Math.sqrt(Math.max(0, totalMbps)) * 0.32);
-  const beamGlowHalf = beamHalf * (4.2 + Math.min(2.6, totalMbps * 0.05));
+  const beamGlowHalf = beamHalf * (5.4 + Math.min(2.6, totalMbps * 0.05));
 
   // Normal vector & unit direction to incident beam
   const bLen = Math.hypot(entryX - startX, entryY - startY) || 1;
@@ -296,19 +301,19 @@ function drawPrismFrame() {
   const beamEndX = entryX + ux * 90;
   const beamEndY = entryY + uy * 90;
 
-  // Dual-tier feathered optical luminance halo clipped flush to prism's left crystal face
-  const outerGlowAlpha = Math.min(0.46, 0.22 + Math.sqrt(Math.max(0, totalMbps)) * 0.036);
-  const innerGlowAlpha = Math.min(0.62, 0.34 + Math.sqrt(Math.max(0, totalMbps)) * 0.042);
+  // Dual-tier Gaussian-feathered optical luminance halo clipped flush to prism's left crystal face
+  const outerGlowAlpha = Math.min(0.36, 0.18 + Math.sqrt(Math.max(0, totalMbps)) * 0.030);
+  const innerGlowAlpha = Math.min(0.42, 0.24 + Math.sqrt(Math.max(0, totalMbps)) * 0.032);
   ctx.save();
   clipSlopeHalfPlane(ctx, topX, topY, leftX, leftY, -1, W, H);
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  // Wide soft outer feather
+  // Wide soft outer Gaussian feather
   drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, nx, ny, beamGlowHalf, '215, 236, 255', outerGlowAlpha);
   drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamGlowHalf, '215, 236, 255', outerGlowAlpha);
   // Tight core bloom
-  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, nx, ny, beamHalf * 2.1, '255, 255, 255', innerGlowAlpha);
-  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamHalf * 2.1, '255, 255, 255', innerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, nx, ny, beamHalf * 2.4, '255, 255, 255', innerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamHalf * 2.4, '255, 255, 255', innerGlowAlpha);
   ctx.restore();
 
   // Solid crisp white incident beam (also flush-clipped to left glass bevel)
@@ -361,8 +366,9 @@ function drawPrismFrame() {
       targetAlpha = 0.48;
       targetGlow = 0.16;
     } else {
-      targetW = 0.88 + 0.28 * tokRatio + Math.min(2.2, Math.sqrt(Math.max(0, mbps)) * 0.44);
-      targetAlpha = Math.min(0.98, 0.78 + 0.10 * tokRatio + Math.min(0.18, Math.sqrt(Math.max(0, mbps)) * 0.05));
+      // Gentle traffic-responsive band widening (subtle +widening on heavy strands without crushing peers)
+      targetW = 1.0 + 0.08 * tokRatio + Math.min(1.05, Math.sqrt(Math.max(0, mbps)) * 0.26);
+      targetAlpha = Math.min(0.98, 0.80 + 0.08 * tokRatio + Math.min(0.14, Math.sqrt(Math.max(0, mbps)) * 0.04));
       targetGlow = Math.min(1.0, 0.36 + 0.10 * tokRatio + Math.log10(1 + Math.max(0, mbps) * 4.5) * 0.40);
     }
 
@@ -433,7 +439,7 @@ function drawPrismFrame() {
     ctx.restore();
   }
 
-  // Draw each of the 21 contiguous straight uniform bands
+  // Draw seamless contiguous opaque bands via stacked full-tail layering (zero seam overlap/gap lines!)
   let cum = 0;
   const bandGeoms = [];
   for (let i = 0; i < nStrands; i++) {
@@ -462,17 +468,23 @@ function drawPrismFrame() {
     const isHover = S.hoverStrand === s.id;
     const smoothGlow = S.bandSmooth[i].glow;
 
-    let alpha = S.bandSmooth[i].alpha;
-    if (anyHover) {
-      alpha = isHover ? 1.0 : alpha * 0.24;
-    }
+    // Luminance pre-composited onto obsidian #040509 so every adjacent band stacks at alpha=1.0 seamlessly
+    const intensity = anyHover
+      ? (isHover ? 1.0 : 0.24)
+      : (!s.healthy ? 0.22 : (s.bucket === 'depleted' ? 0.46 : Math.min(1.0, 0.78 + smoothGlow * 0.22)));
+    const lift = isHover ? 0.16 : (!anyHover && s.healthy ? smoothGlow * 0.07 : 0);
+    const rr = Math.min(255, Math.round(4 + (col.r - 4) * intensity + (255 - col.r) * lift));
+    const gg = Math.min(255, Math.round(5 + (col.g - 5) * intensity + (255 - col.g) * lift));
+    const bb = Math.min(255, Math.round(9 + (col.b - 9) * intensity + (255 - col.b) * lift));
 
-    ctx.fillStyle = `rgba(${col.rgb}, ${alpha.toFixed(3)})`;
+    ctx.fillStyle = `rgb(${rr}, ${gg}, ${bb})`;
     ctx.beginPath();
-    ctx.moveTo(bx0Top, by0Top - 0.35);
-    ctx.lineTo(W, y1Top - 0.35);
-    ctx.lineTo(W, y1Bot + 0.35);
-    ctx.lineTo(bx0Bot, by0Bot + 0.35);
+    // Extend downward to bottom boundary (t = 1.0); subsequent band i+1 cleanly paints over [t_{i+1}..1.0]
+    // producing mathematically exact AA interpolation between Color i and Color i+1 with zero seam lines!
+    ctx.moveTo(bx0Top, by0Top);
+    ctx.lineTo(W, y1Top);
+    ctx.lineTo(W, farBotY + 0.5);
+    ctx.lineTo(rxBot, ryBot + 0.5);
     ctx.closePath();
     ctx.fill();
 
@@ -488,49 +500,26 @@ function drawPrismFrame() {
     });
   }
 
-  // Second pass: Steady smoothed optical aura + phosphor glow (all healthy bands remain gently luminous)
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < bandGeoms.length; i++) {
-    const b = bandGeoms[i];
-    if (!b.isHover && (anyHover || !b.healthy)) continue;
-
-    const gVal = b.smoothGlow;
-    const bandMidThick = ((b.by0Bot - b.by0Top) + (b.y1Bot - b.y1Top)) * 0.5;
-    const bloomPad = b.isHover
-      ? Math.max(14, bandMidThick * 1.75)
-      : (8.0 + gVal * 8.5);
-    const edgePeak = b.isHover
-      ? 0.48
-      : (0.09 + gVal * 0.20);
-    const coreBoost = b.isHover ? 0.36 : (0.07 + gVal * 0.18);
-
-    ctx.fillStyle = `rgba(${b.col.rgb}, ${coreBoost.toFixed(3)})`;
-    ctx.beginPath();
-    ctx.moveTo(b.bx0Top, b.by0Top - 0.2);
-    ctx.lineTo(W, b.y1Top - 0.2);
-    ctx.lineTo(W, b.y1Bot + 0.2);
-    ctx.lineTo(b.bx0Bot, b.by0Bot + 0.2);
-    ctx.closePath();
-    ctx.fill();
-
-    const tDx = W - b.bx0Top;
-    const tDy = b.y1Top - b.by0Top;
-    const tLen = Math.hypot(tDx, tDy) || 1;
-    drawFeatheredEdge(
-      ctx, b.bx0Top, b.by0Top, W, b.y1Top,
-      tDy / tLen, -tDx / tLen, bloomPad, b.col.rgb, edgePeak
-    );
-
-    const bDx = W - b.bx0Bot;
-    const bDy = b.y1Bot - b.by0Bot;
-    const bLen = Math.hypot(bDx, bDy) || 1;
-    drawFeatheredEdge(
-      ctx, b.bx0Bot, b.by0Bot, W, b.y1Bot,
-      -bDy / bLen, bDx / bLen, bloomPad, b.col.rgb, edgePeak
-    );
+  // Focused outer optical aura ONLY when hovering an individual strand (never draws internal seam lines)
+  if (anyHover) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < bandGeoms.length; i++) {
+      const b = bandGeoms[i];
+      if (!b.isHover) continue;
+      const bandMidThick = ((b.by0Bot - b.by0Top) + (b.y1Bot - b.y1Top)) * 0.5;
+      const bloomPad = Math.max(16, bandMidThick * 1.9);
+      const tDx = W - b.bx0Top;
+      const tDy = b.y1Top - b.by0Top;
+      const tLen = Math.hypot(tDx, tDy) || 1;
+      drawFeatheredEdge(ctx, b.bx0Top, b.by0Top, W, b.y1Top, tDy / tLen, -tDx / tLen, bloomPad, b.col.rgb, 0.42);
+      const bDx = W - b.bx0Bot;
+      const bDy = b.y1Bot - b.by0Bot;
+      const bLen = Math.hypot(bDx, bDy) || 1;
+      drawFeatheredEdge(ctx, b.bx0Bot, b.by0Bot, W, b.y1Bot, -bDy / bLen, bDx / bLen, bloomPad, b.col.rgb, 0.42);
+    }
+    ctx.restore();
   }
-  ctx.restore();
   ctx.restore(); // End right-bevel half-plane clip
 
   // 5. Equilateral Prism Body & Internal Dispersion Wedge (Iconic Album Cover Look)
@@ -543,7 +532,7 @@ function drawPrismFrame() {
   ctx.closePath();
   ctx.fill();
 
-  // Internal dispersion wedge inside dark glass prism with localized natural scatter glow
+  // Internal dispersion wedge inside dark glass prism with true 2D Gaussian blur halo (zero hard polygon step)
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(topX, topY);
@@ -555,40 +544,40 @@ function drawPrismFrame() {
   const exitMidX = (exitTopX + exitBotX) * 0.5;
   const exitMidY = (exitTopY + exitBotY) * 0.5;
 
-  // Localized soft ambient bloom tightly hugging ONLY the beam core & fading to 0 before the right wall
-  // (never spills onto the dark upper/lower right glass border!)
-  ctx.globalCompositeOperation = 'lighter';
-  const bloomEndT = 0.88;
-  const bloomEndTopX = entryX + (exitTopX - entryX) * bloomEndT;
-  const bloomEndTopY = (entryY - beamHalf * 0.72) + (exitTopY - (entryY - beamHalf * 0.72)) * bloomEndT;
-  const bloomEndBotX = entryX + (exitBotX - entryX) * bloomEndT;
-  const bloomEndBotY = (entryY + beamHalf * 0.72) + (exitBotY - (entryY + beamHalf * 0.72)) * bloomEndT;
-  const bloomFade = ctx.createLinearGradient(entryX, entryY, (bloomEndTopX + bloomEndBotX) * 0.5, (bloomEndTopY + bloomEndBotY) * 0.5);
-  const bloomPeak = Math.min(0.18, 0.08 + Math.sqrt(Math.max(0, totalMbps)) * 0.018);
-  bloomFade.addColorStop(0.00, `rgba(225, 240, 255, ${(bloomPeak * 1.15).toFixed(3)})`);
-  bloomFade.addColorStop(0.35, `rgba(190, 218, 252, ${(bloomPeak * 0.55).toFixed(3)})`);
-  bloomFade.addColorStop(0.75, `rgba(160, 196, 238, ${(bloomPeak * 0.16).toFixed(3)})`);
-  bloomFade.addColorStop(1.00, 'rgba(150, 188, 232, 0)');
-
-  ctx.fillStyle = bloomFade;
-  ctx.beginPath();
-  ctx.moveTo(entryX, entryY - beamHalf * 2.1);
-  ctx.lineTo(bloomEndTopX, bloomEndTopY - 2);
-  ctx.lineTo(bloomEndBotX, bloomEndBotY + 2);
-  ctx.lineTo(entryX, entryY + beamHalf * 2.1);
-  ctx.closePath();
-  ctx.fill();
-
-  // Tight crystal entry refraction glow strictly near left incident apex
-  const entryRadius = Math.max(18, side * 0.15);
-  const entryGlow = ctx.createRadialGradient(entryX + 2, entryY, 1, entryX + 4, entryY, entryRadius);
-  entryGlow.addColorStop(0.0, `rgba(255, 255, 255, ${Math.min(0.24, 0.12 + Math.sqrt(Math.max(0, totalMbps)) * 0.022).toFixed(3)})`);
-  entryGlow.addColorStop(0.5, 'rgba(205, 228, 255, 0.05)');
-  entryGlow.addColorStop(1.0, 'rgba(205, 228, 255, 0)');
+  // Tight smooth 6-stop radial crystal entry glow (zero blocky edge)
+  const entryRadius = Math.max(22, side * 0.18);
+  const entryPeak = Math.min(0.24, 0.12 + Math.sqrt(Math.max(0, totalMbps)) * 0.022);
+  const entryGlow = ctx.createRadialGradient(entryX + 2, entryY, 0.5, entryX + 3, entryY, entryRadius);
+  entryGlow.addColorStop(0.00, `rgba(255, 255, 255, ${entryPeak.toFixed(3)})`);
+  entryGlow.addColorStop(0.22, `rgba(225, 240, 255, ${(entryPeak * 0.58).toFixed(3)})`);
+  entryGlow.addColorStop(0.46, `rgba(205, 228, 255, ${(entryPeak * 0.24).toFixed(3)})`);
+  entryGlow.addColorStop(0.72, `rgba(185, 212, 248, ${(entryPeak * 0.07).toFixed(3)})`);
+  entryGlow.addColorStop(1.00, 'rgba(180, 208, 246, 0)');
   ctx.fillStyle = entryGlow;
   ctx.fillRect(entryX - entryRadius, entryY - entryRadius, entryRadius * 2, entryRadius * 2);
 
-  // Main sharp internal white-to-mist dispersion fan
+  // Soft 2D Gaussian blurred scatter halo fading cleanly to 0 before touching the right wall
+  ctx.save();
+  const mistEndX = entryX + (exitMidX - entryX) * 0.78;
+  const mistEndY = entryY + (exitMidY - entryY) * 0.78;
+  const mistGrad = ctx.createLinearGradient(entryX, entryY, mistEndX, mistEndY);
+  const mistA = Math.min(0.42, 0.24 + Math.sqrt(Math.max(0, totalMbps)) * 0.03);
+  mistGrad.addColorStop(0.00, `rgba(225, 240, 255, ${mistA.toFixed(3)})`);
+  mistGrad.addColorStop(0.45, `rgba(195, 222, 252, ${(mistA * 0.36).toFixed(3)})`);
+  mistGrad.addColorStop(1.00, 'rgba(170, 204, 244, 0)');
+  ctx.shadowColor = 'rgba(195, 224, 255, 0.44)';
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = mistGrad;
+  ctx.beginPath();
+  ctx.moveTo(entryX, entryY - beamHalf * 0.78);
+  ctx.lineTo(entryX + (exitTopX - entryX) * 0.78, entryY - beamHalf * 0.78 + (exitTopY - (entryY - beamHalf * 0.78)) * 0.78);
+  ctx.lineTo(entryX + (exitBotX - entryX) * 0.78, entryY + beamHalf * 0.78 + (exitBotY - (entryY + beamHalf * 0.78)) * 0.78);
+  ctx.lineTo(entryX, entryY + beamHalf * 0.78);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // Main crisp internal white-to-mist dispersion fan
   ctx.globalCompositeOperation = 'source-over';
   const wedgeGrad = ctx.createLinearGradient(entryX, entryY, exitMidX, exitMidY);
   wedgeGrad.addColorStop(0.00, 'rgba(255, 255, 255, 0.90)');
@@ -599,10 +588,10 @@ function drawPrismFrame() {
 
   ctx.fillStyle = wedgeGrad;
   ctx.beginPath();
-  ctx.moveTo(entryX, entryY - beamHalf * 0.72);
+  ctx.moveTo(entryX, entryY - beamHalf * 0.85);
   ctx.lineTo(exitTopX, exitTopY);
   ctx.lineTo(exitBotX, exitBotY);
-  ctx.lineTo(entryX, entryY + beamHalf * 0.72);
+  ctx.lineTo(entryX, entryY + beamHalf * 0.85);
   ctx.closePath();
   ctx.fill();
   ctx.restore();

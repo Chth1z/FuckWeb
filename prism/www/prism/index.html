@@ -6,10 +6,10 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>PRISM v5.5.0 · Optical Spectrum &amp; Privacy Router</title>
-  <link rel="stylesheet" href="css/tokens.css?v=5.5.0">
-  <link rel="stylesheet" href="css/layout.css?v=5.5.0">
-  <link rel="stylesheet" href="css/components.css?v=5.5.0">
+  <title>PRISM v5.6.0 · Optical Spectrum &amp; Privacy Router</title>
+  <link rel="stylesheet" href="css/tokens.css?v=5.6.0">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.0">
+  <link rel="stylesheet" href="css/components.css?v=5.6.0">
 </head>
 <body>
   <div class="app-shell">
@@ -27,7 +27,7 @@
           </svg>
         </span>
         <span class="brand-name">PRISM</span>
-        <span class="brand-sub"><span id="hdr-ver">v5.5.0</span> · <span id="hdr-ip">192.168.16.1</span></span>
+        <span class="brand-sub"><span id="hdr-ver">v5.6.0</span> · <span id="hdr-ip">192.168.16.1</span></span>
       </div>
 
       <nav class="nav-tabs" aria-label="Primary">
@@ -188,19 +188,17 @@
                   <span id="bp-quic-pkts" class="bp-live-rate c-spectrum" style="font-size:12px">0 pkts</span>
                 </div>
                 <div id="bp-dns-st" class="c-sec" style="font-size:10px;margin-top:2px">SmartDNS :6053 · cn: 0 · tun: 0</div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;flex-wrap:wrap">
-                  <div style="display:flex;align-items:center;gap:5px">
-                    <span id="bp-harvest-meter" class="seg-meter"></span>
-                    <span id="bp-harvest-txt" class="c-spectrum" style="font-size:10px">harvest</span>
+                <div class="bp-meter-row" style="margin-top:6px">
+                  <span id="bp-harvest-meter" class="seg-meter"></span>
+                  <span id="bp-harvest-txt" class="bp-meter-val c-spectrum" style="font-size:10.5px">harvest</span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px">
+                  <div id="site-mode-seg" class="seg-group" aria-label="站點聚匯模式">
+                    <button type="button" class="seg-btn" data-mode="auto">auto</button>
+                    <button type="button" class="seg-btn" data-mode="on">聚匯</button>
+                    <button type="button" class="seg-btn" data-mode="off">單線</button>
                   </div>
-                  <div style="display:flex;align-items:center;gap:5px">
-                    <div id="site-mode-seg" class="seg-group" aria-label="站點聚匯模式">
-                      <button type="button" class="seg-btn" data-mode="auto">auto</button>
-                      <button type="button" class="seg-btn" data-mode="on">聚匯</button>
-                      <button type="button" class="seg-btn" data-mode="off">單線</button>
-                    </div>
-                    <button id="site-mem-btn" type="button" class="btn-cmd" style="padding:2px 6px;font-size:10px">記住站點</button>
-                  </div>
+                  <button id="site-mem-btn" type="button" class="btn-cmd" style="padding:2px 6px;font-size:10px;white-space:nowrap;flex-shrink:0">記住站點</button>
                 </div>
               </div>
 
@@ -210,7 +208,7 @@
                     <div style="font-weight:700;font-size:12px"><span class="c-spectrum">NFTABLES CLASSIFY</span></div>
                     <div class="c-sec" style="font-size:10px">prerouting → @dev_policy → 分流決策</div>
                   </div>
-                  <div style="text-align:right">
+                  <div style="text-align:right;white-space:nowrap;flex-shrink:0">
                     <div id="bp-ingress-rate" class="bp-live-rate c-bright" style="font-size:13px">0 Mbps</div>
                     <div id="bp-ingress-pkts" class="c-sec" style="font-size:10px">0 pkts</div>
                   </div>
@@ -222,20 +220,20 @@
             <!-- Stage 2 (Center Col): Staggered Asymmetric Routing Engines -->
             <div class="bp-stage-col bp-col-engines">
               <div id="bp-card-vip" class="s-box blue bp-stage-card">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px">
+                <div class="bp-node-head" style="margin-bottom:5px">
                   <div>
-                    <span style="font-weight:700;color:var(--c-blue);font-size:12px">@vip_lane · 電競專線</span>
-                    <span class="c-muted" style="font-size:10px;margin-left:6px">mark 0x100 · &gt;50MB退回</span>
+                    <div style="font-weight:700;color:var(--c-blue);font-size:12px">@vip_lane · 電競專線</div>
+                    <div class="c-sec" style="font-size:10px">mark 0x100 · 小包UDP/DNS · &gt;50MB退回</div>
                   </div>
                   <span id="bp-vip-rate" class="bp-live-rate c-blue" style="font-size:13px">0 bps</span>
                 </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+                <div class="bp-meter-row" style="margin-bottom:4px">
                   <span id="bp-vip-meter" class="seg-meter"></span>
-                  <strong id="bp-vip-pct" class="c-bright" style="font-size:11px">—</strong>
+                  <strong id="bp-vip-pct" class="bp-meter-val c-bright">—</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px">
                   <span id="bp-vip-desc" class="c-sec">—</span>
-                  <span style="display:inline-flex;align-items:center;gap:5px"><span class="run-dot"></span><span id="bp-vip-st" class="c-blue">standby</span></span>
+                  <span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0"><span class="run-dot"></span><span id="bp-vip-st" class="c-blue">standby</span></span>
                 </div>
               </div>
 
@@ -247,9 +245,9 @@
                   </div>
                   <span id="bp-tun-rate" class="bp-live-rate c-violet" style="font-size:13px">0 bps</span>
                 </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+                <div class="bp-meter-row" style="margin-bottom:4px">
                   <span id="bp-tun-meter" class="seg-meter"></span>
-                  <strong id="bp-tun-pct" class="c-bright" style="font-size:11px">0%</strong>
+                  <strong id="bp-tun-pct" class="bp-meter-val c-bright">0%</strong>
                 </div>
                 <div id="bp-tun-desc" class="c-sec" style="font-size:10.5px">—</div>
                 <div id="bp-tun-chain" class="relay-mini-list">
@@ -257,11 +255,11 @@
                   <div class="c-muted">備援鏈: JP-Lightsail → 台灣家寬 (同IP)</div>
                 </div>
                 <div style="margin-top:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px">
-                  <span style="display:inline-flex;align-items:center;gap:6px">
+                  <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0">
                     <span class="run-dot violet"></span>
                     <span id="bp-tun-st" class="c-violet">checking...</span>
                   </span>
-                  <a id="zashboard-link" href="#" target="_blank" rel="noopener noreferrer" class="btn-cmd violet" style="padding:2px 8px;font-size:10.5px">Zashboard ↗</a>
+                  <a id="zashboard-link" href="#" target="_blank" rel="noopener noreferrer" class="btn-cmd violet" style="padding:2px 8px;font-size:10.5px;white-space:nowrap;flex-shrink:0">Zashboard ↗</a>
                 </div>
               </div>
 
@@ -273,14 +271,14 @@
                   </div>
                   <span id="bp-dom-rate" class="bp-live-rate c-mint" style="font-size:13px">0 bps</span>
                 </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+                <div class="bp-meter-row" style="margin-bottom:4px">
                   <span id="bp-dom-meter" class="seg-meter"></span>
-                  <strong id="bp-dom-pct" class="c-bright" style="font-size:11px">0%</strong>
+                  <strong id="bp-dom-pct" class="bp-meter-val c-bright">0%</strong>
                 </div>
                 <div id="bp-mini-spectrum" class="mini-spectrum-bar" title="21-Wavelength Real-Time Charge"></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px;margin-top:4px">
                   <span id="bp-dom-desc" class="c-sec">0/21 滿桶 · 126 slots</span>
-                  <span style="display:inline-flex;align-items:center;gap:5px"><span class="run-dot mint"></span><span id="bp-dom-st" class="c-mint">ready</span></span>
+                  <span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0"><span class="run-dot mint"></span><span id="bp-dom-st" class="c-mint">ready</span></span>
                 </div>
               </div>
             </div>
@@ -293,7 +291,7 @@
                     <span style="font-weight:700;color:var(--c-gold);font-size:12px">3-BAND HTB + FQ_CODEL</span>
                     <div class="c-sec" style="font-size:10px">物理上行整形 · ACK ≤128B 零延遲</div>
                   </div>
-                  <span id="bp-qos-meta" class="c-gold" style="font-size:10.5px;font-variant-numeric:tabular-nums">MSS 1440</span>
+                  <span id="bp-qos-meta" class="c-gold" style="font-size:10.5px;font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0">MSS 1440</span>
                 </div>
 
                 <div class="qos-band-col">
@@ -302,7 +300,7 @@
                       <span class="c-blue" style="font-weight:700;font-size:10.5px">1:10 · Prio0 (2ms)</span>
                       <span id="bp-qos-10-rate" class="c-blue" style="font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums">0 bps</span>
                     </div>
-                    <div class="qos-band-track"><div id="bp-qos-10-bar" class="qos-band-fill" style="background:var(--c-blue);box-shadow:0 0 10px rgba(100,174,245,0.68)"></div></div>
+                    <span id="bp-qos-10-bar" class="seg-meter compact"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
                       <span class="c-sec">遊戲 UDP / SYN / DNS</span>
                       <span id="bp-qos-10-sub" class="c-muted">fq_codel target 2ms</span>
@@ -314,7 +312,7 @@
                       <span class="c-violet" style="font-weight:700;font-size:10.5px">1:20 · Prio1 (&lt;4MB)</span>
                       <span id="bp-qos-20-rate" class="c-violet" style="font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums">0 bps</span>
                     </div>
-                    <div class="qos-band-track"><div id="bp-qos-20-bar" class="qos-band-fill" style="background:var(--c-violet);box-shadow:0 0 10px rgba(170,142,240,0.68)"></div></div>
+                    <span id="bp-qos-20-bar" class="seg-meter compact"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
                       <span class="c-sec">TW-HOME 隧道 / 網頁突發</span>
                       <span id="bp-qos-20-sub" class="c-muted">interactive burst</span>
@@ -326,7 +324,7 @@
                       <span class="c-mint" style="font-weight:700;font-size:10.5px">1:30 · Prio2 (≥4MB)</span>
                       <span id="bp-qos-30-rate" class="c-mint" style="font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums">0 bps</span>
                     </div>
-                    <div class="qos-band-track"><div id="bp-qos-30-bar" class="qos-band-fill" style="background:var(--c-mint);box-shadow:0 0 10px rgba(87,209,146,0.68)"></div></div>
+                    <span id="bp-qos-30-bar" class="seg-meter compact"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
                       <span class="c-sec">直連收割 / 大流多線</span>
                       <span id="bp-qos-30-sub" class="c-muted">21-strand fair bulk</span>
@@ -339,7 +337,7 @@
                     <span class="c-sec">上行 / 下行 EWMA 速率比</span>
                     <span id="bp-qos-tx-txt" class="c-bright" style="font-variant-numeric:tabular-nums">—</span>
                   </div>
-                  <div class="uplink-meter-track"><div id="bp-qos-tx-bar" class="uplink-meter-fill" style="background:var(--prism-spectrum);box-shadow:0 0 10px rgba(100,174,245,0.45)"></div></div>
+                  <span id="bp-qos-tx-bar" class="seg-meter compact"></span>
                 </div>
               </div>
 
@@ -349,7 +347,7 @@
                     <span style="font-weight:700;font-size:12px"><span class="c-spectrum">21-UPLINK NAT &amp; OPS</span></span>
                     <div class="c-sec" style="font-size:10px">fw4 persist · 物理出站總控</div>
                   </div>
-                  <span id="bp-up-uptime" class="c-muted" style="font-size:10px;font-variant-numeric:tabular-nums">up —</span>
+                  <span id="bp-up-uptime" class="c-muted" style="font-size:10px;font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0">up —</span>
                 </div>
 
                 <div class="uplink-meters">
@@ -358,7 +356,7 @@
                       <span class="c-sec">21 光譜鏈路滿桶健康度</span>
                       <span id="bp-up-pool-txt" class="c-mint" style="font-weight:600;font-variant-numeric:tabular-nums">21/21</span>
                     </div>
-                    <div class="uplink-meter-track"><div id="bp-up-pool-bar" class="uplink-meter-fill" style="background:var(--prism-spectrum);box-shadow:0 0 10px rgba(87,209,146,0.45)"></div></div>
+                    <span id="bp-up-pool-bar" class="seg-meter"></span>
                   </div>
 
                   <div class="uplink-meter-row">
@@ -366,7 +364,7 @@
                       <span class="c-sec">Conntrack 狀態表佔用</span>
                       <span id="bp-up-ct-txt" class="c-blue" style="font-weight:600;font-variant-numeric:tabular-nums">0 / 131072</span>
                     </div>
-                    <div class="uplink-meter-track"><div id="bp-up-ct-bar" class="uplink-meter-fill" style="background:var(--c-blue);box-shadow:0 0 10px rgba(100,174,245,0.60)"></div></div>
+                    <span id="bp-up-ct-bar" class="seg-meter"></span>
                   </div>
 
                   <div class="uplink-meter-row">
@@ -374,7 +372,7 @@
                       <span class="c-sec">可用內存 / CPU 負載</span>
                       <span id="bp-up-mem-txt" class="c-gold" style="font-weight:600;font-variant-numeric:tabular-nums">— MB · load —</span>
                     </div>
-                    <div class="uplink-meter-track"><div id="bp-up-mem-bar" class="uplink-meter-fill" style="background:var(--c-gold);box-shadow:0 0 10px rgba(240,202,104,0.55)"></div></div>
+                    <span id="bp-up-mem-bar" class="seg-meter"></span>
                   </div>
                 </div>
 
@@ -618,6 +616,6 @@
 
   <div id="toast" class="toast-bar"></div>
 
-  <script type="module" src="js/main.js?v=5.5.0"></script>
+  <script type="module" src="js/main.js?v=5.6.0"></script>
 </body>
 </html>

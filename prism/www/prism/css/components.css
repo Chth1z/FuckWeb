@@ -371,11 +371,13 @@
   height: 8px;
 }
 
-/* Integrated Nftables Classify Strip — Compact 2-Column Progress Matrix */
+/* Integrated Nftables Classify Strip — Compact 2-Column Glowing Block Matrix */
 .classify-strip {
+  flex: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
+  align-content: stretch;
+  gap: 6px;
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid var(--line-subtle);
@@ -384,10 +386,11 @@
 .classify-bar-card {
   background: rgba(5, 7, 13, 0.92);
   border: 1px solid var(--line-window);
-  padding: 4px 7px 5px;
+  padding: 5px 7px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 5px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -404,20 +407,6 @@
   font-size: 10.5px;
 }
 
-.classify-bar-track {
-  position: relative;
-  height: 5px;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.045);
-  overflow: visible;
-}
-
-.classify-bar-fill {
-  height: 100%;
-  min-width: 0;
-  transition: width 0.35s ease, opacity 0.25s ease;
-}
-
 .bp-node-head {
   display: flex;
   align-items: flex-start;
@@ -432,6 +421,7 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .bp-meta-line {
@@ -482,28 +472,64 @@
 .run-dot.crimson { background: var(--c-crimson); box-shadow: 0 0 8px var(--c-crimson), 0 0 16px rgba(var(--c-crimson-rgb), 0.55); }
 .run-dot.off     { background: #3f4a5f; box-shadow: none; }
 
-/* Sharp Segmented Meters with Soft Diffused Optical Bloom (圖1 + 圖4) */
+/* Unified Full-Width Segmented Block Meters with Soft Optical Bloom (圖1 + 圖4) */
 .seg-meter {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: repeat(var(--seg-count, 10), minmax(4px, 1fr));
   align-items: center;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  height: 15px;
+  padding: 2px 3px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+.seg-meter.compact {
   gap: 2px;
-  height: 13px;
-  padding: 1px 2px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  height: 12px;
+  padding: 1.5px 2px;
+}
+
+.seg-meter.active {
+  border-color: rgba(255, 255, 255, 0.13);
 }
 
 .seg-cell {
-  width: 8px;
-  height: 9px;
+  width: 100%;
+  height: 100%;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.055);
 }
-.seg-cell.on.mint   { background: var(--c-mint-bar); box-shadow: 0 0 8px var(--c-mint-glow), 0 0 14px rgba(var(--c-mint-rgb), 0.25); }
-.seg-cell.on.blue   { background: var(--c-blue-bar); box-shadow: 0 0 8px var(--c-blue-glow), 0 0 14px rgba(var(--c-blue-rgb), 0.25); }
-.seg-cell.on.amber  { background: var(--c-amber);    box-shadow: 0 0 8px var(--c-amber-glow), 0 0 14px rgba(var(--c-amber-rgb), 0.25); }
-.seg-cell.on.violet { background: var(--c-violet);   box-shadow: 0 0 8px var(--c-violet-glow), 0 0 14px rgba(var(--c-violet-rgb), 0.25); }
-.seg-cell.on.gold   { background: var(--c-gold);     box-shadow: 0 0 8px var(--c-gold-glow), 0 0 14px rgba(var(--c-gold-rgb), 0.25); }
+.seg-cell.on.mint    { background: var(--c-mint-bar); box-shadow: 0 0 8px var(--c-mint-glow), 0 0 14px rgba(var(--c-mint-rgb), 0.25); }
+.seg-cell.on.blue    { background: var(--c-blue-bar); box-shadow: 0 0 8px var(--c-blue-glow), 0 0 14px rgba(var(--c-blue-rgb), 0.25); }
+.seg-cell.on.amber   { background: var(--c-amber);    box-shadow: 0 0 8px var(--c-amber-glow), 0 0 14px rgba(var(--c-amber-rgb), 0.25); }
+.seg-cell.on.violet  { background: var(--c-violet);   box-shadow: 0 0 8px var(--c-violet-glow), 0 0 14px rgba(var(--c-violet-rgb), 0.25); }
+.seg-cell.on.gold    { background: var(--c-gold);     box-shadow: 0 0 8px var(--c-gold-glow), 0 0 14px rgba(var(--c-gold-rgb), 0.25); }
+.seg-cell.on.crimson { background: var(--c-crimson);  box-shadow: 0 0 8px var(--c-crimson-glow), 0 0 14px rgba(var(--c-crimson-rgb), 0.25); }
+
+.bp-meter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.bp-meter-row > .seg-meter {
+  flex: 1 1 0%;
+  width: auto;
+  min-width: 0;
+}
+
+.bp-meter-val {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
 
 .math-formula {
   font-family: var(--font-math);
@@ -512,21 +538,27 @@
   color: var(--text-muted);
 }
 
-/* --- 02. DiffServ 3-Band HTB + 21-Uplink Egress Telemetry (Full Right Column) --- */
+/* --- 02. Asymmetric Full-Height Blueprint Stage Cards + DiffServ HTB + 21-Uplink --- */
+#bp-card-pregate,
+#bp-card-ingress,
+#bp-card-vip,
+#bp-card-tun,
+#bp-card-dom,
 #bp-card-qos,
 #bp-card-uplink {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  min-height: 0;
 }
 
-#bp-card-qos {
-  flex: 1.14 1 0;
-}
-
-#bp-card-uplink {
-  flex: 0.96 1 0;
-}
+#bp-card-pregate { flex: 0.78 1 0; }
+#bp-card-ingress { flex: 1.22 1 0; }
+#bp-card-vip     { flex: 0.80 1 0; }
+#bp-card-tun     { flex: 1.14 1 0; }
+#bp-card-dom     { flex: 1.06 1 0; }
+#bp-card-qos     { flex: 1.12 1 0; }
+#bp-card-uplink  { flex: 0.98 1 0; }
 
 .qos-band-col {
   display: flex;
@@ -554,37 +586,6 @@
   gap: 8px;
 }
 
-.qos-band-track,
-.uplink-meter-track {
-  position: relative;
-  height: 5px;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.055);
-  overflow: hidden;
-}
-
-.qos-band-fill,
-.uplink-meter-fill {
-  position: relative;
-  height: 100%;
-  width: 0%;
-  transition: width 0.35s ease;
-}
-
-.qos-band-fill.active::after,
-.uplink-meter-fill.active::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.38) 50%, transparent 100%);
-  animation: prism-flow-sheen 2.1s linear infinite;
-}
-
-@keyframes prism-flow-sheen {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
 .uplink-meters {
   display: flex;
   flex-direction: column;
@@ -597,7 +598,7 @@
 .uplink-meter-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .uplink-meter-head {
@@ -611,7 +612,7 @@
 .uplink-foot-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   padding-top: 6px;
   border-top: 1px solid var(--line-subtle);
   font-size: 10px;
@@ -775,9 +776,10 @@
   gap: 6px;
 }
 
-.spec-right-panel .seg-cell {
-  width: 6px;
-  height: 9px;
+.spec-right-panel .seg-meter {
+  height: 12px;
+  padding: 1.5px 2px;
+  gap: 2px;
 }
 
 .spec-right-panel .bp-table.compact th,
