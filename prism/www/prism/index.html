@@ -3,210 +3,217 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>PRISM 5.0 · Optical Spectrum &amp; Privacy Router</title>
-  <link rel="stylesheet" href="css/tokens.css">
-  <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/tokens.css?v=503">
+  <link rel="stylesheet" href="css/layout.css?v=503">
+  <link rel="stylesheet" href="css/components.css?v=503">
 </head>
 <body>
-  <div class="viewport-wrap">
-    <main class="terminal-window">
+  <div class="app-shell">
 
-      <!-- macOS Terminal Window Chrome -->
-      <header class="titlebar">
-        <div class="traffic-lights">
-          <span class="tl-dot close"></span>
-          <span class="tl-dot min"></span>
-          <span class="tl-dot max"></span>
-        </div>
-        <div class="titlebar-path">~/prism — <span id="hdr-ip">192.168.16.1</span> · <span id="hdr-ver">v5.0.0</span></div>
-        <div class="titlebar-actions">
-          <span id="health-pill" class="st-badge charged" style="cursor:pointer" title="查看藍圖與體檢">DOCTOR · 檢查中</span>
-          <button id="btn-auth" class="btn-cmd">管理登入</button>
-        </div>
-      </header>
+    <!-- Unified Edge-to-Edge Navigation Bar (No OS Frame) -->
+    <header class="topbar">
+      <div class="brand-cluster">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="20" height="18" viewBox="0 0 20 18" fill="none">
+            <polygon points="10,1.5 18.5,16.5 1.5,16.5" stroke="#e4ecf8" stroke-width="1.4" fill="rgba(100,168,239,0.08)"/>
+            <line x1="0" y1="12" x2="6.5" y2="9.2" stroke="#ffffff" stroke-width="1.3"/>
+            <line x1="13.5" y1="9.2" x2="20" y2="7.5" stroke="#ee342e" stroke-width="1.2"/>
+            <line x1="13.8" y1="10.2" x2="20" y2="10.2" stroke="#44c65c" stroke-width="1.2"/>
+            <line x1="14.2" y1="11.2" x2="20" y2="13.0" stroke="#9052e4" stroke-width="1.2"/>
+          </svg>
+        </span>
+        <span class="brand-name">PRISM</span>
+        <span class="brand-sub"><span id="hdr-ver">v5.0.0</span> · <span id="hdr-ip">192.168.16.1</span></span>
+      </div>
 
-      <!-- 4-Tab Subtractive Navigation -->
-      <nav class="nav-bar">
-        <div class="nav-tabs">
-          <button class="nav-tab active" data-tab="overview">
-            <span class="tab-idx">01</span><span>總覽</span>
-          </button>
-          <button class="nav-tab" data-tab="blueprint">
-            <span class="tab-idx">02</span><span>藍圖</span>
-          </button>
-          <button class="nav-tab" data-tab="spectrum">
-            <span class="tab-idx">03</span><span>光譜</span>
-            <span id="n-strands" class="tab-badge">21</span>
-          </button>
-          <button class="nav-tab" data-tab="clients">
-            <span class="tab-idx">04</span><span>終端與連接</span>
-            <span id="n-devices" class="tab-badge">0</span>
-          </button>
-        </div>
-        <div class="nav-meta">
-          <span id="site-badge">SITE · —</span>
-          <span class="math-formula">n(λₖ) sin θᵢ = sin θₖ</span>
-        </div>
+      <nav class="nav-tabs" aria-label="Primary">
+        <button class="nav-tab active" data-tab="overview">
+          <span class="tab-idx">01</span><span>總覽</span>
+        </button>
+        <button class="nav-tab" data-tab="blueprint">
+          <span class="tab-idx">02</span><span>藍圖</span>
+        </button>
+        <button class="nav-tab" data-tab="spectrum">
+          <span class="tab-idx">03</span><span>光譜</span>
+          <span id="n-strands" class="tab-badge">21</span>
+        </button>
+        <button class="nav-tab" data-tab="clients">
+          <span class="tab-idx">04</span><span>終端與連接</span>
+          <span id="n-devices" class="tab-badge">0</span>
+        </button>
       </nav>
 
-      <!-- Viewport Body -->
-      <div class="terminal-body">
+      <div class="topbar-right">
+        <span id="site-badge" class="c-sec" style="font-size:11.5px">SITE · —</span>
+        <span id="health-pill" class="st-badge charged" style="cursor:pointer" title="查看藍圖與體檢">DOCTOR · 檢查中</span>
+        <button id="btn-auth" class="btn-cmd">管理登入</button>
+      </div>
+    </header>
 
-        <!-- ================================================================
-             PAGE 01: DARK SIDE OF THE MOON STANDALONE OPTICAL OVERVIEW
-             ================================================================ -->
-        <section id="page-overview" class="page active">
-          <div class="dsotm-stage">
-            <canvas id="topo"></canvas>
+    <!-- Main Edge-to-Edge Content Workspace -->
+    <main class="main-stage">
 
-            <!-- Top-Left Corner: Aggregate Optical Throughput -->
-            <div class="corner-hud tl">
-              <div class="corner-tag">PRISM 5.0 · DISPERSION FLUX</div>
-              <div class="corner-rate-row">
-                <span id="ov-down" class="corner-rate-main">0 Mbps</span>
-                <span id="ov-up" class="corner-rate-up">↑ 0 Mbps</span>
-              </div>
-              <div class="corner-sub">
-                <span>峰值 <strong id="ov-peak" class="c-bright">0 Mbps</strong></span>
-                <span>·</span>
-                <span>活躍流 <strong id="ov-conntrack" class="c-bright">0</strong></span>
-              </div>
+      <!-- ================================================================
+           PAGE 01: DARK SIDE OF THE MOON STANDALONE OPTICAL OVERVIEW
+           ================================================================ -->
+      <section id="page-overview" class="page active">
+        <div class="dsotm-stage">
+          <canvas id="topo"></canvas>
+
+          <!-- Top-Left Corner: Aggregate Optical Throughput -->
+          <div class="corner-hud tl">
+            <div class="corner-tag">PRISM 5.0 · DISPERSION FLUX</div>
+            <div class="corner-rate-row">
+              <span id="ov-down" class="corner-rate-main">0 Mbps</span>
+              <span id="ov-up" class="corner-rate-up">↑ 0 Mbps</span>
             </div>
-
-            <!-- Top-Right Corner: Spectrum Health & VIP专線 -->
-            <div class="corner-hud tr">
-              <div class="corner-tag">SPECTRUM · @vip_lane</div>
-              <div class="corner-sub">
-                <span>光譜健康 <strong id="ov-healthy" class="c-mint">0 / 21</strong></span>
-                <span>·</span>
-                <span>滿桶 <strong id="ov-charged" class="c-mint">0</strong></span>
-              </div>
-              <div class="corner-sub">
-                <span>專線 <strong id="ov-vip" class="c-blue">—</strong></span>
-                <span>·</span>
-                <span id="ov-guard" class="c-violet">FAIL-CLOSED 0x20000000</span>
-              </div>
+            <div class="corner-sub">
+              <span>峰值 <strong id="ov-peak" class="c-bright">0 Mbps</strong></span>
+              <span>·</span>
+              <span>活躍流 <strong id="ov-conntrack" class="c-bright">0</strong></span>
             </div>
-
-            <!-- Bottom-Left Corner: Incident Source (LAN Devices & Totals) -->
-            <div class="corner-hud bl">
-              <div class="corner-tag">INCIDENT WHITE BEAM</div>
-              <div class="corner-sub">
-                <span>在線終端 <strong id="ov-devs" class="c-bright">0 台</strong></span>
-                <span>·</span>
-                <span id="ov-site-name" class="c-amber">—</span>
-              </div>
-              <div class="corner-sub c-muted">
-                <span>累計 ↓ <span id="ov-total-down">0 B</span></span>
-                <span>·</span>
-                <span>↑ <span id="ov-total-up">0 B</span></span>
-              </div>
-            </div>
-
-            <!-- Bottom-Right Corner: TW-HOME Cage & Refraction Law -->
-            <div class="corner-hud br">
-              <div class="corner-tag">TW-HOME PRIVACY CAGE</div>
-              <div class="corner-sub">
-                <span id="ov-relay" class="c-bright">—</span>
-                <span>·</span>
-                <span id="ov-canary" class="c-mint">— ms</span>
-              </div>
-              <div class="corner-math">
-                ISWRR(W, <span id="ov-slots">126</span>) · Bᵢ(t) ∈ [0, 1 MB]
-              </div>
-            </div>
-
-            <!-- Interactive Hover HUD Tooltip -->
-            <div id="topo-tip" class="topo-tooltip"></div>
-          </div>
-        </section>
-
-        <!-- ================================================================
-             PAGE 02: ANIMATED BLUEPRINT SCHEMATIC & POLICY CONTROL
-             ================================================================ -->
-        <section id="page-blueprint" class="page page-padded">
-
-          <!-- Reference Banner & 5-Color Semantic Legend -->
-          <div class="bp-banner">
-            <span class="c-bright">PRISM KERNEL PIPELINE</span>
-            <span class="c-muted">·</span>
-            <span class="c-amber">BURST-HARVEST 2.0 DISPATCH</span>
-            <span class="c-muted">·</span>
-            <span class="c-blue">TW-HOME PRIVACY CAGE</span>
           </div>
 
-          <div class="bp-legend">
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-amber)"></span><span>burst-harvest · lead</span></span>
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-blue)"></span><span>dataplane · subagents</span></span>
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-mint)"></span><span>tokens · 21 strands</span></span>
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-violet)"></span><span>prism_guard · advisor</span></span>
+          <!-- Top-Right Corner: Spectrum Health & VIP 專線 -->
+          <div class="corner-hud tr">
+            <div class="corner-tag">SPECTRUM · @vip_lane</div>
+            <div class="corner-sub">
+              <span>光譜健康 <strong id="ov-healthy" class="c-mint">0 / 21</strong></span>
+              <span>·</span>
+              <span>滿桶 <strong id="ov-charged" class="c-mint">0</strong></span>
+            </div>
+            <div class="corner-sub">
+              <span>專線 <strong id="ov-vip" class="c-blue">—</strong></span>
+              <span>·</span>
+              <span id="ov-guard" class="c-violet">FAIL-CLOSED 0x20000000</span>
+            </div>
           </div>
 
-          <!-- Two-Column Animated Blueprint Stage -->
-          <div class="blueprint-stage">
+          <!-- Bottom-Left Corner: Incident Source (LAN Devices & Totals) -->
+          <div class="corner-hud bl">
+            <div class="corner-tag">INCIDENT WHITE BEAM</div>
+            <div class="corner-sub">
+              <span>在線終端 <strong id="ov-devs" class="c-bright">0 台</strong></span>
+              <span>·</span>
+              <span id="ov-site-name" class="c-amber">—</span>
+            </div>
+            <div class="corner-sub c-muted">
+              <span>累計 ↓ <span id="ov-total-down">0 B</span></span>
+              <span>·</span>
+              <span>↑ <span id="ov-total-up">0 B</span></span>
+            </div>
+          </div>
 
-            <!-- Left Tall Violet Column: PRISM_GUARD Advisor -->
-            <aside class="s-box violet guard-rail">
-              <div>
-                <div class="guard-title">PRISM_GUARD</div>
-                <div class="guard-sub">advisor · fail-closed</div>
+          <!-- Bottom-Right Corner: TW-HOME Cage & Refraction Law -->
+          <div class="corner-hud br">
+            <div class="corner-tag">TW-HOME PRIVACY CAGE</div>
+            <div class="corner-sub">
+              <span id="ov-relay" class="c-bright">—</span>
+              <span>·</span>
+              <span id="ov-canary" class="c-mint">— ms</span>
+            </div>
+            <div class="corner-math">
+              n(λₖ) sin θᵢ = sin θₖ · ISWRR(W, <span id="ov-slots">126</span>)
+            </div>
+          </div>
 
-                <div class="guard-step" style="margin-bottom:12px">
-                  <span class="c-violet">◇</span>
-                  <span class="c-bright">before a packet</span>
-                  <div class="horiz-bridge" style="top:3px">
-                    <div class="horiz-bridge-line"><span class="horiz-dot"></span></div>
-                  </div>
-                </div>
+          <!-- Interactive Hover HUD Tooltip -->
+          <div id="topo-tip" class="topo-tooltip"></div>
+        </div>
+      </section>
 
-                <div class="guard-body">
-                  <div>observes every LAN packet, enforces zero direct leak via <code class="c-bright">0x20000000</code></div>
-                  <div>last check: <br><span class="c-violet">»</span> <strong id="adv-verdict" class="c-bright">loading...</strong></div>
-                  <div style="display:grid;grid-template-columns:1fr auto;gap:4px 8px">
-                    <span>canary</span><strong id="adv-canary" class="c-bright">— ms</strong>
-                    <span>conntrack</span><strong id="adv-ct" class="c-bright">0</strong>
-                    <span>strands</span><strong id="adv-strands" class="c-bright">21/21</strong>
-                  </div>
-                  <div>drops IPv6 &amp; DoT <code class="c-bright">:853</code> unconditionally on forward chain</div>
-                </div>
+      <!-- ================================================================
+           PAGE 02: LIVE KERNEL ROUTING ARCHITECTURE & POLICY CONTROL
+           ================================================================ -->
+      <section id="page-blueprint" class="page page-contained">
 
-                <div class="guard-step" style="margin-top:14px">
-                  <span class="c-violet">◇</span>
-                  <span>dns hijack <span id="adv-dns" class="c-mint">53 → 6053</span></span>
-                </div>
+        <div class="bp-banner">
+          <span class="c-bright">NFTABLES PREROUTING PIPELINE</span>
+          <span class="c-muted">·</span>
+          <span class="c-blue">@vip_lane 0x100</span>
+          <span class="c-muted">·</span>
+          <span class="c-violet">TW-HOME PRIVACY CAGE</span>
+          <span class="c-muted">·</span>
+          <span class="c-mint">BURST-HARVEST 2.0</span>
+        </div>
 
-                <div class="guard-body" style="margin-top:10px">
-                  <div>never weakens fail_open=0. fw4 post-hook persists across restarts.</div>
+        <div class="bp-legend">
+          <span class="legend-item"><span class="legend-sq" style="background:var(--c-amber)"></span><span>ingress · classify gate</span></span>
+          <span class="legend-item"><span class="legend-sq" style="background:var(--c-blue)"></span><span>@vip_lane · 專線直連</span></span>
+          <span class="legend-item"><span class="legend-sq" style="background:var(--c-violet)"></span><span>TW-HOME · 隱私隧道</span></span>
+          <span class="legend-item"><span class="legend-sq" style="background:var(--c-mint)"></span><span>burst-harvest · 21 光譜織網</span></span>
+        </div>
+
+        <div class="blueprint-stage">
+
+          <!-- Left Tall Violet Column: PRISM_GUARD Fail-Closed Advisor -->
+          <aside class="s-box violet guard-rail">
+            <div>
+              <div class="guard-title">PRISM_GUARD</div>
+              <div class="guard-sub">inet prism_guard · 0x20000000</div>
+
+              <div class="guard-step" style="margin-bottom:12px">
+                <span class="c-violet">◇</span>
+                <span class="c-bright">dns hijack &amp; pre-gate</span>
+                <div class="horiz-bridge" style="top:3px">
+                  <div class="horiz-bridge-line"><span class="horiz-streak"></span></div>
                 </div>
               </div>
 
-              <div class="guard-footer-bar">
-                <span class="c-violet">◆</span>
-                <span id="adv-doctor">doctor invariants ok</span>
-                <div class="horiz-bridge" style="top:9px">
-                  <div class="horiz-bridge-line"><span class="horiz-dot" style="animation-delay:-1.2s"></span></div>
+              <div class="guard-body">
+                <div>intercepts LAN UDP/TCP <code class="c-bright">:53 → :6053</code> via SmartDNS</div>
+                <div>last verdict: <br><span class="c-violet">»</span> <strong id="adv-verdict" class="c-bright">checking...</strong></div>
+                <div style="display:grid;grid-template-columns:1fr auto;gap:4px 8px">
+                  <span>canary</span><strong id="adv-canary" class="c-bright">— ms</strong>
+                  <span>conntrack</span><strong id="adv-ct" class="c-bright">0</strong>
+                  <span>strands</span><strong id="adv-strands" class="c-bright">21/21</strong>
                 </div>
+                <div>unconditionally drops IPv6 forward, DoT <code class="c-bright">:853</code> &amp; raw QUIC <code class="c-bright">:443</code></div>
               </div>
-            </aside>
 
-            <!-- Right Main Animated Pipeline -->
-            <div class="blueprint-pipeline">
+              <div class="guard-step" style="margin-top:14px">
+                <span class="c-violet">◇</span>
+                <span>dns status <span id="adv-dns" class="c-mint">53 → 6053</span></span>
+              </div>
 
-              <!-- Lead Node (Amber) -->
-              <div class="s-box amber" style="width:100%;max-width:480px;text-align:center">
-                <div style="font-weight:700;color:var(--c-amber);font-size:13.5px">
-                  Burst-Harvest 2.0 · main scheduler
+              <div class="guard-body" style="margin-top:10px">
+                <div>blocks unauthenticated <code class="c-bright">mark &amp; 0x20000000</code> on fw4 hook</div>
+              </div>
+            </div>
+
+            <div class="guard-footer-bar">
+              <span class="c-violet">◆</span>
+              <span id="adv-doctor">doctor invariants ok</span>
+              <div class="horiz-bridge" style="top:11px">
+                <div class="horiz-bridge-line"><span class="horiz-streak" style="animation-delay:-0.9s"></span></div>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Right Main Packet-Flow Pipeline -->
+          <div class="blueprint-pipeline">
+
+            <!-- Top Ingress & Classification Gate -->
+            <div class="s-box amber" style="width:100%">
+              <div class="bp-node-head">
+                <div>
+                  <span style="font-weight:700;color:var(--c-amber);font-size:13.5px">LAN INGRESS · NFTABLES CLASSIFY</span>
+                  <span class="c-sec" style="font-size:11px;margin-left:8px">prerouting → @dev_block → QUIC → classify</span>
                 </div>
-                <div class="c-sec" style="font-size:11.5px;margin:2px 0 6px">
-                  harvests 1 MB burst windows · pins lowest-RTT VIP lane
-                </div>
-                <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:6px 0">
-                  <span class="c-sec">ratio</span>
+                <span id="bp-ingress-rate" class="bp-live-rate c-bright">0 Mbps</span>
+              </div>
+
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:6px 0">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span class="c-sec" style="font-size:11.5px">harvest</span>
                   <span id="bp-harvest-meter" class="seg-meter"></span>
-                  <span id="bp-harvest-txt" class="c-gold">harvest</span>
+                  <span id="bp-harvest-txt" class="c-gold" style="font-size:11.5px">harvest</span>
                 </div>
-                <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:6px">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                   <div id="site-mode-seg" class="seg-group">
                     <button class="seg-btn" data-mode="auto">auto</button>
                     <button class="seg-btn" data-mode="on">強制聚匯</button>
@@ -216,201 +223,221 @@
                 </div>
               </div>
 
-              <!-- Animated Vertical Connector 1 -->
-              <svg class="v-conn-svg" width="32" height="34" viewBox="0 0 32 34">
-                <path id="vp1" d="M16,0 L16,34" stroke="#343b52" stroke-width="1.4" stroke-dasharray="2 4" fill="none"/>
-                <circle r="3" fill="#e0915a">
-                  <animateMotion dur="1.5s" repeatCount="indefinite"><mpath href="#vp1"/></animateMotion>
-                </circle>
-                <circle r="2.2" fill="#e0915a" opacity="0.55">
-                  <animateMotion dur="1.5s" begin="-0.75s" repeatCount="indefinite"><mpath href="#vp1"/></animateMotion>
-                </circle>
-              </svg>
-
-              <!-- Middle Mint Token Capacitor Layer -->
-              <div class="s-box mint" style="width:100%;max-width:600px">
-                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
-                  <span style="font-weight:700;color:var(--c-mint)">TOKEN · capacitor layer</span>
-                  <span class="c-sec" style="font-size:11.5px">slots <strong id="cap-slots" class="c-bright">126</strong></span>
-                </div>
-
-                <div class="fork-row">
-                  <span class="c-sec">charged (滿桶)</span>
-                  <span id="bar-charged" class="seg-meter"></span>
-                  <span><strong id="val-charged" class="c-bright">0</strong> <span class="c-mint">ready</span></span>
-                </div>
-                <div class="fork-row">
-                  <span class="c-sec">draining (釋放)</span>
-                  <span id="bar-draining" class="seg-meter"></span>
-                  <span><strong id="val-draining" class="c-bright">0</strong> <span class="c-amber">active</span></span>
-                </div>
-                <div class="fork-row">
-                  <span class="c-sec">cooling (回血)</span>
-                  <span id="bar-cooling" class="seg-meter"></span>
-                  <span><strong id="val-cooling" class="c-bright">0</strong> <span class="c-violet">refill</span></span>
-                </div>
-                <div class="fork-row">
-                  <span class="c-sec">vip_lane (專線)</span>
-                  <span id="bar-vip" class="seg-meter"></span>
-                  <span><strong id="val-vip" class="c-bright">—</strong> <span class="c-blue">0x100</span></span>
-                </div>
-
-                <div class="math-formula" style="margin-top:8px;padding-top:6px;border-top:1px solid var(--line-subtle);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
-                  <span>Wᵢ = 10(Bᵢ/Bᶜ)² · (1 + 0.35Δτᵢ)⁻¹</span>
-                  <span class="c-mint">depleted → 0 slots</span>
-                </div>
+              <div class="bp-meta-line" style="border-top:1px solid var(--line-subtle);padding-top:6px">
+                <span id="bp-dns-st">SmartDNS :6053 · tunnel4_dns: 0 ips</span>
+                <span id="bp-ingress-pkts">total pkts: 0</span>
               </div>
-
-              <!-- Animated 3-Way Fork SVG (Exact Geometric Alignment) -->
-              <div style="width:100%;text-align:center;margin-top:4px">
-                <div class="c-blue" style="font-size:11px;letter-spacing:0.04em;margin-bottom:2px">
-                  dispatch to subsystems · prism kernel
-                </div>
-                <svg class="fork-svg" viewBox="0 0 900 44" preserveAspectRatio="none">
-                  <path id="forkL" d="M450,0 L450,18 L150,18 L150,44" stroke="#343b52" stroke-width="1.3" stroke-dasharray="2 5" fill="none"/>
-                  <path id="forkC" d="M450,0 L450,44" stroke="#343b52" stroke-width="1.3" stroke-dasharray="2 5" fill="none"/>
-                  <path id="forkR" d="M450,0 L450,18 L750,18 L750,44" stroke="#343b52" stroke-width="1.3" stroke-dasharray="2 5" fill="none"/>
-                  <circle r="3.4" fill="#68a3dc">
-                    <animateMotion dur="2.1s" repeatCount="indefinite"><mpath href="#forkL"/></animateMotion>
-                  </circle>
-                  <circle r="3.4" fill="#68a3dc">
-                    <animateMotion dur="1.7s" repeatCount="indefinite"><mpath href="#forkC"/></animateMotion>
-                  </circle>
-                  <circle r="3.4" fill="#68a3dc">
-                    <animateMotion dur="2.1s" begin="-0.6s" repeatCount="indefinite"><mpath href="#forkR"/></animateMotion>
-                  </circle>
-                </svg>
-              </div>
-
-              <!-- 3 Cerulean Sub-Nodes -->
-              <div class="blueprint-subnodes">
-                <div class="s-box blue">
-                  <div style="font-weight:700;color:var(--c-blue);text-align:center">classify</div>
-                  <div class="c-sec" style="font-size:11px;text-align:center;margin-bottom:6px">nft · divert</div>
-                  <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">
-                    <span id="sub1-bar" class="seg-meter"></span>
-                    <strong id="sub1-pct" class="c-bright">0%</strong>
-                  </div>
-                  <div id="sub1-desc" class="c-sec" style="font-size:11px;text-align:center">domestic direct / rest tunnel</div>
-                  <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--c-blue);display:flex;align-items:center;justify-content:center;gap:6px">
-                    <span class="run-dot"></span><span id="sub1-st">running</span>
-                  </div>
-                </div>
-
-                <div class="s-box blue">
-                  <div style="font-weight:700;color:var(--c-blue);text-align:center">mihomo</div>
-                  <div class="c-sec" style="font-size:11px;text-align:center;margin-bottom:6px">TProxy :61235</div>
-                  <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">
-                    <span id="sub2-bar" class="seg-meter"></span>
-                    <strong id="sub2-pct" class="c-bright">100%</strong>
-                  </div>
-                  <div id="sub2-desc" class="c-sec" style="font-size:11px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">TW-HOME zero-split</div>
-                  <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--c-blue);display:flex;align-items:center;justify-content:center;gap:6px">
-                    <span class="run-dot"></span><span id="sub2-st">running</span>
-                  </div>
-                </div>
-
-                <div class="s-box blue">
-                  <div style="font-weight:700;color:var(--c-blue);text-align:center">smartdns</div>
-                  <div class="c-sec" style="font-size:11px;text-align:center;margin-bottom:6px">DoH · :6053</div>
-                  <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">
-                    <span id="sub3-bar" class="seg-meter"></span>
-                    <strong id="sub3-pct" class="c-bright">100%</strong>
-                  </div>
-                  <div id="sub3-desc" class="c-sec" style="font-size:11px;text-align:center">cn DoH + tunnel4_dns</div>
-                  <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--c-blue);display:flex;align-items:center;justify-content:center;gap:6px">
-                    <span class="run-dot"></span><span id="sub3-st">running</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Animated 3-Way Merge SVG -->
-              <svg class="fork-svg" viewBox="0 0 900 44" preserveAspectRatio="none">
-                <path id="mergeL" d="M150,0 L150,24 L450,24 L450,44" stroke="#343b52" stroke-width="1.3" stroke-dasharray="2 5" fill="none"/>
-                <path id="mergeC" d="M450,0 L450,44" stroke="#343b52" stroke-width="1.3" stroke-dasharray="2 5" fill="none"/>
-                <path id="mergeR" d="M750,0 L750,24 L450,24 L450,44" stroke="#343b52" stroke-width="1.3" stroke-dasharray="2 5" fill="none"/>
-                <circle r="3.4" fill="#a389e0">
-                  <animateMotion dur="2.2s" repeatCount="indefinite"><mpath href="#mergeL"/></animateMotion>
-                </circle>
-                <circle r="3.4" fill="#a389e0">
-                  <animateMotion dur="1.8s" repeatCount="indefinite"><mpath href="#mergeC"/></animateMotion>
-                </circle>
-                <circle r="3.4" fill="#a389e0">
-                  <animateMotion dur="2.2s" begin="-0.9s" repeatCount="indefinite"><mpath href="#mergeR"/></animateMotion>
-                </circle>
-              </svg>
-
-              <!-- Bottom Violet Verifier Node -->
-              <div class="s-box violet" style="width:100%;max-width:520px;text-align:center">
-                <div style="font-weight:700;color:var(--c-violet)">
-                  back to Prism · doctor + reconcile
-                </div>
-                <div class="c-sec" style="font-size:11.5px;margin:3px 0 8px">
-                  <span id="bp-verify-summary">檢查所有內核與隱私不變量</span>
-                </div>
-                <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-                  <button id="btn-reconcile" class="btn-cmd primary">prism apply</button>
-                  <button id="btn-relogin" class="btn-cmd">portal 重登</button>
-                  <button id="btn-toggle-sys" class="btn-cmd">體檢與 UCI 參數 ▾</button>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- Session Log Box -->
-          <div class="session-log-box">
-            <div class="session-log-title">session log</div>
-            <div id="ov-session-log" class="log-rows"></div>
-          </div>
-
-          <!-- Collapsible Doctor Invariants + UCI Params (Subtractive by default) -->
-          <div id="bp-sys-drawer" style="display:none;flex-direction:column;gap:14px">
-            <div class="s-box violet">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-                <span class="c-violet" style="font-weight:700">DOCTOR · LIVE SYSTEM INVARIANTS</span>
-                <span id="doctor-cap" class="c-sec" style="font-size:11.5px">—</span>
-              </div>
-              <div id="doctor-list" class="doctor-grid"></div>
             </div>
 
-            <div class="bp-split-2">
-              <div class="s-box amber">
-                <div class="c-amber" style="font-weight:700;margin-bottom:8px">核心架構鎖定項 (IMMUTABLE)</div>
-                <div id="locked-panel"></div>
+            <!-- Live Light-Pulse 3-Way Optical Fork (classify -> VIP | TW-HOME | Domestic Harvest) -->
+            <svg id="bp-fork-svg" class="fork-svg" viewBox="0 0 900 54" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="lg-blue" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#64a8ef" stop-opacity="0"/>
+                  <stop offset="55%" stop-color="#64a8ef" stop-opacity="0.85"/>
+                  <stop offset="92%" stop-color="#ffffff" stop-opacity="0.98"/>
+                  <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="lg-violet" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#a689eb" stop-opacity="0"/>
+                  <stop offset="55%" stop-color="#a689eb" stop-opacity="0.85"/>
+                  <stop offset="92%" stop-color="#ffffff" stop-opacity="0.98"/>
+                  <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="lg-mint" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#57ca8e" stop-opacity="0"/>
+                  <stop offset="55%" stop-color="#57ca8e" stop-opacity="0.85"/>
+                  <stop offset="92%" stop-color="#ffffff" stop-opacity="0.98"/>
+                  <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+
+              <!-- Base Etched Rails -->
+              <path class="bp-rail-bg" d="M 450,0 L 450,24 L 146,24 L 146,54"/>
+              <path class="bp-rail-bg" d="M 450,0 L 450,54"/>
+              <path class="bp-rail-bg" d="M 450,0 L 450,24 L 754,24 L 754,54"/>
+
+              <!-- Real-Time Luminance Overlay Rails -->
+              <path id="rail-f0" class="bp-rail-active" stroke="#64a8ef" d="M 450,0 L 450,24 L 146,24 L 146,54"/>
+              <path id="rail-f1" class="bp-rail-active" stroke="#a689eb" d="M 450,0 L 450,54"/>
+              <path id="rail-f2" class="bp-rail-active" stroke="#57ca8e" d="M 450,0 L 450,24 L 754,24 L 754,54"/>
+
+              <!-- Directional Light-Streak Photons (2 per branch for smooth flow) -->
+              <g id="ph-f0a"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-blue)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-f0b"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-blue)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-f1a"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-violet)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-f1b"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-violet)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-f2a"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-mint)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-f2b"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-mint)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+            </svg>
+
+            <!-- 3 Real Egress Paths -->
+            <div class="blueprint-subnodes">
+              <!-- Branch 0: @vip_lane -->
+              <div class="s-box blue">
+                <div class="bp-node-head">
+                  <div>
+                    <div style="font-weight:700;color:var(--c-blue)">@vip_lane · 專線</div>
+                    <div class="c-sec" style="font-size:11px">mark 0x100 · low-RTT pinned</div>
+                  </div>
+                  <span id="bp-vip-rate" class="bp-live-rate c-blue">0 bps</span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                  <span id="bp-vip-meter" class="seg-meter"></span>
+                  <strong id="bp-vip-pct" class="c-bright">—</strong>
+                </div>
+                <div id="bp-vip-desc" class="c-sec" style="font-size:11px">—</div>
+                <div style="margin-top:6px;display:flex;align-items:center;gap:6px;font-size:11px">
+                  <span class="run-dot"></span>
+                  <span id="bp-vip-st" class="c-blue">standby</span>
+                </div>
               </div>
+
+              <!-- Branch 1: TW-HOME Mihomo TProxy -->
+              <div class="s-box violet">
+                <div class="bp-node-head">
+                  <div>
+                    <div style="font-weight:700;color:var(--c-violet)">TW-HOME · Mihomo</div>
+                    <div class="c-sec" style="font-size:11px">TProxy :61235 · @tunnel4</div>
+                  </div>
+                  <span id="bp-tun-rate" class="bp-live-rate c-violet">0 bps</span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                  <span id="bp-tun-meter" class="seg-meter"></span>
+                  <strong id="bp-tun-pct" class="c-bright">0%</strong>
+                </div>
+                <div id="bp-tun-desc" class="c-sec" style="font-size:11px">tw-home · canary — ms</div>
+                <div style="margin-top:6px;display:flex;align-items:center;gap:6px;font-size:11px">
+                  <span class="run-dot violet"></span>
+                  <span id="bp-tun-st" class="c-violet">checking...</span>
+                </div>
+              </div>
+
+              <!-- Branch 2: Domestic Direct + Burst-Harvest 21-Strand Weave -->
               <div class="s-box mint">
-                <div class="c-mint" style="font-weight:700;margin-bottom:8px">運行時可調參數 (UCI)</div>
-                <div id="config-panel"></div>
+                <div class="bp-node-head">
+                  <div>
+                    <div style="font-weight:700;color:var(--c-mint)">Burst-Harvest · @pattern</div>
+                    <div class="c-sec" style="font-size:11px">@domestic4 · 126-slot weave</div>
+                  </div>
+                  <span id="bp-dom-rate" class="bp-live-rate c-mint">0 bps</span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                  <span id="bp-dom-meter" class="seg-meter"></span>
+                  <strong id="bp-dom-pct" class="c-bright">0%</strong>
+                </div>
+                <div id="bp-dom-desc" class="c-sec" style="font-size:11px">0/21 滿桶 · 126 slots</div>
+                <div style="margin-top:6px;display:flex;align-items:center;gap:6px;font-size:11px">
+                  <span class="run-dot mint"></span>
+                  <span id="bp-dom-st" class="c-mint">harvest ready</span>
+                </div>
               </div>
+            </div>
+
+            <!-- Live Light-Pulse 3-Way Optical Merge (VIP | TW-HOME | Harvest -> 3-Band HTB QoS) -->
+            <svg id="bp-merge-svg" class="fork-svg" viewBox="0 0 900 54" preserveAspectRatio="none">
+              <path class="bp-rail-bg" d="M 146,0 L 146,28 L 450,28 L 450,54"/>
+              <path class="bp-rail-bg" d="M 450,0 L 450,54"/>
+              <path class="bp-rail-bg" d="M 754,0 L 754,28 L 450,28 L 450,54"/>
+
+              <path id="rail-m0" class="bp-rail-active" stroke="#64a8ef" d="M 146,0 L 146,28 L 450,28 L 450,54"/>
+              <path id="rail-m1" class="bp-rail-active" stroke="#a689eb" d="M 450,0 L 450,54"/>
+              <path id="rail-m2" class="bp-rail-active" stroke="#57ca8e" d="M 754,0 L 754,28 L 450,28 L 450,54"/>
+
+              <g id="ph-m0a"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-blue)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-m0b"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-blue)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-m1a"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-violet)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-m1b"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-violet)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-m2a"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-mint)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+              <g id="ph-m2b"><rect x="-32" y="-1.7" width="36" height="3.4" rx="1.7" fill="url(#lg-mint)"/><ellipse cx="1" cy="0" rx="5" ry="2.2" fill="#ffffff" opacity="0.92"/></g>
+            </svg>
+
+            <!-- Bottom QoS Shaping & Reconcile Box -->
+            <div class="s-box gold" style="width:100%;text-align:center">
+              <div style="font-weight:700;color:var(--c-gold)">
+                3-BAND HTB QoS &amp; DOCTOR VERIFY
+              </div>
+              <div id="bp-qos-tags" class="c-sec" style="font-size:11px;margin:4px 0">
+                1:10 ACK/DNS/ICMP · 1:20 @vip_lane/Game · 1:30 Bulk/Cage · fw4 persist
+              </div>
+              <div id="bp-verify-summary" class="c-sec" style="font-size:11.5px;margin:2px 0 10px">
+                waiting for reconcile &amp; system invariants...
+              </div>
+              <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+                <button id="btn-reconcile" class="btn-cmd primary">prism apply</button>
+                <button id="btn-relogin" class="btn-cmd">portal 重登</button>
+                <button id="btn-toggle-sys" class="btn-cmd">體檢與 UCI 參數 ▾</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Session Log Box -->
+        <div class="session-log-box">
+          <div class="session-log-title">session log</div>
+          <div id="ov-session-log" class="log-rows"></div>
+        </div>
+
+        <!-- Collapsible Doctor Invariants + UCI Params -->
+        <div id="bp-sys-drawer" style="display:none;flex-direction:column;gap:14px">
+          <div class="s-box violet">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <span class="c-violet" style="font-weight:700">DOCTOR · LIVE SYSTEM INVARIANTS</span>
+              <span id="doctor-cap" class="c-sec" style="font-size:11.5px">—</span>
+            </div>
+            <div id="doctor-list" class="doctor-grid"></div>
+          </div>
+
+          <div class="bp-split-2">
+            <div class="s-box amber">
+              <div class="c-amber" style="font-weight:700;margin-bottom:8px">核心架構鎖定項 (IMMUTABLE)</div>
+              <div id="locked-panel"></div>
+            </div>
+            <div class="s-box mint">
+              <div class="c-mint" style="font-weight:700;margin-bottom:8px">運行時可調參數 (UCI)</div>
+              <div id="config-panel"></div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================================================================
+           PAGE 03: OPTICAL SPECTROMETER, 126-SLOT TIMELINE & OSCILLOSCOPE
+           ================================================================ -->
+      <section id="page-spectrum" class="page page-contained">
+
+        <!-- 21-Wavelength Vertical Optical Spectrometer + 126-Slot Kernel Dispatch Ribbon -->
+        <div class="s-box amber">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+            <div>
+              <span class="c-amber" style="font-weight:700">21-WAVELENGTH OPTICAL SPECTROMETER · TOKEN CAPACITORS</span>
+              <span class="c-sec" style="margin-left:10px;font-size:11.5px" id="weave-cap">126 slots · 2s sweep</span>
+            </div>
+            <div class="math-formula">
+              Wᵢ = 10(Bᵢ/Bᶜ)²·(1+0.35Δτᵢ)⁻¹ · P(depleted) = 0 · @vip = argmin(τ_net)
             </div>
           </div>
 
-        </section>
+          <!-- Ordered Left-to-Right Equalizer (wan 700nm -> vwan20 380nm) -->
+          <div id="spectrum-eq" class="spec-eq-grid"></div>
 
-        <!-- ================================================================
-             PAGE 03: SPECTRUM (126 SLOTS, OSCILLOSCOPE & 21 WAVELENGTHS)
-             ================================================================ -->
-        <section id="page-spectrum" class="page page-padded">
-
-          <!-- 126-Slot ISWRR Chromatic Matrix -->
-          <div class="s-box amber">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-              <div>
-                <span class="c-amber" style="font-weight:700">ISWRR @pattern CHROMATIC MATRIX</span>
-                <span class="c-sec" style="margin-left:10px;font-size:11.5px" id="weave-cap">126 slots · 2s sweep</span>
-              </div>
-              <div class="math-formula">
-                S = ISWRR(W, 126) · P(depleted) = 0 · @vip_lane = argmin(τ_net)
-              </div>
-            </div>
-            <div id="pattern" class="slot-matrix"></div>
+          <!-- Slim Single-Row 126-Slot ISWRR Time-Division Timeline -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+            <span class="c-muted" style="font-size:10.5px">ISWRR @pattern 時間片調度序列 (slot #0 → #125 · 懸停光譜柱高亮對應槽位與表格行)</span>
+            <span class="c-muted" style="font-size:10.5px">700nm (紅端) ───▶ 380nm (紫端)</span>
           </div>
+          <div id="pattern" class="slot-ribbon"></div>
+        </div>
 
-          <!-- Dual-Channel Oscilloscope -->
+        <!-- Balanced Two-Column Lower Detail View -->
+        <div class="spectrum-lower-grid">
+
+          <!-- Left Column: Dual-Channel Oscilloscope + Bucket State Distribution -->
           <div class="s-box blue">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-              <span class="c-blue" style="font-weight:700">OPTICAL FLUX OSCILLOSCOPE (MBPS)</span>
+              <span class="c-blue" style="font-weight:700">OPTICAL FLUX OSCILLOSCOPE</span>
               <div id="chart-range" class="seg-group">
                 <button class="seg-btn" data-limit="150">5m</button>
                 <button class="seg-btn on" data-limit="360">12m</button>
@@ -418,28 +445,29 @@
               </div>
             </div>
             <div class="scope-box">
-              <svg id="chart" viewBox="0 0 900 150" preserveAspectRatio="none"></svg>
+              <svg id="chart" viewBox="0 0 900 210" preserveAspectRatio="none"></svg>
               <div id="tip" class="topo-tooltip"></div>
             </div>
+            <div id="scope-buckets" class="bucket-summary-strip"></div>
           </div>
 
-          <!-- 21 Wavelengths Table -->
-          <div class="s-box">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-              <span class="c-bright" style="font-weight:700">21 WAVELENGTH STRANDS · TOKEN CAPACITORS</span>
-              <span class="c-muted" style="font-size:11.5px">懸停高亮矩陣對應槽位</span>
+          <!-- Right Column: Compact 21-Strand Token Bucket Telemetry Table -->
+          <div class="s-box mint">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span class="c-mint" style="font-weight:700">STRAND TELEMETRY · 21 CHANNELS</span>
+              <span class="c-muted" style="font-size:11px">1.0 MB burst cap · τ_net ms</span>
             </div>
-            <div class="table-wrap">
-              <table class="bp-table">
+            <div class="table-wrap spec-table-scroll">
+              <table class="bp-table compact">
                 <thead>
                   <tr>
                     <th>波長 / 接口</th>
                     <th>狀態機</th>
-                    <th class="num">τ_net RTT</th>
-                    <th class="num">下行速率</th>
-                    <th class="num">上行速率</th>
-                    <th class="num">峰值速率</th>
-                    <th>令牌桶 (1.0 MB)</th>
+                    <th class="num">τ_net</th>
+                    <th class="num">下行</th>
+                    <th class="num">上行</th>
+                    <th class="num">峰值</th>
+                    <th>令牌桶</th>
                     <th class="num">槽位</th>
                   </tr>
                 </thead>
@@ -448,114 +476,115 @@
             </div>
           </div>
 
-        </section>
+        </div>
 
-        <!-- ================================================================
-             PAGE 04: CLIENTS, CAGE & LIVE CONNECTIONS
-             ================================================================ -->
-        <section id="page-clients" class="page page-padded">
+      </section>
 
-          <!-- Inline TW-HOME Relay Cage & nftables Counters -->
-          <div class="bp-split-2">
-            <div class="s-box violet">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-                <span class="c-violet" style="font-weight:700">TW-HOME PRIVACY CAGE</span>
-                <a id="zashboard-link" href="#" target="_blank" class="btn-cmd" style="text-decoration:none">Zashboard ↗</a>
-              </div>
-              <div id="tunnel-summary" class="c-sec" style="font-size:11.5px;margin-bottom:8px">—</div>
-              <div id="relays-grid" class="relay-strip"></div>
-            </div>
+      <!-- ================================================================
+           PAGE 04: CLIENTS, CAGE & LIVE CONNECTIONS
+           ================================================================ -->
+      <section id="page-clients" class="page page-contained">
 
-            <div class="s-box mint">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-                <span class="c-mint" style="font-weight:700">NFTABLES CLASSIFY COUNTERS</span>
-                <span id="rules-sizes" class="c-sec" style="font-size:11px">—</span>
-              </div>
-              <div id="rules-flow" class="rules-pills"></div>
-            </div>
-          </div>
-
-          <!-- LAN Terminals Table -->
-          <div class="s-box">
+        <!-- Inline TW-HOME Relay Cage & nftables Counters -->
+        <div class="bp-split-2">
+          <div class="s-box violet">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-              <span class="c-bright" style="font-weight:700">LAN TERMINALS · DEVICE POLICY</span>
-              <span class="c-muted" style="font-size:11.5px">別名即時寫入 UCI · 回車提交</span>
+              <span class="c-violet" style="font-weight:700">TW-HOME PRIVACY CAGE</span>
+              <a id="zashboard-link" href="#" target="_blank" class="btn-cmd" style="text-decoration:none">Zashboard ↗</a>
             </div>
-            <div class="table-wrap">
-              <table class="bp-table">
-                <thead>
-                  <tr>
-                    <th>終端名稱 (MAC)</th>
-                    <th>接入方式</th>
-                    <th>IP 地址</th>
-                    <th class="num">實時下行</th>
-                    <th class="num">實時上行</th>
-                    <th>分流策略 (nft classify / @vip_lane)</th>
-                  </tr>
-                </thead>
-                <tbody id="devices-tbody"></tbody>
-              </table>
-            </div>
+            <div id="tunnel-summary" class="c-sec" style="font-size:11.5px;margin-bottom:8px">—</div>
+            <div id="relays-grid" class="relay-strip"></div>
           </div>
 
-          <!-- Live Flows Table (Auth Required) -->
-          <div class="s-box blue">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
-              <div style="display:flex;align-items:center;gap:10px">
-                <span class="c-blue" style="font-weight:700">ACTIVE CONNECTIONS</span>
-                <span id="conn-cap" class="c-sec" style="font-size:11.5px">—</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <div id="conn-route-seg" class="seg-group">
-                  <button class="seg-btn on" data-route="all">全部</button>
-                  <button class="seg-btn" data-route="direct">直連</button>
-                  <button class="seg-btn" data-route="tunnel">TW-HOME</button>
-                  <button class="seg-btn" data-route="vip">VIP專線</button>
-                </div>
-                <input id="conn-q" class="bp-input" type="search" placeholder="過濾 IP / 域名 / 端口..." style="width:200px">
-              </div>
+          <div class="s-box mint">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <span class="c-mint" style="font-weight:700">NFTABLES CLASSIFY COUNTERS</span>
+              <span id="rules-sizes" class="c-sec" style="font-size:11px">—</span>
             </div>
-            <div id="conn-empty" class="c-muted" style="padding:18px;text-align:center">請點擊右上角「管理登入」查看實時連接流表</div>
-            <div id="conn-table-wrap" class="table-wrap" style="display:none">
-              <table class="bp-table">
-                <thead>
-                  <tr>
-                    <th>源終端</th>
-                    <th>目標地址 / 域名</th>
-                    <th>端口 / 協議</th>
-                    <th>路由出口</th>
-                    <th class="num">實時下行</th>
-                    <th class="num">實時上行</th>
-                    <th class="num">累計流量</th>
-                  </tr>
-                </thead>
-                <tbody id="connections-tbody"></tbody>
-              </table>
+            <div id="rules-flow" class="rules-pills"></div>
+          </div>
+        </div>
+
+        <!-- LAN Terminals Table -->
+        <div class="s-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <span class="c-bright" style="font-weight:700">LAN TERMINALS · DEVICE POLICY</span>
+            <span class="c-muted" style="font-size:11.5px">別名即時寫入 UCI · 回車提交</span>
+          </div>
+          <div class="table-wrap">
+            <table class="bp-table">
+              <thead>
+                <tr>
+                  <th>終端名稱 (MAC)</th>
+                  <th>接入方式</th>
+                  <th>IP 地址</th>
+                  <th class="num">實時下行</th>
+                  <th class="num">實時上行</th>
+                  <th>分流策略 (nft classify / @vip_lane)</th>
+                </tr>
+              </thead>
+              <tbody id="devices-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Live Flows Table (Auth Required) -->
+        <div class="s-box blue">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="c-blue" style="font-weight:700">ACTIVE CONNECTIONS</span>
+              <span id="conn-cap" class="c-sec" style="font-size:11.5px">—</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div id="conn-route-seg" class="seg-group">
+                <button class="seg-btn on" data-route="all">全部</button>
+                <button class="seg-btn" data-route="direct">直連</button>
+                <button class="seg-btn" data-route="tunnel">TW-HOME</button>
+                <button class="seg-btn" data-route="vip">VIP專線</button>
+              </div>
+              <input id="conn-q" class="bp-input" type="search" placeholder="過濾 IP / 域名 / 端口..." style="width:200px">
             </div>
           </div>
-
-        </section>
-
-      </div>
-
-      <!-- Persistent Terminal CLI Prompt Footer -->
-      <footer class="cli-footer">
-        <div class="cli-cmd-line">
-          <span class="c-mint">~/prism</span>
-          <span class="c-muted">$</span>
-          <span class="c-bright">prism --policy <span id="cli-policy">harvest</span> --affinity flow --cage <span id="cli-cage">tw-home</span> --vip <span id="cli-vip">—</span></span>
-          <span class="cli-cursor"></span>
+          <div id="conn-empty" class="c-muted" style="padding:18px;text-align:center">請點擊右上角「管理登入」查看實時連接流表</div>
+          <div id="conn-table-wrap" class="table-wrap" style="display:none">
+            <table class="bp-table">
+              <thead>
+                <tr>
+                  <th>源終端</th>
+                  <th>目標地址 / 域名</th>
+                  <th>端口 / 協議</th>
+                  <th>路由出口</th>
+                  <th class="num">實時下行</th>
+                  <th class="num">實時上行</th>
+                  <th class="num">累計流量</th>
+                </tr>
+              </thead>
+              <tbody id="connections-tbody"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="cli-status-line">
-          <span>spectrum <span id="ft-strands" class="c-amber">[21/21]</span></span>
-          <span>vip <span id="ft-vip" class="c-blue">[—]</span></span>
-          <span>tunnel <span id="ft-tunnel" class="c-violet">[tw-home]</span></span>
-          <span>guard <span id="ft-guard" class="c-mint">[fail_closed]</span></span>
-          <span>down <span id="ft-down" class="c-bright">0 Mbps</span></span>
-        </div>
-      </footer>
+
+      </section>
 
     </main>
+
+    <!-- Edge-to-Edge Telemetry Footer -->
+    <footer class="telemetry-footer">
+      <div class="footer-left">
+        <span class="pulse-dot-live"></span>
+        <span>policy <strong id="cli-policy" class="c-bright">harvest</strong></span>
+        <span>cage <strong id="cli-cage" class="c-violet">tw-home</strong></span>
+        <span>vip <strong id="cli-vip" class="c-blue">—</strong></span>
+      </div>
+      <div class="footer-right">
+        <span>spectrum <span id="ft-strands" class="c-amber">[21/21]</span></span>
+        <span>vip <span id="ft-vip" class="c-blue">[—]</span></span>
+        <span>tunnel <span id="ft-tunnel" class="c-violet">[tw-home]</span></span>
+        <span>guard <span id="ft-guard" class="c-mint">[fail_closed]</span></span>
+        <span>down <strong id="ft-down" class="c-bright">0 Mbps</strong></span>
+      </div>
+    </footer>
+
   </div>
 
   <!-- Admin Auth Modal -->
@@ -583,6 +612,6 @@
 
   <div id="toast" class="toast-bar"></div>
 
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=503"></script>
 </body>
 </html>

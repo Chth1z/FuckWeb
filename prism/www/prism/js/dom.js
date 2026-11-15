@@ -2,7 +2,7 @@
  * PRISM 5.0 — DOM Builders, Segmented Block Meters & Log Renderers
  * ============================================================================ */
 
-import { fmtClock } from './state.js';
+import { fmtClock } from './state.js?v=503';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -12,7 +12,12 @@ export function el(tag, attrs = {}, ...children) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
     if (k === 'class') node.className = v;
-    else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+    else if (k === 'style' && typeof v === 'object') {
+      for (const [sk, sv] of Object.entries(v)) {
+        if (sk.startsWith('--')) node.style.setProperty(sk, sv);
+        else node.style[sk] = sv;
+      }
+    }
     else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2).toLowerCase(), v);
     else node.setAttribute(k, v === true ? '' : v);
   }

@@ -2,8 +2,8 @@
  * PRISM 5.0 — Dual-Channel SVG Throughput Oscilloscope
  * ============================================================================ */
 
-import { S, fmtRate, fmtClock } from '../state.js';
-import { $, svgEl } from '../dom.js';
+import { S, fmtRate, fmtClock } from '../state.js?v=503';
+import { $, svgEl } from '../dom.js?v=503';
 
 let lastSig = '';
 let chartLimit = 360;
@@ -34,7 +34,7 @@ export function renderOscilloscope() {
   if (sig === lastSig) return;
   lastSig = sig;
 
-  const W = 900, H = 150;
+  const W = 900, H = 210;
   const padL = 44, padR = 12, padT = 14, padB = 22;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
@@ -70,8 +70,8 @@ export function renderOscilloscope() {
       'stroke-dasharray': k === 0 ? '' : '3 4'
     }));
     const lbl = svgEl('text', {
-      x: padL - 6, y: y + 3.5,
-      fill: '#525b70', 'font-size': '10', 'text-anchor': 'end', 'font-family': 'monospace'
+      x: padL - 6, y: y + 4,
+      fill: '#7f8ca6', 'font-size': '11', 'text-anchor': 'end', 'font-family': 'monospace'
     });
     lbl.textContent = ((val * 8) / 1e6).toFixed(val * 8 >= 10e6 ? 0 : 1) + 'M';
     svg.appendChild(lbl);

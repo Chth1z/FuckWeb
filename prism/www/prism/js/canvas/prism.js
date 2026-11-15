@@ -5,8 +5,8 @@
  * bands (no curves, no core lines, no particles), zero shadowBlur lag.
  * ============================================================================ */
 
-import { S, spectralColor, fmtRate } from '../state.js';
-import { $ } from '../dom.js';
+import { S, spectralColor, fmtRate } from '../state.js?v=503';
+import { $ } from '../dom.js?v=503';
 
 let rafId = null;
 let needsRedraw = true;
@@ -170,6 +170,25 @@ function handlePrismHover(rect) {
   tip.classList.add('show');
 }
 
+function drawFeatheredEdge(ctx, x0, y0, x1, y1, nx, ny, dist, rgb, alpha) {
+  if (alpha <= 0.004 || dist <= 0.5) return;
+  const mx = (x0 + x1) * 0.5;
+  const my = (y0 + y1) * 0.5;
+  const g = ctx.createLinearGradient(mx, my, mx + nx * dist, my + ny * dist);
+  g.addColorStop(0, `rgba(${rgb}, ${alpha.toFixed(3)})`);
+  g.addColorStop(0.32, `rgba(${rgb}, ${(alpha * 0.42).toFixed(3)})`);
+  g.addColorStop(0.68, `rgba(${rgb}, ${(alpha * 0.12).toFixed(3)})`);
+  g.addColorStop(1, `rgba(${rgb}, 0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.lineTo(x1 + nx * dist, y1 + ny * dist);
+  ctx.lineTo(x0 + nx * dist, y0 + ny * dist);
+  ctx.closePath();
+  ctx.fill();
+}
+
 function drawPrismFrame() {
   const canvas = $('#topo');
   if (!canvas) return false;
@@ -191,8 +210,8 @@ function drawPrismFrame() {
   const W = rect.width;
   const H = rect.height;
 
-  // 1. Pure Album-Cover Obsidian Black Background
-  ctx.fillStyle = '#030407';
+  // 1. Pure Album-Cover Obsidian Black Background (matches --bg-void)
+  ctx.fillStyle = '#040509';
   ctx.fillRect(0, 0, W, H);
 
   // 2. Equilateral Triangle Prism Geometry (Centered like Dark Side of the Moon)
@@ -242,16 +261,29 @@ function drawPrismFrame() {
   const nx = -(entryY - startY) / bLen;
   const ny = (entryX - startX) / bLen;
 
-  // Outer soft luminance polygon (zero shadowBlur!)
-  const glowAlpha = Math.min(0.32, 0.10 + Math.sqrt(Math.max(0, totalMbps)) * 0.025);
-  ctx.fillStyle = `rgba(225, 238, 255, ${glowAlpha})`;
-  ctx.beginPath();
-  ctx.moveTo(startX + nx * beamGlowHalf, startY + ny * beamGlowHalf);
-  ctx.lineTo(entryX + nx * beamGlowHalf, entryY + ny * beamGlowHalf);
-  ctx.lineTo(entryX - nx * beamGlowHalf, entryY - ny * beamGlowHalf);
-  ctx.lineTo(startX - nx * beamGlowHalf, startY - ny * beamGlowHalf);
-  ctx.closePath();
-  ctx.fill();
+  // Feathered optical luminance halo around the incident beam (zero hard edges)
+  const glowAlpha = Math.min(0.42, 0.14 + Math.sqrt(Math.max(0, totalMbps)) * 0.032);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  drawFeatheredEdge(
+    ctx,
+    startX, startY,
+    entryX, entryY,
+    nx, ny,
+    beamGlowHalf,
+    '225, 240, 255',
+    glowAlpha
+  );
+  drawFeatheredEdge(
+    ctx,
+    startX, startY,
+    entryX, entryY,
+    -nx, -ny,
+    beamGlowHalf,
+    '225, 240, 255',
+    glowAlpha
+  );
+  ctx.restore();
 
   // Solid crisp white incident beam
   ctx.fillStyle = '#ffffff';
@@ -318,25 +350,43 @@ function drawPrismFrame() {
     weightSum += sm.w;
   }
 
-  // Soft collective outer glow behind the rainbow fan when traffic is flowing
-  if (totalMbps > 0.05) {
-    const fanGlowAlpha = Math.min(0.18, 0.04 + Math.sqrt(totalMbps) * 0.02);
-    const fanGrad = ctx.createLinearGradient(exitTopX, exitTopY, exitBotX, farBotY);
-    fanGrad.addColorStop(0, `rgba(238, 52, 46, ${fanGlowAlpha})`);
-    fanGrad.addColorStop(0.5, `rgba(68, 198, 92, ${fanGlowAlpha})`);
-    fanGrad.addColorStop(1, `rgba(144, 82, 228, ${fanGlowAlpha})`);
-    ctx.fillStyle = fanGrad;
-    ctx.beginPath();
-    ctx.moveTo(exitTopX, exitTopY - 6);
-    ctx.lineTo(W, farTopY - 14);
-    ctx.lineTo(W, farBotY + 14);
-    ctx.lineTo(exitBotX, exitBotY + 6);
-    ctx.closePath();
-    ctx.fill();
+  // Soft atmospheric outer glow along Red (top) & Violet (bottom) fading cleanly to 0 (no rectangular gray bars)
+  const anyHover = S.hoverStrand !== null;
+  if (!anyHover) {
+    const outerReach = Math.min(26, 12 + Math.sqrt(Math.max(0, totalMbps)) * 2.4);
+    const outerAlpha = Math.min(0.24, 0.09 + Math.sqrt(Math.max(0, totalMbps)) * 0.024);
+    const topDx = W - exitTopX;
+    const topDy = farTopY - exitTopY;
+    const topLen = Math.hypot(topDx, topDy) || 1;
+    const colTop = spectralColor(0, nStrands);
+    drawFeatheredEdge(
+      ctx,
+      exitTopX, exitTopY,
+      W, farTopY,
+      topDy / topLen, -topDx / topLen,
+      outerReach,
+      colTop.rgb,
+      outerAlpha
+    );
+
+    const botDx = W - exitBotX;
+    const botDy = farBotY - exitBotY;
+    const botLen = Math.hypot(botDx, botDy) || 1;
+    const colBot = spectralColor(nStrands - 1, nStrands);
+    drawFeatheredEdge(
+      ctx,
+      exitBotX, exitBotY,
+      W, farBotY,
+      -botDy / botLen, botDx / botLen,
+      outerReach,
+      colBot.rgb,
+      outerAlpha
+    );
   }
 
   // Draw each of the 21 contiguous straight uniform bands
   let cum = 0;
+  const bandGeoms = [];
   for (let i = 0; i < nStrands; i++) {
     const s = strands[i] || { id: i + 1, dev: i === 0 ? 'wan' : `vwan${i}`, healthy: true };
     const t0 = cum / weightSum;
@@ -355,11 +405,12 @@ function drawPrismFrame() {
 
     const col = spectralColor(i, nStrands);
     const isHover = S.hoverStrand === s.id;
-    const anyHover = S.hoverStrand !== null;
+    const rateBps = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
+    const mbps = (rateBps * 8) / 1e6;
 
     let alpha = S.bandSmooth[i].alpha;
     if (anyHover) {
-      alpha = isHover ? 1.0 : alpha * 0.28;
+      alpha = isHover ? 1.0 : alpha * 0.24;
     }
 
     ctx.fillStyle = `rgba(${col.rgb}, ${alpha.toFixed(3)})`;
@@ -372,11 +423,9 @@ function drawPrismFrame() {
     ctx.closePath();
     ctx.fill();
 
-    if (isHover) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
+    bandGeoms.push({
+      x0Top, y0Top, x0Bot, y0Bot, y1Top, y1Bot, col, isHover, mbps
+    });
 
     S.hitBoxes.push({
       kind: 'band',
@@ -385,6 +434,51 @@ function drawPrismFrame() {
       col
     });
   }
+
+  // Second pass: Pure chromatic bloom on hovered/active bands (圖2 style, no white stroke!)
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < bandGeoms.length; i++) {
+    const b = bandGeoms[i];
+    if (!b.isHover && (anyHover || b.mbps <= 0.15)) continue;
+
+    const bandMidThick = ((b.y0Bot - b.y0Top) + (b.y1Bot - b.y1Top)) * 0.5;
+    const bloomPad = b.isHover
+      ? Math.max(12, bandMidThick * 1.5)
+      : Math.min(11, 4 + Math.sqrt(b.mbps) * 1.4);
+    const edgePeak = b.isHover
+      ? 0.44
+      : Math.min(0.20, 0.04 + Math.sqrt(b.mbps) * 0.03);
+    const coreBoost = b.isHover ? 0.32 : edgePeak * 0.55;
+
+    // Chromatic interior boost in its own wavelength color
+    ctx.fillStyle = `rgba(${b.col.rgb}, ${coreBoost.toFixed(3)})`;
+    ctx.beginPath();
+    ctx.moveTo(b.x0Top, b.y0Top - 0.2);
+    ctx.lineTo(W, b.y1Top - 0.2);
+    ctx.lineTo(W, b.y1Bot + 0.2);
+    ctx.lineTo(b.x0Bot, b.y0Bot + 0.2);
+    ctx.closePath();
+    ctx.fill();
+
+    // Feathered chromatic aura radiating outward from upper and lower band edges
+    const tDx = W - b.x0Top;
+    const tDy = b.y1Top - b.y0Top;
+    const tLen = Math.hypot(tDx, tDy) || 1;
+    drawFeatheredEdge(
+      ctx, b.x0Top, b.y0Top, W, b.y1Top,
+      tDy / tLen, -tDx / tLen, bloomPad, b.col.rgb, edgePeak
+    );
+
+    const bDx = W - b.x0Bot;
+    const bDy = b.y1Bot - b.y0Bot;
+    const bLen = Math.hypot(bDx, bDy) || 1;
+    drawFeatheredEdge(
+      ctx, b.x0Bot, b.y0Bot, W, b.y1Bot,
+      -bDy / bLen, bDx / bLen, bloomPad, b.col.rgb, edgePeak
+    );
+  }
+  ctx.restore();
 
   // 5. Equilateral Prism Body & Internal Dispersion Wedge (Iconic Album Cover Look)
   // Fill dark glass interior

@@ -2,9 +2,9 @@
  * PRISM 5.0 — View 04: Terminals, TW-HOME Relay Cage & Active Flows
  * ============================================================================ */
 
-import { S, fmtRate, fmtBytes } from '../state.js';
-import { $, $$, el } from '../dom.js';
-import { write } from '../api.js';
+import { S, fmtRate, fmtBytes } from '../state.js?v=503';
+import { $, $$, el } from '../dom.js?v=503';
+import { write } from '../api.js?v=503';
 
 const POLICIES = [
   ['auto',   '自動'],

@@ -1,52 +1,50 @@
 /* ============================================================================
- * PRISM 5.0 — Design Tokens & Schematic Color System
+ * PRISM 5.0 — Design Tokens & Luminous Dark Color System
  * ============================================================================ */
 
 :root {
-  /* Obsidian Terminal Canvas */
-  --bg-void: #050608;
-  --bg-window: #0d0f15;
-  --bg-titlebar: #151822;
-  --bg-panel: #10131b;
-  --bg-panel-alt: #0b0d13;
+  /* Edge-to-Edge Obsidian Canvas */
+  --bg-void: #040509;
+  --bg-surface: #0a0d14;
+  --bg-panel: rgba(13, 17, 26, 0.88);
+  --bg-panel-alt: #080b11;
   --bg-hover: rgba(255, 255, 255, 0.04);
 
   /* Structural Hairlines */
-  --line-window: #252a3a;
-  --line-subtle: #1c202e;
-  --line-dashed: #343b52;
+  --line-window: #1c2231;
+  --line-subtle: #141925;
+  --line-dashed: #2d364d;
 
-  /* 5 Semantic Blueprint Accents (from reference schematic) */
-  --c-amber: #e0915a;
-  --c-amber-dim: rgba(224, 145, 90, 0.14);
+  /* 5 Semantic Luminous Accents */
+  --c-amber: #e8965c;
+  --c-amber-dim: rgba(232, 150, 92, 0.14);
+  --c-amber-glow: rgba(232, 150, 92, 0.28);
 
-  --c-mint: #5bc28c;
-  --c-mint-dim: rgba(91, 194, 140, 0.14);
-  --c-mint-bar: #79d2a6;
+  --c-mint: #57ca8e;
+  --c-mint-dim: rgba(87, 202, 142, 0.14);
+  --c-mint-glow: rgba(87, 202, 142, 0.28);
+  --c-mint-bar: #70daa2;
 
-  --c-blue: #68a3dc;
-  --c-blue-dim: rgba(104, 163, 220, 0.14);
-  --c-blue-bar: #7db4e8;
+  --c-blue: #64a8ef;
+  --c-blue-dim: rgba(100, 168, 239, 0.15);
+  --c-blue-glow: rgba(100, 168, 239, 0.30);
+  --c-blue-bar: #7ab9f5;
 
-  --c-violet: #a389e0;
-  --c-violet-dim: rgba(163, 137, 224, 0.14);
+  --c-violet: #a689eb;
+  --c-violet-dim: rgba(166, 137, 235, 0.15);
+  --c-violet-glow: rgba(166, 137, 235, 0.30);
 
-  --c-gold: #ebc465;
-  --c-gold-dim: rgba(235, 196, 101, 0.14);
+  --c-gold: #efc766;
+  --c-gold-dim: rgba(239, 199, 102, 0.14);
 
-  --c-crimson: #e06c75;
-  --c-crimson-dim: rgba(224, 108, 117, 0.15);
+  --c-crimson: #e46c75;
+  --c-crimson-dim: rgba(228, 108, 117, 0.16);
 
   /* Typography Hierarchy */
-  --text-bright: #eef2f8;
-  --text-primary: #c9d1df;
-  --text-secondary: #838da2;
-  --text-muted: #525b70;
-
-  /* macOS Window Traffic Lights */
-  --dot-close: #ff5f56;
-  --dot-min: #ffbd2e;
-  --dot-max: #27c93f;
+  --text-bright: #f0f4fa;
+  --text-primary: #cad2e0;
+  --text-secondary: #8590a6;
+  --text-muted: #525c72;
 
   /* Font Stacks */
   --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Mono', 'Consolas',
@@ -72,5 +70,4 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
   overflow-x: hidden;
-  selection-background-color: var(--c-blue-dim);
 }

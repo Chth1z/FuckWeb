@@ -2,14 +2,14 @@
  * PRISM 5.0 — Bootstrap, 4-Tab Router & Differential Polling Engine
  * ============================================================================ */
 
-import { S, fmtRate } from './state.js';
-import { $, $$, toast } from './dom.js';
-import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js';
-import { initPrismCanvas, markPrismDirty } from './canvas/prism.js';
-import { renderOverview } from './views/overview.js';
-import { renderBlueprint, bindBlueprintEvents } from './views/blueprint.js';
-import { renderSpectrum, bindSpectrumEvents } from './views/spectrum.js';
-import { renderClients, bindClientsEvents } from './views/clients.js';
+import { S, fmtRate } from './state.js?v=503';
+import { $, $$, toast } from './dom.js?v=503';
+import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=503';
+import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=503';
+import { renderOverview } from './views/overview.js?v=503';
+import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=503';
+import { renderSpectrum, bindSpectrumEvents } from './views/spectrum.js?v=503';
+import { renderClients, bindClientsEvents } from './views/clients.js?v=503';
 
 let fastTimer = null;
 let slowTimer = null;
@@ -78,22 +78,25 @@ export function switchTab(tab, updateHash = true) {
   pollFast();
   pollSlow();
   if (tab === 'overview') markPrismDirty();
+  if (tab === 'blueprint') startBlueprintAnim();
+  else stopBlueprintAnim();
 }
 
 async function pollFast() {
   if (document.visibilityState === 'hidden') return;
   try {
-    const jobs = [call('status')];
-    if (S.tab === 'overview' || S.tab === 'clients') jobs.push(call('devices'));
-    else jobs.push(null);
+    const jobs = [
+      call('status'),
+      S.tab === 'overview' || S.tab === 'clients' ? call('devices') : null,
+      S.tab === 'clients' && S.session ? call('connections') : null,
+      S.tab === 'blueprint' ? call('rules') : null
+    ];
 
-    if (S.tab === 'clients' && S.session) jobs.push(call('connections'));
-    else jobs.push(null);
-
-    const [st, dv, cn] = await Promise.all(jobs);
+    const [st, dv, cn, rl] = await Promise.all(jobs);
     if (st) S.status = st;
     if (dv) S.devices = dv;
     if (cn) S.connections = cn;
+    if (rl) S.rules = rl;
     renderActiveTab();
   } catch (e) {
     // Keep last snapshot cleanly without UI glitch
@@ -163,6 +166,9 @@ function bindGlobalEvents() {
       pollFast();
       pollSlow();
       if (S.tab === 'overview') markPrismDirty();
+      if (S.tab === 'blueprint') startBlueprintAnim();
+    } else {
+      stopBlueprintAnim();
     }
   });
 
