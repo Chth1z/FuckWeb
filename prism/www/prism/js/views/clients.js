@@ -2,9 +2,9 @@
  * PRISM — View 04: Merged Wide Device Policy Matrix & Live Flows Explorer
  * ============================================================================ */
 
-import { S, fmtRate, fmtBytes } from '../state.js?v=5.6.2';
-import { $, $$, el } from '../dom.js?v=5.6.2';
-import { write, openLoginModal } from '../api.js?v=5.6.2';
+import { S, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.6.3';
+import { $, $$, el } from '../dom.js?v=5.6.3';
+import { write, openLoginModal } from '../api.js?v=5.6.3';
 
 const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
 const POLICY_META = {
@@ -265,7 +265,7 @@ function syncDeviceCard(card, d, dr, isSelected) {
   r.flowsEl.className = S.session && dr.count > 0 ? 'c-blue' : (d.online ? 'c-mint' : 'c-muted');
 
   const rateStr = S.session && (dr.down + dr.up > 50)
-    ? ` · ↓${fmtRate(dr.down).full} ↑${fmtRate(dr.up).full}`
+    ? ` · ↓${fmtRateCompact(dr.down)} ↑${fmtRateCompact(dr.up)}`
     : '';
   r.ipRateEl.textContent = `${d.ip || d.mac.slice(-8)}${rateStr}`;
   r.ipRateEl.className = rateStr ? 'c-mint' : 'c-muted';

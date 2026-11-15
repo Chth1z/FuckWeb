@@ -2,20 +2,13 @@
  * PRISM — View 03: Pure Square Emission Matrix, Oscilloscope & 21-Ch Telemetry
  * ============================================================================ */
 
-import { S, spectralColor } from '../state.js?v=5.6.2';
-import { $, $$, el, renderSegMeter } from '../dom.js?v=5.6.2';
-import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.6.2';
+import { S, spectralColor, fmtRateCompact } from '../state.js?v=5.6.3';
+import { $, $$, el, renderSegMeter } from '../dom.js?v=5.6.3';
+import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.6.3';
 
 let hoverStrandId = null;
 
-function fmtShortRate(bps) {
-  const b = (bps || 0) * 8;
-  if (b <= 50) return '0';
-  if (b >= 1e9) return `${(b / 1e9).toFixed(1)}G`;
-  if (b >= 1e6) return `${(b / 1e6).toFixed(b >= 10e6 ? 0 : 1)}M`;
-  if (b >= 1e3) return `${Math.round(b / 1e3)}K`;
-  return `${Math.round(b)}b`;
-}
+const fmtShortRate = (bps) => fmtRateCompact(bps, '0');
 
 function getActiveStrandId() {
   return hoverStrandId != null ? hoverStrandId : S.pinnedStrandId;

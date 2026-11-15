@@ -2,7 +2,7 @@
  * PRISM 5.0 — Central State Store, DSOTM Spectral Color Math & Formatters
  * ============================================================================ */
 
-export const UI_VERSION = '5.6.2';
+export const UI_VERSION = '5.6.3';
 
 export const S = {
   tab: 'overview',
@@ -86,6 +86,15 @@ export function fmtRate(bytesPerSec) {
   if (mbps < 1000) return { num: mbps < 10 ? mbps.toFixed(2) : mbps.toFixed(1), unit: 'Mbps', full: (mbps < 10 ? mbps.toFixed(2) : mbps.toFixed(1)) + ' Mbps' };
   const gbps = mbps / 1000;
   return { num: gbps.toFixed(2), unit: 'Gbps', full: gbps.toFixed(2) + ' Gbps' };
+}
+
+export function fmtRateCompact(bytesPerSec, zeroLabel = '0b') {
+  const b = (bytesPerSec || 0) * 8;
+  if (b <= 50) return zeroLabel;
+  if (b >= 1e9) return `${(b / 1e9).toFixed(1)}G`;
+  if (b >= 1e6) return `${(b / 1e6).toFixed(b >= 10e6 ? 0 : 1)}M`;
+  if (b >= 1e3) return `${b < 10e3 ? (b / 1e3).toFixed(1) : Math.round(b / 1e3)}K`;
+  return `${Math.round(b)}b`;
 }
 
 export function fmtBytes(bytes) {

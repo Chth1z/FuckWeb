@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtBytes, fmtClock } from '../state.js?v=5.6.2';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.2';
-import { write, call } from '../api.js?v=5.6.2';
+import { S, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.3';
+import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.3';
+import { write, call } from '../api.js?v=5.6.3';
 
 let drawerOpen = false;
 let rafId = null;
@@ -494,19 +494,25 @@ function drawDualPrismPipeline(ctx, W, H, ing, vip, tun, dom, qos, prismsQueue) 
   const gap2W = qos.x - s2Right;
   if (gap1W < 30 || gap2W < 30) return;
 
-  // Center optical axis horizontally centered along the pipeline within safe intersection of ing, tun & qos
-  const safeTop = Math.max(ing.y, tun.y, qos.y, vip.cy + 28) + 22;
-  const safeBot = Math.min(ing.bottom, tun.bottom, qos.bottom, dom.cy - 28) - 22;
-  const midY = safeTop <= safeBot
-    ? Math.max(safeTop, Math.min(safeBot, H * 0.50))
-    : Math.max(ing.y + 20, Math.min(tun.bottom - 20, qos.bottom - 20, tun.cy));
+  // Left Main Prism sits LOWER (aligned toward NFTABLES CLASSIFY), Right Merge Prism sits HIGHER (toward 3-BAND HTB)
+  const safeTop1 = Math.max(ing.y + 22, tun.y + 22, vip.cy + 28);
+  const safeBot1 = Math.min(ing.bottom - 22, tun.bottom - 22, dom.cy - 40);
+  const y1 = safeTop1 <= safeBot1
+    ? Math.max(safeTop1, Math.min(safeBot1, safeTop1 + (safeBot1 - safeTop1) * 0.90, ing.cy - 8))
+    : Math.max(ing.y + 18, Math.min(tun.bottom - 18, tun.cy + 28));
 
-  // === GAP 1: Symmetric 1 -> 3 Main Dispersion Prism on Gap 1 Midline ===
-  const g1 = makePrismGeom(ing.right + gap1W * 0.50, midY, Math.max(28, Math.min(42, gap1W * 0.34)));
+  const safeTop2 = Math.max(tun.y + 22, qos.y + 22, vip.cy + 40);
+  const safeBot2 = Math.min(tun.bottom - 22, qos.bottom - 22, dom.cy - 40);
+  const y2 = safeTop2 <= safeBot2
+    ? Math.max(safeTop2, Math.min(safeBot2, Math.max(qos.cy + 18, safeTop2 + (safeBot2 - safeTop2) * 0.16)))
+    : Math.max(tun.y + 18, Math.min(qos.bottom - 18, qos.cy + 18));
+
+  // === GAP 1: Symmetric 1 -> 3 Main Dispersion Prism on Gap 1 Lower Axis ===
+  const g1 = makePrismGeom(ing.right + gap1W * 0.50, y1, Math.max(26, Math.min(38, gap1W * 0.34)));
 
   drawOrthoStepWithPrisms(
     ctx,
-    [{ x: ing.right - 1, y: midY }, { x: g1.entryX + 12, y: midY }],
+    [{ x: ing.right - 1, y: y1 }, { x: g1.entryX + 12, y: y1 }],
     'spectrum', waveState[4], 0.04, prismsQueue,
     { clipFirst: (c) => clipHalfPlane(c, g1.topX, g1.topY, g1.leftX, g1.leftY, -1, W, H) }
   );
@@ -522,7 +528,7 @@ function drawDualPrismPipeline(ctx, W, H, ing, vip, tun, dom, qos, prismsQueue) 
   // Branch 1 (Violet TW-HOME): exits right bevel STRAIGHT RIGHT (0 bends)
   drawOrthoStepWithPrisms(
     ctx,
-    [{ x: g1.exitX - 12, y: midY }, { x: tun.x + 1, y: midY }],
+    [{ x: g1.exitX - 12, y: y1 }, { x: tun.x + 1, y: y1 }],
     '170, 142, 240', waveState[1], 0.16, prismsQueue,
     { clipFirst: (c) => clipHalfPlane(c, g1.topX, g1.topY, g1.rightX, g1.rightY, 1, W, H) }
   );
@@ -537,8 +543,8 @@ function drawDualPrismPipeline(ctx, W, H, ing, vip, tun, dom, qos, prismsQueue) 
 
   drawCrystalPrism(ctx, g1, 'split');
 
-  // === GAP 2: Symmetric 3 -> 1 Recombination Merge Prism on Gap 2 Midline ===
-  const g2 = makePrismGeom(s2Right + gap2W * 0.50, midY, Math.max(26, Math.min(38, gap2W * 0.36)));
+  // === GAP 2: Symmetric 3 -> 1 Recombination Merge Prism on Gap 2 Upper Axis ===
+  const g2 = makePrismGeom(s2Right + gap2W * 0.50, y2, Math.max(26, Math.min(38, gap2W * 0.36)));
 
   // Branch 0 (Blue @vip_lane): RIGHT -> SINGLE 45-deg prism -> straight DOWN into apex (1 bend)
   drawOrthoStepWithPrisms(
@@ -551,7 +557,7 @@ function drawDualPrismPipeline(ctx, W, H, ing, vip, tun, dom, qos, prismsQueue) 
   // Branch 1 (Violet TW-HOME): STRAIGHT RIGHT into left bevel (0 bends)
   drawOrthoStepWithPrisms(
     ctx,
-    [{ x: tun.right - 1, y: midY }, { x: g2.entryX + 12, y: midY }],
+    [{ x: tun.right - 1, y: y2 }, { x: g2.entryX + 12, y: y2 }],
     '170, 142, 240', waveState[1], 0.38, prismsQueue,
     { clipFirst: (c) => clipHalfPlane(c, g2.topX, g2.topY, g2.leftX, g2.leftY, -1, W, H) }
   );
@@ -567,7 +573,7 @@ function drawDualPrismPipeline(ctx, W, H, ing, vip, tun, dom, qos, prismsQueue) 
   // Unified Merged Spectrum Egress -> 3-BAND HTB + FQ_CODEL (0 bends)
   drawOrthoStepWithPrisms(
     ctx,
-    [{ x: g2.exitX - 12, y: midY }, { x: qos.x + 1, y: midY }],
+    [{ x: g2.exitX - 12, y: y2 }, { x: qos.x + 1, y: y2 }],
     'spectrum', waveState[4], 0.44, prismsQueue,
     { clipFirst: (c) => clipHalfPlane(c, g2.topX, g2.topY, g2.rightX, g2.rightY, 1, W, H) }
   );
@@ -1024,9 +1030,9 @@ export function renderBlueprint() {
   if ($('#bp-dns-port')) {
     $('#bp-dns-port').textContent = st.dns?.smartdns ? `:${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}` : 'offline';
   }
-  $('#bp-dns-st').textContent = `dom ${sz.domestic4 ?? 0} · cn ${sz.domestic4_dns ?? 0}`;
-  if ($('#bp-dns-tun')) $('#bp-dns-tun').textContent = `${sz.tunnel4_dns ?? 0} (range ${sz.tunnel4 ?? 0})`;
-  if ($('#bp-site-name')) $('#bp-site-name').textContent = `${st.site?.name || 'direct'} · ${st.site?.mode || 'auto'}`;
+  $('#bp-dns-st').textContent = `${sz.domestic4 ?? 0} / ${sz.domestic4_dns ?? 0}`;
+  if ($('#bp-dns-tun')) $('#bp-dns-tun').textContent = `${sz.tunnel4_dns ?? 0} · r${sz.tunnel4 ?? 0}`;
+  if ($('#bp-site-name')) $('#bp-site-name').textContent = st.site?.name || 'direct';
 
   const chargedRatio = (w.charged_count || 0) / nH;
   renderSegMeter($('#bp-harvest-meter'), chargedRatio, 10, 'spectrum');
@@ -1061,24 +1067,32 @@ export function renderBlueprint() {
   renderSegMeter($('#bp-vip-meter'), vipTok, 10, 'blue');
   $('#bp-vip-pct').textContent = vipS ? `${Math.round(vipTok * 100)}%` : 'none';
   $('#bp-vip-desc').textContent = vipS
-    ? `${vipS.dev} · τ=${vipS.ttfb_ms || '—'}ms · loss ${vipS.loss_pct ?? 0}%`
+    ? `${vipS.dev} · τ=${vipS.ttfb_ms || '—'}ms · ${vipS.loss_pct ?? 0}% loss`
     : 'auto selecting lowest RTT strand...';
-  $('#bp-vip-st').textContent = vipS && vipS.healthy ? 'dedicated lane pinned' : 'standby';
+  $('#bp-vip-st').textContent = vipS && vipS.healthy ? 'vip pinned' : 'standby';
 
   // Tier 2 · Branch 1: TW-HOME Mihomo + MPTCP + Zashboard
   const mihomoOk = !!st.tunnel?.running;
   $('#bp-tun-rate').textContent = mihomoOk ? fmtRate(liveFlow.tunBps).full : '0 bps';
   renderSegMeter($('#bp-tun-meter'), mihomoOk ? Math.max(0.08, liveFlow.tunShare) : 0, 10, mihomoOk ? 'violet' : 'amber');
   $('#bp-tun-pct').textContent = mihomoOk ? `${Math.round(liveFlow.tunShare * 100)}%` : '0%';
-  $('#bp-tun-desc').textContent = `主力: ${(tun?.tw_home || tun?.selected || 'TW-HOME').slice(0, 26)} · ${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts`;
+  $('#bp-tun-desc').textContent = tun?.tw_home || tun?.selected || 'TW-HOME';
+  if ($('#bp-tun-pkts')) {
+    $('#bp-tun-pkts').textContent = liveFlow.tunPkts >= 1000
+      ? `${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts`
+      : `${liveFlow.tunPkts} pkts`;
+  }
   const mptcpEl = $('#bp-tun-mptcp');
   if (mptcpEl) {
     mptcpEl.textContent = st.mptcp?.enabled
-      ? `MPTCP ${st.mptcp.subflows} subflows · ${st.mptcp.endpoints?.length || 0} ep → weave_out`
-      : 'MPTCP single-path → weave_out';
+      ? `${st.mptcp.subflows} subflows · ${st.mptcp.endpoints?.length || 0} ep`
+      : 'single-path';
+  }
+  if ($('#bp-tun-relays')) {
+    $('#bp-tun-relays').textContent = `${st.tunnel?.relays ?? 0} nodes · weave`;
   }
   if ($('#bp-tun-meta')) {
-    $('#bp-tun-meta').textContent = `relays ${st.tunnel?.relays ?? 0} · canary ${canaryMs || '—'}ms · ${st.tunnel?.fail_open ? 'fail-open' : 'fail-closed'}`;
+    $('#bp-tun-meta').textContent = `${st.tunnel?.fail_open ? 'fail-open' : 'fail-closed'} · ${canaryMs || '—'}ms`;
   }
   $('#bp-tun-st').textContent = mihomoOk ? (canaryMs > 0 ? `canary ${canaryMs} ms ok` : 'cage encrypted') : 'offline / direct';
   const zBtn = $('#zashboard-link');
@@ -1123,7 +1137,7 @@ export function renderBlueprint() {
   const ewmaDown = st.rate_ewma ?? st.rate ?? 0;
   const ewmaUp = st.rate_up_ewma ?? st.rate_up ?? 0;
   const ewmaMbps = ((ewmaDown + ewmaUp) * 8) / 1e6;
-  if ($('#bp-qos-tx-txt')) $('#bp-qos-tx-txt').textContent = `↑ ${fmtRate(ewmaUp).full} · ↓ ${fmtRate(ewmaDown).full}`;
+  if ($('#bp-qos-tx-txt')) $('#bp-qos-tx-txt').textContent = `↑ ${fmtRateCompact(ewmaUp)} · ↓ ${fmtRateCompact(ewmaDown)}`;
   const ewmaRatio = ewmaMbps > 0 ? Math.min(1, Math.max(1 / 18, Math.log10(1 + ewmaMbps * 3.5) * 0.44)) : 0;
   setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', true, ewmaMbps > 0.02);
 

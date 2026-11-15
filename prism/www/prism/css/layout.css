@@ -200,11 +200,11 @@
   position: relative;
   display: grid;
   grid-template-columns:
-    minmax(242px, 0.94fr)
-    minmax(108px, 0.42fr)
-    minmax(274px, 1.08fr)
-    minmax(88px, 0.34fr)
-    minmax(262px, 1.02fr);
+    minmax(244px, 0.99fr)
+    minmax(76px, 0.30fr)
+    minmax(254px, 1.04fr)
+    minmax(76px, 0.30fr)
+    minmax(254px, 1.02fr);
   align-items: stretch;
   height: 100%;
   min-width: 0;

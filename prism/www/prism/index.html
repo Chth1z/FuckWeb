@@ -6,10 +6,10 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>PRISM v5.6.2 · Optical Spectrum &amp; Privacy Router</title>
-  <link rel="stylesheet" href="css/tokens.css?v=5.6.2">
-  <link rel="stylesheet" href="css/layout.css?v=5.6.2">
-  <link rel="stylesheet" href="css/components.css?v=5.6.2">
+  <title>PRISM v5.6.3 · Optical Spectrum &amp; Privacy Router</title>
+  <link rel="stylesheet" href="css/tokens.css?v=5.6.3">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.3">
+  <link rel="stylesheet" href="css/components.css?v=5.6.3">
 </head>
 <body>
   <div class="app-shell">
@@ -27,7 +27,7 @@
           </svg>
         </span>
         <span class="brand-name">PRISM</span>
-        <span class="brand-sub"><span id="hdr-ver">v5.6.2</span> · <span id="hdr-ip">192.168.16.1</span></span>
+        <span class="brand-sub"><span id="hdr-ver">v5.6.3</span> · <span id="hdr-ip">192.168.16.1</span></span>
       </div>
 
       <nav class="nav-tabs" aria-label="Primary">
@@ -203,9 +203,9 @@
                   <span id="bp-quic-pkts" class="bp-live-rate c-spectrum" style="font-size:12px">0 pkts</span>
                 </div>
                 <div class="bp-kv-strip">
-                  <div class="bp-kv-cell"><span class="k">SmartDNS</span><span id="bp-dns-port" class="v c-mint">:6053 · ad-block</span></div>
-                  <div class="bp-kv-cell"><span class="k">routes</span><span id="bp-dns-st" class="v">dom 0 · cn 0</span></div>
-                  <div class="bp-kv-cell"><span class="k">tun pins</span><span id="bp-dns-tun" class="v c-violet">0</span></div>
+                  <div class="bp-kv-cell"><span class="k">DNS</span><span id="bp-dns-port" class="v c-mint">:6053 · ad-block</span></div>
+                  <div class="bp-kv-cell"><span class="k">routes</span><span id="bp-dns-st" class="v">0 / 0</span></div>
+                  <div class="bp-kv-cell"><span class="k">pins</span><span id="bp-dns-tun" class="v c-violet">0 · 0</span></div>
                   <div class="bp-kv-cell"><span class="k">site</span><span id="bp-site-name" class="v">auto</span></div>
                 </div>
                 <div class="bp-meter-row">
@@ -226,7 +226,7 @@
                 <div class="bp-node-head" style="margin-bottom:0">
                   <div>
                     <div style="font-weight:700;font-size:12px"><span class="c-spectrum">NFTABLES CLASSIFY</span></div>
-                    <div class="c-sec" style="font-size:10px">prerouting → @dev_policy → 分流決策</div>
+                    <div class="c-sec" style="font-size:10px">prerouting → @dev_policy · 分流</div>
                   </div>
                   <div style="text-align:right;white-space:nowrap;flex-shrink:0">
                     <div id="bp-ingress-rate" class="bp-live-rate c-bright" style="font-size:13px">0 Mbps</div>
@@ -251,9 +251,9 @@
                   <span id="bp-vip-meter" class="seg-meter"></span>
                   <strong id="bp-vip-pct" class="bp-meter-val c-bright">—</strong>
                 </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px">
-                  <span id="bp-vip-desc" class="c-sec">—</span>
-                  <span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0"><span class="run-dot"></span><span id="bp-vip-st" class="c-blue">standby</span></span>
+                <div class="bp-node-foot" style="color:var(--text-secondary)">
+                  <span id="bp-vip-desc" style="min-width:0;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto">—</span>
+                  <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0"><span class="run-dot"></span><span id="bp-vip-st" class="c-blue">standby</span></span>
                 </div>
               </div>
 
@@ -261,22 +261,29 @@
                 <div class="bp-node-head" style="margin-bottom:0">
                   <div>
                     <div style="font-weight:700;color:var(--c-violet);font-size:12px">TW-HOME · 台灣家寬零跳變籠</div>
-                    <div class="c-sec" style="font-size:10px">TProxy :61235 · @tunnel4 &amp; 海外全閉鎖</div>
+                    <div class="c-sec" style="font-size:10px">TProxy :61235 · @tunnel4 · 海外閉鎖</div>
                   </div>
                   <span id="bp-tun-rate" class="bp-live-rate c-violet" style="font-size:13px">0 bps</span>
                 </div>
-                <div class="bp-meter-row">
-                  <span id="bp-tun-meter" class="seg-meter"></span>
-                  <strong id="bp-tun-pct" class="bp-meter-val c-bright">0%</strong>
+                <div class="bp-card-body">
+                  <div class="bp-meter-row">
+                    <span id="bp-tun-meter" class="seg-meter"></span>
+                    <strong id="bp-tun-pct" class="bp-meter-val c-bright">0%</strong>
+                  </div>
+                  <div class="bp-tun-node-row">
+                    <span class="c-muted" style="flex-shrink:0">主力</span>
+                    <span id="bp-tun-desc" class="bp-tun-node-name c-bright">—</span>
+                    <span id="bp-tun-pkts" class="c-violet" style="flex-shrink:0;font-variant-numeric:tabular-nums">0 pkts</span>
+                  </div>
+                  <div id="bp-tun-chain" class="bp-kv-strip">
+                    <div class="bp-kv-cell"><span class="k">mptcp</span><span id="bp-tun-mptcp" class="v c-bright">—</span></div>
+                    <div class="bp-kv-cell"><span class="k">backup</span><span class="v c-muted">JP-Lightsail → 同IP</span></div>
+                    <div class="bp-kv-cell"><span class="k">relays</span><span id="bp-tun-relays" class="v">—</span></div>
+                    <div class="bp-kv-cell"><span class="k">cage</span><span id="bp-tun-meta" class="v c-violet">fail-closed</span></div>
+                  </div>
                 </div>
-                <div id="bp-tun-desc" class="c-sec" style="font-size:10.5px">—</div>
-                <div id="bp-tun-chain" class="relay-mini-list">
-                  <div id="bp-tun-mptcp" class="c-bright">MPTCP —</div>
-                  <div class="c-muted">備援鏈: JP-Lightsail → 台灣家寬 (同IP)</div>
-                  <div id="bp-tun-meta" class="c-sec" style="margin-top:2px">relays — · canary — · fail_closed</div>
-                </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px">
-                  <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0">
+                <div class="bp-node-foot">
+                  <span style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0">
                     <span class="run-dot violet"></span>
                     <span id="bp-tun-st" class="c-violet">checking...</span>
                   </span>
@@ -292,20 +299,22 @@
                   </div>
                   <span id="bp-dom-rate" class="bp-live-rate c-mint" style="font-size:13px">0 bps</span>
                 </div>
-                <div class="bp-meter-row">
-                  <span id="bp-dom-meter" class="seg-meter"></span>
-                  <strong id="bp-dom-pct" class="bp-meter-val c-bright">0%</strong>
+                <div class="bp-card-body">
+                  <div class="bp-meter-row">
+                    <span id="bp-dom-meter" class="seg-meter"></span>
+                    <strong id="bp-dom-pct" class="bp-meter-val c-bright">0%</strong>
+                  </div>
+                  <div id="bp-mini-spectrum" class="mini-spectrum-bar" title="21-Wavelength Real-Time Charge"></div>
+                  <div class="bp-kv-strip">
+                    <div class="bp-kv-cell"><span class="k">slots</span><span id="bp-dom-slots" class="v c-mint">126 (flow)</span></div>
+                    <div class="bp-kv-cell"><span class="k">direct</span><span id="bp-dom-direct" class="v">0 pkts</span></div>
+                    <div class="bp-kv-cell"><span class="k">probe</span><span id="bp-dom-probe" class="v">—</span></div>
+                    <div class="bp-kv-cell"><span class="k">buckets</span><span id="bp-dom-buckets" class="v">0/21</span></div>
+                  </div>
                 </div>
-                <div id="bp-mini-spectrum" class="mini-spectrum-bar" title="21-Wavelength Real-Time Charge"></div>
-                <div class="bp-kv-strip">
-                  <div class="bp-kv-cell"><span class="k">slots</span><span id="bp-dom-slots" class="v c-mint">126 (flow)</span></div>
-                  <div class="bp-kv-cell"><span class="k">direct</span><span id="bp-dom-direct" class="v">0 pkts</span></div>
-                  <div class="bp-kv-cell"><span class="k">probe</span><span id="bp-dom-probe" class="v">—</span></div>
-                  <div class="bp-kv-cell"><span class="k">buckets</span><span id="bp-dom-buckets" class="v">0/21</span></div>
-                </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px">
-                  <span id="bp-dom-desc" class="c-sec">0/21 滿桶 · 126 slots</span>
-                  <span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0"><span class="run-dot mint"></span><span id="bp-dom-st" class="c-mint">ready</span></span>
+                <div class="bp-node-foot" style="color:var(--text-secondary)">
+                  <span id="bp-dom-desc" style="min-width:0;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto">0/21 滿桶 · 126 slots</span>
+                  <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0"><span class="run-dot mint"></span><span id="bp-dom-st" class="c-mint">ready</span></span>
                 </div>
               </div>
             </div>
@@ -361,7 +370,7 @@
 
                 <div class="uplink-foot-row">
                   <div class="uplink-meter-head">
-                    <span class="c-sec">上行 / 下行 EWMA 速率比</span>
+                    <span class="c-sec">EWMA 上/下行速率</span>
                     <span id="bp-qos-tx-txt" class="c-bright" style="font-variant-numeric:tabular-nums">—</span>
                   </div>
                   <span id="bp-qos-tx-bar" class="seg-meter compact"></span>
@@ -404,13 +413,13 @@
                 </div>
 
                 <div>
-                  <div id="bp-verify-summary" class="c-sec" style="font-size:10px;margin-bottom:7px;font-variant-numeric:tabular-nums">
+                  <div id="bp-verify-summary" class="c-sec" style="font-size:10px;margin-bottom:7px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
                     checking system state...
                   </div>
-                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <div class="bp-btn-row">
                     <button id="btn-reconcile" type="button" class="btn-cmd primary">prism apply</button>
                     <button id="btn-relogin" type="button" class="btn-cmd">portal 重登</button>
-                    <button id="btn-toggle-sys" type="button" class="btn-cmd">體檢與 UCI 參數</button>
+                    <button id="btn-toggle-sys" type="button" class="btn-cmd">體檢 / UCI</button>
                   </div>
                 </div>
               </div>
@@ -504,8 +513,8 @@
             </div>
 
             <div class="dev-toolbar">
-              <input id="dev-menu-q" class="bp-input" type="search" placeholder="篩選設備 / IP / MAC..." aria-label="篩選終端" style="flex:1;min-width:120px">
-              <div id="dev-sort-seg" class="seg-group" title="終端排序方式" aria-label="終端排序方式">
+              <input id="dev-menu-q" class="bp-input" type="search" placeholder="篩選設備 / IP / MAC..." aria-label="篩選終端" style="flex:1;min-width:80px">
+              <div id="dev-sort-seg" class="seg-group" style="flex-shrink:0" title="終端排序方式" aria-label="終端排序方式">
                 <button type="button" class="seg-btn on" data-sort="stable">固定</button>
                 <button type="button" class="seg-btn" data-sort="rate">速率</button>
                 <button type="button" class="seg-btn" data-sort="flows">流數</button>
@@ -530,21 +539,21 @@
           <!-- Right Full-Height Column: Live Active Connections Explorer -->
           <div class="clients-right-col">
             <div class="s-box blue" style="flex:1;height:100%;display:flex;flex-direction:column;min-height:0">
-              <div class="panel-head">
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div class="panel-head" style="gap:8px;white-space:nowrap">
+                <div style="display:flex;align-items:center;gap:6px;min-width:0">
                   <span class="panel-title c-blue">ACTIVE CONNECTIONS</span>
                   <span id="conn-scope-badge" class="st-badge vip">全局連接</span>
                   <button id="btn-conn-clear-dev" class="btn-cmd" type="button" style="display:none;padding:2px 7px;font-size:10px">全部終端 ✕</button>
-                  <span id="conn-cap" class="c-sec" style="font-size:11px">—</span>
+                  <span id="conn-cap" class="c-sec" style="font-size:11px;overflow:hidden;text-overflow:ellipsis">—</span>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
                   <div id="conn-route-seg" class="seg-group" aria-label="過濾路由路徑">
                     <button type="button" class="seg-btn on" data-route="all">全部</button>
                     <button type="button" class="seg-btn" data-route="direct">直連</button>
                     <button type="button" class="seg-btn" data-route="tunnel">TW-HOME</button>
                     <button type="button" class="seg-btn" data-route="vip">VIP專線</button>
                   </div>
-                  <input id="conn-q" class="bp-input" type="search" placeholder="過濾目標 / 域名 / 端口..." aria-label="過濾連接目標" style="width:190px">
+                  <input id="conn-q" class="bp-input" type="search" placeholder="過濾目標 / 域名 / 端口..." aria-label="過濾連接目標" style="width:152px">
                 </div>
               </div>
 
@@ -643,6 +652,6 @@
 
   <div id="toast" class="toast-bar"></div>
 
-  <script type="module" src="js/main.js?v=5.6.2"></script>
+  <script type="module" src="js/main.js?v=5.6.3"></script>
 </body>
 </html>

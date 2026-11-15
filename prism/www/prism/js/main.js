@@ -2,14 +2,14 @@
  * PRISM 5.0 — Bootstrap, 4-Tab Router & Differential Polling Engine
  * ============================================================================ */
 
-import { S, UI_VERSION, fmtRate } from './state.js?v=5.6.2';
-import { $, $$, toast } from './dom.js?v=5.6.2';
-import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.6.2';
-import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=5.6.2';
-import { renderOverview } from './views/overview.js?v=5.6.2';
-import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.6.2';
-import { renderSpectrum, bindSpectrumEvents } from './views/spectrum.js?v=5.6.2';
-import { renderClients, bindClientsEvents } from './views/clients.js?v=5.6.2';
+import { S, UI_VERSION, fmtRate } from './state.js?v=5.6.3';
+import { $, $$, toast } from './dom.js?v=5.6.3';
+import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.6.3';
+import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=5.6.3';
+import { renderOverview } from './views/overview.js?v=5.6.3';
+import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.6.3';
+import { renderSpectrum, bindSpectrumEvents } from './views/spectrum.js?v=5.6.3';
+import { renderClients, bindClientsEvents } from './views/clients.js?v=5.6.3';
 
 let fastTimer = null;
 let slowTimer = null;

@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as ulog from "log";
 import { md5 } from "digest";
 
-export const VERSION = "5.6.2";
+export const VERSION = "5.6.3";
 export const SHARE = fs.dirname(sourcepath(0, true));
 export const RUN = getenv("PRISM_RUN") ?? "/tmp/prism";
 export const ETC = getenv("PRISM_ETC") ?? "/etc/prism";
