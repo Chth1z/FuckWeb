@@ -8,11 +8,14 @@ import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin
 import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=5.6.6';
 import { renderOverview } from './views/overview.js?v=5.6.6';
 import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.6.6';
-import { renderSpectrum, bindSpectrumEvents } from './views/spectrum.js?v=5.6.6';
+import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.6.6';
 import { renderClients, bindClientsEvents } from './views/clients.js?v=5.6.6';
 
 let fastTimer = null;
 let slowTimer = null;
+let fastSeq = 0;
+let fastInFlight = false;
+let slowInFlight = false;
 
 function renderChrome() {
   const st = S.status;
@@ -84,38 +87,88 @@ export function switchTab(tab, updateHash = true) {
   if (tab === 'overview') markPrismDirty();
   if (tab === 'blueprint') startBlueprintAnim();
   else stopBlueprintAnim();
+  if (tab === 'spectrum') startSpectrumAnim();
+  else stopSpectrumAnim();
+}
+
+function mergeSeriesDelta(delta) {
+  if (!delta || !Array.isArray(delta.ts) || delta.ts.length === 0) return;
+  const cur = S.series;
+  if (!cur || !Array.isArray(cur.ts) || cur.ts.length < 2 || delta.ts.length > 60) {
+    S.series = delta;
+    return;
+  }
+  const lastTs = cur.ts[cur.ts.length - 1] || 0;
+  const startIdx = delta.ts.findIndex(t => t > lastTs);
+  if (startIdx < 0) return;
+  const addCount = delta.ts.length - startIdx;
+  cur.ts.push(...delta.ts.slice(startIdx));
+  cur.total.push(...(delta.total || []).slice(startIdx));
+  if (!cur.up) cur.up = new Array(cur.ts.length - addCount).fill(0);
+  cur.up.push(...(delta.up || new Array(addCount).fill(0)).slice(startIdx));
+  const mergeMap = (dstMap, srcMap) => {
+    if (!srcMap) return;
+    const targetLen = cur.ts.length;
+    for (const [dev, arr] of Object.entries(srcMap)) {
+      let dst = dstMap[dev];
+      if (!dst) dst = dstMap[dev] = new Array(targetLen - addCount).fill(0);
+      dst.push(...arr.slice(startIdx));
+      if (dst.length > 720) dst.splice(0, dst.length - 720);
+    }
+    for (const dst of Object.values(dstMap)) {
+      while (dst.length < targetLen) dst.push(0);
+      if (dst.length > 720) dst.splice(0, dst.length - 720);
+    }
+  };
+  mergeMap(cur.strands || (cur.strands = {}), delta.strands);
+  mergeMap(cur.strands_up || (cur.strands_up = {}), delta.strands_up);
+  if (cur.ts.length > 720) {
+    const drop = cur.ts.length - 720;
+    cur.ts.splice(0, drop);
+    cur.total.splice(0, drop);
+    cur.up.splice(0, drop);
+  }
 }
 
 async function pollFast() {
-  if (document.visibilityState === 'hidden') return;
+  if (document.visibilityState === 'hidden' || fastInFlight) return;
+  fastInFlight = true;
+  const seq = ++fastSeq;
+  const runHeavy = (seq === 1 || seq % 2 === 0);
   try {
+    const needFullSeries = S.tab === 'spectrum' && (!S.series?.ts || S.series.ts.length < 2);
     const jobs = [
       call('status'),
       S.tab === 'overview' || S.tab === 'clients' ? call('devices') : null,
-      S.tab === 'clients' && S.session ? call('connections') : null,
-      S.tab === 'blueprint' ? call('rules') : null
+      S.tab === 'spectrum' ? call('series', { limit: needFullSeries ? 720 : 8 }) : null,
+      runHeavy && S.tab === 'clients' && S.session ? call('connections') : null,
+      runHeavy && S.tab === 'blueprint' ? call('rules') : null
     ];
 
-    const [st, dv, cn, rl] = await Promise.all(jobs);
+    const [st, dv, ser, cn, rl] = await Promise.all(jobs);
     if (st) S.status = st;
     if (dv) S.devices = dv;
+    if (ser) mergeSeriesDelta(ser);
     if (cn) S.connections = cn;
     if (rl) S.rules = rl;
     renderActiveTab();
   } catch (e) {
     // Keep last snapshot cleanly without UI glitch
+  } finally {
+    fastInFlight = false;
   }
 }
 
 async function pollSlow() {
-  if (document.visibilityState === 'hidden') return;
+  if (document.visibilityState === 'hidden' || slowInFlight) return;
+  slowInFlight = true;
   try {
     const reqs = [];
     reqs.push(S.tab === 'overview' || S.tab === 'blueprint' ? call('tunnel') : null);
     reqs.push(S.tab === 'blueprint' ? call('rules') : null);
     reqs.push(S.tab === 'blueprint' ? call('events', { limit: 40 }) : null);
     reqs.push(S.tab === 'blueprint' ? call('doctor') : null);
-    reqs.push(S.tab === 'spectrum' ? call('series', { limit: 720 }) : null);
+    reqs.push(S.tab === 'spectrum' && (!S.series?.ts || S.series.ts.length < 2) ? call('series', { limit: 720 }) : null);
     reqs.push(S.tab === 'blueprint' && S.session ? call('config') : null);
 
     const [tun, rul, ev, doc, ser, cfg] = await Promise.all(reqs);
@@ -123,10 +176,13 @@ async function pollSlow() {
     if (rul) S.rules = rul;
     if (ev) S.events = ev;
     if (doc) S.doctor = doc;
-    if (ser) S.series = ser;
+    if (ser) mergeSeriesDelta(ser);
     if (cfg) S.config = cfg;
     renderActiveTab();
-  } catch (_) {}
+  } catch (_) {
+  } finally {
+    slowInFlight = false;
+  }
 }
 
 function bindGlobalEvents() {
@@ -178,8 +234,10 @@ function bindGlobalEvents() {
       pollSlow();
       if (S.tab === 'overview') markPrismDirty();
       if (S.tab === 'blueprint') startBlueprintAnim();
+      if (S.tab === 'spectrum') startSpectrumAnim();
     } else {
       stopBlueprintAnim();
+      stopSpectrumAnim();
     }
   });
 
@@ -209,7 +267,7 @@ async function init() {
   } catch (_) {}
 
   pollSlow();
-  fastTimer = setInterval(pollFast, 2000);
+  fastTimer = setInterval(pollFast, 1000);
   slowTimer = setInterval(pollSlow, 6000);
 }
 

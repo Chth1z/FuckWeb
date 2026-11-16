@@ -8,6 +8,11 @@ import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/osci
 
 let hoverStrandId = null;
 const strandMetaById = new Map();
+let specRafId = null;
+let lastSpecTs = 0;
+let lastSpecPaintTs = 0;
+const tileSmooth = new Map();
+let ribSmooth = { cur: null, target: 0.06 };
 
 const fmtShortRate = (bps) => fmtRateCompact(bps, '0');
 
@@ -268,6 +273,130 @@ function buildHeatmapTiles(grid, strands) {
   grid.dataset.count = String(strands.length);
 }
 
+function applyTileVisual(tile, meta, k) {
+  const { col, healthy, bucket, pct } = meta;
+  const sat = !healthy ? 0.22 : (0.26 + 0.74 * Math.pow(k, 0.72));
+  const litRgb = desatObsidianRgb(col.rgb, sat);
+  const kAct = !healthy ? 0 : Math.max(0, (k - 0.12) / 0.88);
+  const rimRgb = kAct > 0.05 ? mixWhiteRgb(col.rgb, 0.36 + 0.24 * kAct) : litRgb;
+
+  const baseFill = !healthy ? 0.10
+    : (bucket === 'depleted' ? 0.16
+      : (bucket === 'cooling' ? 0.18 : (0.20 + (pct / 100) * 0.04)));
+  const fillAlpha = !healthy ? 0.10 : Math.min(0.82, baseFill + Math.pow(k, 0.84) * 0.58);
+
+  tile.style.setProperty('--sc-rgb', col.rgb);
+  tile.style.setProperty('--lit-rgb', litRgb);
+  tile.style.setProperty('--rim-rgb', rimRgb);
+  tile.style.setProperty('--heat-fill', fillAlpha.toFixed(2));
+  tile.style.setProperty('--heat-rim', (kAct > 0.05 ? 0.10 + 0.28 * Math.pow(kAct, 0.95) : 0).toFixed(3));
+  tile.style.setProperty('--heat-halo', (kAct > 0.05 ? 0.14 + 0.44 * Math.pow(kAct, 0.90) : 0).toFixed(3));
+  tile.style.setProperty('--heat-blur', `${Math.round(10 + 8 * kAct)}px`);
+  tile.style.setProperty('--heat-spark-op', (0.44 + 0.34 * kAct).toFixed(2));
+  tile.style.setProperty('--heat-label-op', (!healthy ? 0.48 : (0.80 + k * 0.20)).toFixed(2));
+}
+
+function applyRibbonVisual(ribK) {
+  const ribSat = 0.24 + 0.50 * Math.pow(ribK, 0.88);
+  const ribFill = (0.20 + 0.26 * Math.pow(ribK, 0.90)).toFixed(2);
+  const ribScope = $('#spec-ribbon-scope');
+  if (ribScope) {
+    const rLit = desatObsidianRgb(SPECTRUM_STOPS[0], ribSat);
+    const gLit = desatObsidianRgb(SPECTRUM_STOPS[3], ribSat);
+    const bLit = desatObsidianRgb(SPECTRUM_STOPS[5], ribSat);
+    const vLit = desatObsidianRgb(SPECTRUM_STOPS[6], ribSat);
+    const sA = (0.02 + 0.10 * Math.pow(ribK, 1.15)).toFixed(3);
+    const vA = (0.015 + 0.07 * Math.pow(ribK, 1.20)).toFixed(3);
+    const blur1 = Math.round(5 + 4 * ribK);
+    const blur2 = Math.round(8 + 4 * ribK);
+    ribScope.style.setProperty('--ribbon-fill', ribFill);
+    ribScope.style.setProperty('--ribbon-shadow',
+      `-4px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
+      `0 0 ${blur1}px rgba(${gLit}, ${sA}), ` +
+      `4px 0 ${blur1}px rgba(${bLit}, ${sA}), ` +
+      `6px 0 ${blur2}px rgba(${vLit}, ${vA}), ` +
+      `inset 0 0 0 0.5px rgba(0, 0, 0, 0.45)`
+    );
+  }
+  const mat = $('#pattern');
+  if (mat && mat.children.length > 0) {
+    const satKey = String(Math.round(ribSat * 60));
+    if (mat.dataset.satKey !== satKey) {
+      mat.dataset.satKey = satKey;
+      for (const tick of mat.children) {
+        if (tick._pureRgb) tick.style.setProperty('--tick-rgb', desatObsidianRgb(tick._pureRgb, ribSat));
+      }
+    }
+  }
+  return ribSat;
+}
+
+function stepSpectrumAnim(now) {
+  specRafId = null;
+  if (S.tab !== 'spectrum' || document.visibilityState === 'hidden') {
+    lastSpecTs = 0;
+    return;
+  }
+  const dt = lastSpecTs ? Math.min(0.1, Math.max(0.004, (now - lastSpecTs) / 1000)) : 0.016;
+  lastSpecTs = now;
+  const kEase = Math.min(1, 1 - Math.exp(-dt * 4.2));
+  let dirty = false;
+
+  const shouldPaint = (now - lastSpecPaintTs >= 33) || lastSpecPaintTs === 0;
+  const grid = $('#spectrum-heatmap');
+  const tiles = grid ? grid.children : [];
+
+  for (const tile of tiles) {
+    const meta = tile._specMeta;
+    if (!meta) continue;
+    const sm = tileSmooth.get(meta.id);
+    if (!sm) continue;
+    const d = sm.target - sm.cur;
+    if (Math.abs(d) > 0.002) {
+      sm.cur += d * kEase;
+      dirty = true;
+    } else {
+      sm.cur = sm.target;
+    }
+    if (shouldPaint) applyTileVisual(tile, meta, sm.cur);
+  }
+
+  if (ribSmooth.cur != null) {
+    const dr = ribSmooth.target - ribSmooth.cur;
+    if (Math.abs(dr) > 0.002) {
+      ribSmooth.cur += dr * kEase;
+      dirty = true;
+    } else {
+      ribSmooth.cur = ribSmooth.target;
+    }
+    if (shouldPaint) applyRibbonVisual(ribSmooth.cur);
+  }
+
+  if (shouldPaint) lastSpecPaintTs = now;
+  if (dirty) {
+    specRafId = requestAnimationFrame(stepSpectrumAnim);
+  } else {
+    lastSpecTs = 0;
+  }
+}
+
+export function startSpectrumAnim() {
+  if (S.tab !== 'spectrum' || typeof requestAnimationFrame !== 'function') return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  if (!specRafId) {
+    lastSpecTs = 0;
+    specRafId = requestAnimationFrame(stepSpectrumAnim);
+  }
+}
+
+export function stopSpectrumAnim() {
+  if (specRafId && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(specRafId);
+  }
+  specRafId = null;
+  lastSpecTs = 0;
+}
+
 function updateHeatmap(strands) {
   const grid = $('#spectrum-heatmap');
   if (!grid || !strands.length) return;
@@ -279,12 +408,15 @@ function updateHeatmap(strands) {
   let maxMbps = 0.05;
   let maxSlots = 6;
   const mbpsList = strands.map(s => {
-    const m = ((s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0)) * 8 / 1e6;
+    const raw = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
+    const ewma = (s.rate ?? s.now ?? 0) + (s.up ?? s.up_now ?? 0);
+    const m = ((raw * 0.45 + ewma * 0.55) * 8) / 1e6;
     if (m > maxMbps) maxMbps = m;
     if ((s.slots || 0) > maxSlots) maxSlots = s.slots;
     return m;
   });
   const slotCols = Math.min(18, Math.max(6, maxSlots));
+  const hasRaf = typeof globalThis.requestAnimationFrame === 'function';
 
   const tiles = grid.children;
   for (let i = 0; i < strands.length; i++) {
@@ -300,29 +432,25 @@ function updateHeatmap(strands) {
     const mbps = mbpsList[i];
     const rel = maxMbps > 0.12 ? mbps / maxMbps : 0;
     const absPulse = Math.min(1, Math.log10(1 + mbps * 6.5) / 1.48);
-    const k = !s.healthy ? 0.04 : Math.max(0.08, Math.min(1, Math.max(absPulse * 0.92, rel * 0.85) + (s.vip ? 0.08 : 0)));
-    const sat = !s.healthy ? 0.22 : (0.26 + 0.74 * Math.pow(k, 0.72));
-    const litRgb = desatObsidianRgb(col.rgb, sat);
-    const kAct = !s.healthy ? 0 : Math.max(0, (k - 0.12) / 0.88);
-    const rimRgb = kAct > 0.05 ? mixWhiteRgb(col.rgb, 0.36 + 0.24 * kAct) : litRgb;
-
-    const baseFill = !s.healthy ? 0.10
-      : (s.bucket === 'depleted' ? 0.16
-        : (s.bucket === 'cooling' ? 0.18 : (0.20 + (pct / 100) * 0.04)));
-    const fillAlpha = !s.healthy ? 0.10 : Math.min(0.82, baseFill + Math.pow(k, 0.84) * 0.58);
+    const targetK = !s.healthy ? 0.04 : Math.max(0.08, Math.min(1, Math.max(absPulse * 0.92, rel * 0.85) + (s.vip ? 0.08 : 0)));
 
     tile.classList.toggle('vip', !!s.vip);
     tile.classList.toggle('down', !s.healthy);
 
-    tile.style.setProperty('--sc-rgb', col.rgb);
-    tile.style.setProperty('--lit-rgb', litRgb);
-    tile.style.setProperty('--rim-rgb', rimRgb);
-    tile.style.setProperty('--heat-fill', fillAlpha.toFixed(2));
-    tile.style.setProperty('--heat-rim', (kAct > 0.05 ? 0.10 + 0.28 * Math.pow(kAct, 0.95) : 0).toFixed(3));
-    tile.style.setProperty('--heat-halo', (kAct > 0.05 ? 0.14 + 0.44 * Math.pow(kAct, 0.90) : 0).toFixed(3));
-    tile.style.setProperty('--heat-blur', `${Math.round(10 + 8 * kAct)}px`);
-    tile.style.setProperty('--heat-spark-op', (0.44 + 0.34 * kAct).toFixed(2));
-    tile.style.setProperty('--heat-label-op', (!s.healthy ? 0.48 : (0.80 + k * 0.20)).toFixed(2));
+    const meta = { id: s.id, col, healthy: !!s.healthy, bucket: s.bucket, pct };
+    tile._specMeta = meta;
+    let sm = tileSmooth.get(s.id);
+    if (!sm) {
+      sm = { cur: targetK, target: targetK };
+      tileSmooth.set(s.id, sm);
+      applyTileVisual(tile, meta, targetK);
+    } else {
+      sm.target = targetK;
+      if (!hasRaf) {
+        sm.cur = targetK;
+        applyTileVisual(tile, meta, targetK);
+      }
+    }
 
     tile.title = `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ↓${fmtShortRate(downBps)} ↑${fmtShortRate(upBps)} · pk ${fmtShortRate(s.peak)} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}% · slots ${s.slots ?? 0}`;
 
@@ -399,30 +527,16 @@ export function renderSpectrum() {
   // 2. Full-Page Gapless 21-Wavelength Matrix (unified obsidian saturation & glow)
   updateHeatmap(strands);
 
-  // 3. Modulate rainbow bar fill, obsidian saturation & 4-stop prism bloom smoothly with higher total-Mbps ceiling
-  const totMbps = (totBps * 8) / 1e6;
-  const ribK = totMbps > 0.05 ? Math.min(1, Math.max(0.06, Math.log10(1 + totMbps * 0.45) / 1.85)) : 0.06;
-  const ribSat = 0.24 + 0.50 * Math.pow(ribK, 0.88);
-  const ribFill = (0.20 + 0.26 * Math.pow(ribK, 0.90)).toFixed(2);
-  const ribScope = $('#spec-ribbon-scope');
-  if (ribScope) {
-    const rLit = desatObsidianRgb(SPECTRUM_STOPS[0], ribSat);
-    const gLit = desatObsidianRgb(SPECTRUM_STOPS[3], ribSat);
-    const bLit = desatObsidianRgb(SPECTRUM_STOPS[5], ribSat);
-    const vLit = desatObsidianRgb(SPECTRUM_STOPS[6], ribSat);
-    const sA = (0.02 + 0.10 * Math.pow(ribK, 1.15)).toFixed(3);
-    const vA = (0.015 + 0.07 * Math.pow(ribK, 1.20)).toFixed(3);
-    const blur1 = Math.round(5 + 4 * ribK);
-    const blur2 = Math.round(8 + 4 * ribK);
-    ribScope.style.setProperty('--ribbon-fill', ribFill);
-    ribScope.style.setProperty('--ribbon-shadow',
-      `-4px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
-      `0 0 ${blur1}px rgba(${gLit}, ${sA}), ` +
-      `4px 0 ${blur1}px rgba(${bLit}, ${sA}), ` +
-      `6px 0 ${blur2}px rgba(${vLit}, ${vA}), ` +
-      `inset 0 0 0 0.5px rgba(0, 0, 0, 0.45)`
-    );
+  // 3. Modulate rainbow bar fill, obsidian saturation & 4-stop prism bloom smoothly with EWMA blend + high ceiling
+  const ewmaTot = (st.rate_ewma ?? downNow) + (st.rate_up_ewma ?? upNow);
+  const totMbps = ((totBps * 0.45 + ewmaTot * 0.55) * 8) / 1e6;
+  const targetRibK = totMbps > 0.05 ? Math.min(1, Math.max(0.06, Math.log10(1 + totMbps * 0.45) / 1.85)) : 0.06;
+  const hasRaf = typeof globalThis.requestAnimationFrame === 'function';
+  ribSmooth.target = targetRibK;
+  if (ribSmooth.cur == null || !hasRaf) {
+    ribSmooth.cur = targetRibK;
   }
+  const ribSat = applyRibbonVisual(ribSmooth.cur);
 
   const ribDownEl = $('#ribbon-rate-down');
   if (ribDownEl) {
@@ -445,7 +559,7 @@ export function renderSpectrum() {
   const mat = $('#pattern');
   if (mat) {
     const sig = pat.join(',');
-    const satKey = String(Math.round(ribSat * 50));
+    const satKey = String(Math.round(ribSat * 60));
     if (mat.dataset.sig !== sig) {
       mat.dataset.sig = sig;
       mat.dataset.satKey = satKey;
@@ -477,4 +591,5 @@ export function renderSpectrum() {
 
   $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === getChartLimit()));
   syncStrandHighlight();
+  startSpectrumAnim();
 }

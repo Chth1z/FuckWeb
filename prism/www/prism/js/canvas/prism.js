@@ -10,6 +10,7 @@ import { $ } from '../dom.js?v=5.6.6';
 
 let rafId = null;
 let needsRedraw = true;
+let lastPrismTs = 0;
 
 export function markPrismDirty() {
   needsRedraw = true;
@@ -46,13 +47,21 @@ export function initPrismCanvas() {
   markPrismDirty();
 }
 
-function stepPrism() {
+function stepPrism(now) {
   rafId = null;
-  if (S.tab !== 'overview') return;
-  const stillAnimating = drawPrismFrame();
+  if (S.tab !== 'overview') {
+    lastPrismTs = 0;
+    return;
+  }
+  const ts = (typeof now === 'number' && now > 0) ? now : (globalThis.performance?.now?.() || Date.now());
+  const dt = lastPrismTs ? Math.min(0.08, Math.max(0.004, (ts - lastPrismTs) / 1000)) : 0.016;
+  lastPrismTs = ts;
+  const stillAnimating = drawPrismFrame(dt);
   if (stillAnimating || needsRedraw) {
     needsRedraw = false;
     rafId = requestAnimationFrame(stepPrism);
+  } else {
+    lastPrismTs = 0;
   }
 }
 
@@ -234,7 +243,7 @@ function drawFeatheredEdge(ctx, x0, y0, x1, y1, nx, ny, dist, rgb, alpha) {
   ctx.fill();
 }
 
-function drawPrismFrame() {
+function drawPrismFrame(dt = 0.016) {
   const canvas = $('#topo');
   if (!canvas) return false;
   const rect = canvas.getBoundingClientRect();
@@ -288,8 +297,20 @@ function drawPrismFrame() {
   const st = S.status || {};
   const strands = st.strands || [];
   const nStrands = Math.max(1, strands.length);
-  const totalRate = (st.rate || 0) + (st.rate_up || 0);
-  const totalMbps = (totalRate * 8) / 1e6;
+  const rawTotalRate = (st.rate || 0) + (st.rate_up || 0);
+  const ewmaTotalRate = (st.rate_ewma ?? st.rate ?? 0) + (st.rate_up_ewma ?? st.rate_up ?? 0);
+  const targetTotalMbps = ((rawTotalRate * 0.45 + ewmaTotalRate * 0.55) * 8) / 1e6;
+  if (S.prismTotalMbps == null) S.prismTotalMbps = targetTotalMbps;
+  const kEnv = Math.min(1, 1 - Math.exp(-dt * 4.8));
+  const dTot = targetTotalMbps - S.prismTotalMbps;
+  let stillMoving = false;
+  if (Math.abs(dTot) > 0.004) {
+    S.prismTotalMbps += dTot * kEnv;
+    stillMoving = true;
+  } else {
+    S.prismTotalMbps = targetTotalMbps;
+  }
+  const totalMbps = S.prismTotalMbps;
 
   S.hitBoxes = [];
 
@@ -349,16 +370,19 @@ function drawPrismFrame() {
   const farTopY = exitTopY + rightSpan * Math.tan(10.0 * Math.PI / 180);
   const farBotY = exitBotY + rightSpan * Math.tan(15.2 * Math.PI / 180);
 
-  let stillMoving = false;
   if (S.bandSmooth.length !== nStrands) {
     S.bandSmooth = new Array(nStrands).fill(null).map(() => ({ w: 1, alpha: 0.90, glow: 0.45 }));
   }
 
+  const kUp = Math.min(1, 1 - Math.exp(-dt * 5.2));
+  const kDown = Math.min(1, 1 - Math.exp(-dt * 3.0));
   const weights = [];
   let weightSum = 0;
   for (let i = 0; i < nStrands; i++) {
     const s = strands[i] || {};
-    const rateBps = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
+    const rawNowBps = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
+    const ewmaBps = (s.rate ?? s.now ?? 0) + (s.up ?? s.up_now ?? 0);
+    const rateBps = rawNowBps * 0.45 + ewmaBps * 0.55;
     const mbps = (rateBps * 8) / 1e6;
     const tokRatio = (s.tokens_pct ?? 100) / 100;
 
@@ -384,10 +408,10 @@ function drawPrismFrame() {
     const dw = targetW - sm.w;
     const da = targetAlpha - sm.alpha;
     const dg = targetGlow - sm.glow;
-    if (Math.abs(dw) > 0.003 || Math.abs(da) > 0.003 || Math.abs(dg) > 0.002) {
-      sm.w += dw * 0.18;
-      sm.alpha += da * 0.18;
-      sm.glow += dg * (dg > 0 ? 0.24 : 0.055);
+    if (Math.abs(dw) > 0.002 || Math.abs(da) > 0.002 || Math.abs(dg) > 0.002) {
+      sm.w += dw * kUp;
+      sm.alpha += da * kUp;
+      sm.glow += dg * (dg > 0 ? kUp : kDown);
       stillMoving = true;
     } else {
       sm.w = targetW;

@@ -136,16 +136,17 @@ function paintModuleHeat(m, h) {
   }
 }
 
-function paintAllModuleHeats(snap = false) {
+function paintAllModuleHeats(snap = false, dt = 0.033) {
   let dirty = false;
+  const ease = Math.min(1, 1 - Math.exp(-Math.max(0.004, dt) * 5.8));
   for (const key of Object.keys(moduleHeat)) {
     const m = moduleHeat[key];
     if (snap) {
       m.cur = m.target;
       paintModuleHeat(m, m.cur);
       dirty = true;
-    } else if (Math.abs(m.target - m.cur) > 0.004) {
-      m.cur += (m.target - m.cur) * 0.22;
+    } else if (Math.abs(m.target - m.cur) > 0.003) {
+      m.cur += (m.target - m.cur) * ease;
       paintModuleHeat(m, m.cur);
       dirty = true;
     }
@@ -802,20 +803,22 @@ function stepAnimation(now) {
     return;
   }
 
-  const dt = lastFrameTs ? Math.min(0.08, (now - lastFrameTs) / 1000) : 0.016;
+  const dt = lastFrameTs ? Math.min(0.08, Math.max(0.004, (now - lastFrameTs) / 1000)) : 0.016;
   lastFrameTs = now;
+  const kWave = Math.min(1, 1 - Math.exp(-dt * 5.2));
 
   for (let k = 0; k < waveState.length; k++) {
     const b = waveState[k];
-    b.vel += (b.targetVel - b.vel) * 0.1;
-    b.glow += (b.targetGlow - b.glow) * 0.1;
-    b.width += (b.targetWidth - b.width) * 0.1;
+    b.vel += (b.targetVel - b.vel) * kWave;
+    b.glow += (b.targetGlow - b.glow) * kWave;
+    b.width += (b.targetWidth - b.width) * kWave;
     b.phase = (b.phase + b.vel * dt) % 1.0;
   }
 
-  if (now - lastHeatPaintTs >= 66) {
+  const heatElapsed = now - lastHeatPaintTs;
+  if (heatElapsed >= 33) {
     lastHeatPaintTs = now;
-    paintAllModuleHeats(false);
+    paintAllModuleHeats(false, Math.min(0.1, heatElapsed / 1000));
   }
 
   renderWaveguidesCanvas();
