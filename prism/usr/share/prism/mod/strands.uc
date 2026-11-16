@@ -154,8 +154,10 @@ function probe(set, cfg) {
 				sloss = 1.0;
 			else if (tcp_rtt >= 0.90)
 				sloss = 0.50;
-			else if (pure - tcp_rtt >= 0.50)
-				sloss = 0.25;
+			else if (tcp_rtt >= 0.35 || pure - tcp_rtt >= 0.50)
+				sloss = 0.20;
+			else if (tcp_rtt >= 0.18 || pure - tcp_rtt >= 0.22)
+				sloss = 0.08;
 			res[m[1]] = { code, ttfb: pure, tcp_rtt, loss: sloss };
 		}
 	}

@@ -222,18 +222,14 @@ chain postrouting {
 
 #### 4. `Burst-Harvest 2.0` 權重計算函數 `POLICIES.harvest`（`weave.uc`）
 對收割池中的每條候選鏈路 $s$：
-1. **延遲與丟包指數懲罰因子 $Q_s$**：
-   - 找到當前池中最低延遲 $\text{TTFB}_{\min}$；
-   - 若 $\text{TTFB}_s > 0.70\text{s}$（代表發生了 SYN 重傳），令 $Q_s = 0.02$（熔斷隔離）；
-   - 否則 $Q_s = \exp\left(-\frac{\max(0, \text{TTFB}_s - \text{TTFB}_{\min})}{0.25}\right)$。
-2. **三態收割份額計算 $\text{Share}_s$**：
-   - 若處於 **`charged`（滿電態）**：
-     $$\text{Share}_s = 10.0 \times \left(\frac{\text{tokens}_s}{\text{BURST\_MAX}}\right)^2 \times Q_s$$
-   - 若處於 **`draining`（放電態）**：
-     $$\text{Share}_s = 2.5 \times \max\left(0.1, 1 - \frac{\text{Rate}_s}{\text{CIR}}\right) \times Q_s$$
-   - 若處於 **`cooldown`（冷卻態）**：
-     $$\text{Share}_s = 0.02 \quad (\text{僅保留單個保底槽位，停止注入新連接})$$
-3. 調用 `apportion()` 與 `interleave()`（平滑加權輪詢展開）生成 126 個槽位的 `@pattern` 並通過 `nft -f` 原子更新至內核。
+1. **三段式 Token-Bucket 狀態機與連續壅塞感知**：
+   - `update_buckets` 區分靜默（`< 960 Kbps` 全速回充）、輕載穩態（`[960 Kbps, 2.8 Mbps)` 維持部分上限而不誤耗盡）與突發耗盡區（`>= 2.8 Mbps` 模擬物理 `1.0 MB` 突發桶快速消耗至 `depleted` 進入冷卻）；
+   - `active_flows()` 僅統計最近 90 秒內仍有活躍報文的 `ESTABLISHED` TCP 流（剔除長連線閒置 keepalive 干擾）。
+2. **延遲與相對丟包平滑懲罰因子**：
+   - 延遲懲罰：取相對最低延遲偏差 $d = \min(8.0, \max(0, \text{TTFB}_s - \text{TTFB}_{\min}) / 0.10)$，令 $Q_s = \frac{1}{1 + 0.55 d}$；
+   - 相對丟包懲罰：$L_s = \frac{1}{1 + 18 r_s + 120 r_s^2}$（`rel_loss >= 14%` 時熔斷歸 `0`）。
+3. **三態收割份額計算 $\text{Share}_s$**：
+   - 結合 `idle_bias`（`1 / (1 + rate / 160000)`）與活躍流衰減 `flow_bias`（`1 / (1 + 0.08 * flows)`），經 `apportion()` 最大餘數整數化與 `interleave()` 平滑加權輪詢展開為 126 槽位。
 
 ---
 

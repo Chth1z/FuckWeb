@@ -32,7 +32,8 @@ export const MARK_VIP = 0x100;
 export const CIR_BYTES_S = 1250000;
 export const EFF_CIR_BYTES_S = 1050000; // ~8.4 Mbps steady-state TCP goodput under drop-tail policer
 export const BURST_MAX = 1000000;
-const IDLE_THRESH = 120000;             // < 960 Kbps: quiet, hardware bucket refills
+const IDLE_THRESH = 120000;             // < 960 Kbps: completely quiet, rapid full refill
+const SAFE_SUSTAIN = 350000;            // < 2.8 Mbps: below micro-burst exhaustion knee
 const CHARGED_THRESH = 750000;          // >= 750 KB: ready for full-speed 20 Mbps burst
 const EMPTY_THRESH = 150000;            // <= 150 KB: burst exhausted, entering policer clamp
 export const COOLDOWN_SEC = 2.0;
@@ -56,16 +57,25 @@ export function counters(set) {
 	return out;
 };
 
-// Count active ESTABLISHED kernel flows per strand ID from nf_conntrack so
-// Burst-Harvest avoids piling new connections onto strands busy with slow TCP flows.
+// Count recently-active ESTABLISHED kernel flows per strand ID from nf_conntrack,
+// ignoring long-lived idle TCP keepalives (>90s silent) so zombie sockets never
+// penalize an idle 100% charged strand.
 export function active_flows() {
 	let raw = core.read("/proc/net/nf_conntrack");
 	if (!raw)
 		return {};
+	let tcp_ttl_min = max(0, int(core.read("/proc/sys/net/netfilter/nf_conntrack_tcp_timeout_established") ?? "7200") - 90);
 	let counts = {};
 	for (let line in split(raw, "\n")) {
-		if (index(line, "ESTABLISHED") < 0)
+		let pe = index(line, " ESTABLISHED ");
+		if (pe < 0)
 			continue;
+		if (index(line, " tcp ") >= 0 && tcp_ttl_min > 0) {
+			let tail = split(trim(substr(line, max(0, pe - 8), 8)), / +/);
+			let ttl = length(tail) ? int(pop(tail)) : tcp_ttl_min;
+			if (ttl < tcp_ttl_min)
+				continue;
+		}
 		let p = index(line, " mark=");
 		if (p < 0)
 			continue;
@@ -78,9 +88,11 @@ export function active_flows() {
 
 // Advance each strand's virtual token bucket over elapsed `dt` seconds.
 // Reflects true hardware policer + TCP micro-burst behavior:
-//   - Quiet (< 150 KB/s): bucket refills at (CIR - rate) * dt up to 1.0 MB.
-//   - Active (>= 150 KB/s): TCP micro-bursts drain the 1.0 MB burst credit
-//     proportionally to load, clamping at the spare headroom ceiling.
+//   - Quiet (< 960 Kbps): bucket refills rapidly toward 1.0 MB.
+//   - Light steady (< 2.8 Mbps): bucket net-refills slowly up to a partial cap
+//     instead of falsely collapsing into `depleted`.
+//   - Heavy burst (>= 2.8 Mbps): micro-bursts drain Bc toward `depleted` before
+//     CUBIC hits the drop-tail policer wall.
 export function update_buckets(load, dt, now) {
 	if (dt <= 0)
 		return;
@@ -98,12 +110,16 @@ export function update_buckets(load, dt, now) {
 			let refilled = (CIR_BYTES_S - rate_eff) * dt * factor;
 			b.tokens = min(BURST_MAX, int(b.tokens + refilled));
 		}
+		else if (rate_eff < SAFE_SUSTAIN) {
+			let cap = int(BURST_MAX * (1.0 - 0.30 * rate_eff / (1.0 * EFF_CIR_BYTES_S)));
+			let delta = int((SAFE_SUSTAIN - rate_eff) * dt * 0.65);
+			b.tokens = max(0, min(cap, b.tokens + delta));
+		}
 		else {
-			let drain = int(rate_eff * dt * 0.95);
+			let drain = int(max(80000, rate_eff - 200000) * dt);
 			let cap = int(BURST_MAX * max(0.0, 1.0 - (rate_eff / (1.0 * EFF_CIR_BYTES_S))));
 			b.tokens = max(0, min(cap, b.tokens - drain));
-			if (rate_eff >= 220000)
-				b.cooldown_until = now + COOLDOWN_SEC;
+			b.cooldown_until = now + COOLDOWN_SEC;
 		}
 
 		if (rate_eff >= EFF_CIR_BYTES_S * 0.72 || b.tokens <= EMPTY_THRESH) {
@@ -112,7 +128,7 @@ export function update_buckets(load, dt, now) {
 		else if (rate_eff < IDLE_THRESH && (now < (b.cooldown_until ?? 0) || b.tokens < CHARGED_THRESH)) {
 			b.state = "cooling";
 		}
-		else if (b.tokens >= CHARGED_THRESH && rate_eff < IDLE_THRESH) {
+		else if (b.tokens >= CHARGED_THRESH && rate_eff < SAFE_SUSTAIN) {
 			b.state = "charged";
 		}
 		else {
@@ -140,6 +156,14 @@ function loss_baseline(strands) {
 	return { active: floor < 0.90, floor };
 }
 
+function rel_loss(lb, s) {
+	return lb.active ? max(0.0, (s.loss ?? 0.0) - lb.floor * 0.5) : 0.0;
+}
+
+function loss_quality(rel) {
+	return 1.0 / (1.0 + 18.0 * rel + 120.0 * rel * rel);
+}
+
 // Pick the lowest-loss, lowest-TTFB, uncongested strand for @vip_lane with
 // tight hysteresis: stays sticky during an active session while loss remains
 // clean, latency stays within max(best + 40ms, 1.45 * best_ttfb), and sustained
@@ -153,7 +177,6 @@ export function select_vip(healthy, load, mptcp_ids) {
 	if (!length(candidates))
 		candidates = healthy;
 	let lb = loss_baseline(candidates);
-	let eff_loss = (s) => lb.active ? max(0.0, (s.loss ?? 0.0) - lb.floor * 0.5) : 0.0;
 	let best = candidates[0], best_score = 1e9, min_ttfb = 10.0;
 	let prefer_vwan = length(candidates) >= 4;
 	for (let s in candidates) {
@@ -161,10 +184,10 @@ export function select_vip(healthy, load, mptcp_ids) {
 		let rate = max(load?.[s.dev]?.down?.now ?? 0, load?.[s.dev]?.down?.rate ?? 0, (load?.[s.dev]?.up?.now ?? 0) * 1.2);
 		if (rate < IDLE_THRESH && ttfb < min_ttfb)
 			min_ttfb = ttfb;
-		let loss_pen = eff_loss(s) * 2500.0; // +25 ms score per 1% relative loss
+		let loss_pen = rel_loss(lb, s) * 2500.0; // +25 ms score per 1% relative loss
 		let wan_pen = (prefer_vwan && s.id == 1) ? 15.0 : 0.0;
 		let mp_pen = (mptcp_ids?.[s.id] || mptcp_ids?.["" + s.id]) ? 6.0 : 0.0;
-		let score = ttfb * 1000.0 + loss_pen + (rate / 256.0) + wan_pen + mp_pen;
+		let score = ttfb * 1000.0 + loss_pen + (rate / 4096.0) + wan_pen + mp_pen;
 		if (score < best_score) {
 			best_score = score;
 			best = s;
@@ -182,7 +205,7 @@ export function select_vip(healthy, load, mptcp_ids) {
 			let cur_now = max(load?.[cur.dev]?.down?.now ?? 0, (load?.[cur.dev]?.up?.now ?? 0) * 1.2);
 			let cur_ewma = max(load?.[cur.dev]?.down?.rate ?? 0, (load?.[cur.dev]?.up?.rate ?? 0) * 1.2);
 			let limit = max(min_ttfb + 0.040, min_ttfb * 1.45);
-			let loss_ok = eff_loss(cur) <= max(0.05, lb.floor * 0.5 + 0.04);
+			let loss_ok = rel_loss(lb, cur) <= max(0.05, lb.floor * 0.5 + 0.04);
 			let load_ok = !(cur_ewma >= 250000 && cur_now >= 200000) && cur_now < 650000;
 			let role_ok = !prefer_vwan || cur.id != 1 || best.id == 1;
 			if (loss_ok && ttfb <= limit && load_ok && role_ok)
@@ -250,8 +273,8 @@ const POLICIES = {
 				min_ttfb = s.ttfb;
 			let l = load[s.dev] ?? {}, b = l.bucket ?? { tokens: BURST_MAX, state: "charged" };
 			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, (l.up?.now ?? 0) * 1.2, (l.up?.rate ?? 0) * 1.2);
-			let rel_loss = lb.active ? max(0.0, (s.loss ?? 0.0) - lb.floor * 0.5) : 0.0;
-			if (b.state != "depleted" && rate < EFF_CIR_BYTES_S * 0.65 && rel_loss < 0.14)
+			let rl = rel_loss(lb, s);
+			if (b.state != "depleted" && rate < EFF_CIR_BYTES_S * 0.65 && rl < 0.14)
 				clean_active++;
 		}
 		if (min_ttfb >= 10.0)
@@ -261,30 +284,31 @@ const POLICIES = {
 			let l = load[s.dev] ?? {};
 			let b = l.bucket ?? { tokens: BURST_MAX, state: "charged" };
 			let ttfb = (s.ttfb && s.ttfb > 0) ? s.ttfb : 0.035;
-			let d = min(2.0, max(0.0, ttfb - min_ttfb) / 0.10);
-			let q = 1.0 / (1.0 + 0.35 * d);
-			let rel_loss = lb.active ? max(0.0, (s.loss ?? 0.0) - lb.floor * 0.5) : 0.0;
-			let loss_q = 1.0 / (1.0 + 18.0 * rel_loss + 120.0 * rel_loss * rel_loss);
+			let d = min(8.0, max(0.0, ttfb - min_ttfb) / 0.10);
+			let q = 1.0 / (1.0 + 0.55 * d);
+			let rl = rel_loss(lb, s);
+			let lq = loss_quality(rl);
 			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, (l.up?.now ?? 0) * 1.2, (l.up?.rate ?? 0) * 1.2);
 			let ratio = b.tokens / (1.0 * BURST_MAX);
 
 			// Shield heavily losing (>=14% relative loss) or depleted strands when
 			// healthier clean alternatives exist, avoiding CUBIC SYN/CWND stalls.
-			if (b.state == "depleted" || rate >= EFF_CIR_BYTES_S * 0.65 || rel_loss >= 0.14)
-				return clean_active > 0 ? 0 : max(FLOOR, (1.0 - rate / (1.5 * EFF_CIR_BYTES_S)) * loss_q);
+			if (b.state == "depleted" || rate >= EFF_CIR_BYTES_S * 0.65 || rl >= 0.14)
+				return clean_active > 0 ? 0 : max(FLOOR, (1.0 - rate / (1.5 * EFF_CIR_BYTES_S)) * lq);
 			let af = l.flows ?? 0;
-			let flow_bias = 1.0 / (1.0 + 0.15 * af);
-			let idle_bias = 1.0 / (1.0 + rate / 25000.0);
+			let flow_bias = 1.0 / (1.0 + 0.08 * af);
+			let idle_bias = 1.0 / (1.0 + rate / 160000.0);
 			if (b.state == "cooling")
-				return max(FLOOR, 1.8 * ratio * q * loss_q * idle_bias * flow_bias);
+				return max(FLOOR, 1.8 * ratio * q * lq * idle_bias * flow_bias);
 			if (b.state == "charged")
-				return max(FLOOR, 10.0 * ratio * ratio * q * loss_q * idle_bias * flow_bias);
+				return max(FLOOR, 10.0 * ratio * ratio * q * lq * idle_bias * flow_bias);
 			let rem = max(0.10, 1.0 - rate / (1.0 * EFF_CIR_BYTES_S));
-			return max(FLOOR, 3.5 * rem * q * loss_q * idle_bias * flow_bias);
+			return max(FLOOR, 3.5 * rem * q * lq * idle_bias * flow_bias);
 		}), nslots);
 	},
 
 	headroom: function(strands, load, nslots, cfg) {
+		let lb = loss_baseline(strands);
 		let top = { down: MIN_CEILING, up: MIN_CEILING };
 		for (let dir in [ "down", "up" ]) {
 			if (cfg.strand_kbit > 0) {
@@ -296,8 +320,9 @@ const POLICIES = {
 		}
 		return apportion(map(strands, (s) => {
 			let l = load[s.dev] ?? {};
+			let lq = loss_quality(rel_loss(lb, s));
 			let used = max((l.down?.rate ?? 0) / top.down, (l.up?.rate ?? 0) / top.up);
-			return max(1 - used, FLOOR);
+			return max(1 - used, FLOOR) * lq;
 		}), nslots);
 	},
 
