@@ -77,15 +77,26 @@ function renderTileSpark(tile, dev) {
   }
   const scaleMax = peakBps * 1.10;
 
+  const gId = `sp-grad-${String(dev).replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  svg.appendChild(
+    svgEl('defs', {},
+      svgEl('linearGradient', { id: gId, x1: '0', y1: '0', x2: '0', y2: '1' },
+        svgEl('stop', { offset: '0%', 'stop-color': 'rgba(255, 255, 255, 0.13)' }),
+        svgEl('stop', { offset: '68%', 'stop-color': 'rgba(255, 255, 255, 0.04)' }),
+        svgEl('stop', { offset: '100%', 'stop-color': 'rgba(255, 255, 255, 0)' })
+      )
+    )
+  );
+
   const dDown = sparkPathCoords(slDown, scaleMax);
   const dArea = `${dDown} L100.0,32.0 L0.0,32.0 Z`;
-  svg.appendChild(svgEl('path', { d: dArea, fill: 'rgba(255, 255, 255, 0.11)' }));
+  svg.appendChild(svgEl('path', { d: dArea, fill: `url(#${gId})` }));
 
   if (slUp.length === slDown.length && slUp.some(v => v > 0)) {
     svg.appendChild(svgEl('path', {
       d: sparkPathCoords(slUp, scaleMax),
       fill: 'none',
-      stroke: 'rgba(255, 255, 255, 0.24)',
+      stroke: 'rgba(255, 255, 255, 0.22)',
       'stroke-width': '0.85'
     }));
   }
@@ -93,8 +104,8 @@ function renderTileSpark(tile, dev) {
   svg.appendChild(svgEl('path', {
     d: dDown,
     fill: 'none',
-    stroke: 'rgba(255, 255, 255, 0.48)',
-    'stroke-width': '1.2'
+    stroke: 'rgba(255, 255, 255, 0.40)',
+    'stroke-width': '1.1'
   }));
 }
 

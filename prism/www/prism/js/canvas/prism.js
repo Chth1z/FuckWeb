@@ -5,7 +5,7 @@
  * bands (no curves, no core lines, no particles), zero shadowBlur lag.
  * ============================================================================ */
 
-import { S, SPECTRUM_STOPS, spectralColor, parseRgb, mixWhiteRgb, desatObsidianRgb, fmtRate } from '../state.js?v=5.6.6';
+import { S, spectralColor, parseRgb, mixWhiteRgb, desatObsidianRgb, fmtRate } from '../state.js?v=5.6.6';
 import { $ } from '../dom.js?v=5.6.6';
 
 let rafId = null;
@@ -298,8 +298,8 @@ function drawPrismFrame() {
   const incidentAngle = 14.5 * Math.PI / 180;
   const startX = 0;
   const startY = entryY + entryX * Math.tan(incidentAngle);
-  const beamHalf = Math.min(4.6, 1.5 + Math.sqrt(Math.max(0, totalMbps)) * 0.30);
-  const beamGlowHalf = beamHalf * (6.2 + Math.min(2.8, totalMbps * 0.05));
+  const beamHalf = Math.min(4.2, 1.45 + Math.sqrt(Math.max(0, totalMbps)) * 0.28);
+  const beamGlowHalf = beamHalf * (5.6 + Math.min(2.4, totalMbps * 0.04));
 
   // Normal vector & unit direction to incident beam
   const bLen = Math.hypot(entryX - startX, entryY - startY) || 1;
@@ -311,8 +311,8 @@ function drawPrismFrame() {
   const beamEndY = entryY + uy * 90;
 
   // Dual-tier Gaussian-feathered optical photon bloom clipped flush to prism's left crystal face
-  const outerGlowAlpha = Math.min(0.46, 0.24 + Math.sqrt(Math.max(0, totalMbps)) * 0.032);
-  const innerGlowAlpha = Math.min(0.54, 0.32 + Math.sqrt(Math.max(0, totalMbps)) * 0.036);
+  const outerGlowAlpha = Math.min(0.34, 0.18 + Math.sqrt(Math.max(0, totalMbps)) * 0.026);
+  const innerGlowAlpha = Math.min(0.44, 0.26 + Math.sqrt(Math.max(0, totalMbps)) * 0.030);
   ctx.save();
   clipSlopeHalfPlane(ctx, topX, topY, leftX, leftY, -1, W, H);
   ctx.save();
@@ -414,11 +414,11 @@ function drawPrismFrame() {
   const rxBot = exitBotX - (botDx / botLen) * 65;
   const ryBot = exitBotY - (botDy / botLen) * 65;
 
-  // Wide volumetric spectral aura radiating out around & through the rainbow light beam
+  // Soft slope-aligned outer atmospheric glow along Red (top) & Violet (bottom) — zero sharp polygon seams
   const anyHover = S.hoverStrand !== null;
   if (!anyHover) {
-    const outerReach = Math.min(68, 36 + Math.sqrt(Math.max(0, totalMbps)) * 4.2);
-    const outerAlpha = Math.min(0.44, 0.26 + Math.sqrt(Math.max(0, totalMbps)) * 0.032);
+    const outerReach = Math.min(48, 26 + Math.sqrt(Math.max(0, totalMbps)) * 3.0);
+    const outerAlpha = Math.min(0.28, 0.14 + Math.sqrt(Math.max(0, totalMbps)) * 0.022);
     const colTop = spectralColor(0, nStrands);
     const colBot = spectralColor(nStrands - 1, nStrands);
 
@@ -539,34 +539,9 @@ function drawPrismFrame() {
     });
   }
 
-  // Broad atmospheric spectral sheet glow & luminous prism-exit dispersion shimmer
+  // Subtle prism-exit optical shimmer & soft hover strand bloom (slope-aligned, never clipped polygon bands)
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  const beamMidX = (exitTopX + W) * 0.5;
-  const beamExitMidY = (exitTopY + exitBotY) * 0.5;
-  const beamFarMidY = (farTopY + farBotY) * 0.5;
-  const haloSpanExit = (exitBotY - exitTopY) * 0.5 + 22;
-  const haloSpanFar = (farBotY - farTopY) * 0.5 + 40;
-  const midSpan = (haloSpanExit + haloSpanFar) * 0.5;
-  const midCenterY = (beamExitMidY + beamFarMidY) * 0.5;
-  const sheetA = anyHover ? 0.06 : Math.min(0.22, 0.13 + Math.sqrt(Math.max(0, totalMbps)) * 0.022);
-  const sheetGrad = ctx.createLinearGradient(beamMidX, midCenterY - midSpan, beamMidX, midCenterY + midSpan);
-  sheetGrad.addColorStop(0.00, 'rgba(239, 68, 68, 0)');
-  SPECTRUM_STOPS.forEach((rgb, idx) => {
-    const pos = 0.14 + (idx / Math.max(1, SPECTRUM_STOPS.length - 1)) * 0.72;
-    sheetGrad.addColorStop(pos, `rgba(${rgb}, ${sheetA.toFixed(3)})`);
-  });
-  sheetGrad.addColorStop(1.00, 'rgba(139, 92, 246, 0)');
-  ctx.fillStyle = sheetGrad;
-  ctx.beginPath();
-  ctx.moveTo(rxTop, beamExitMidY - haloSpanExit);
-  ctx.lineTo(W, beamFarMidY - haloSpanFar);
-  ctx.lineTo(W, beamFarMidY + haloSpanFar);
-  ctx.lineTo(rxBot, beamExitMidY + haloSpanExit);
-  ctx.closePath();
-  ctx.fill();
-
-  // Warm optical shimmer right along crystal right-bevel exit
   const eDx = exitBotX - exitTopX;
   const eDy = exitBotY - exitTopY;
   const eLen = Math.hypot(eDx, eDy) || 1;
@@ -575,26 +550,26 @@ function drawPrismFrame() {
     exitTopX, exitTopY,
     exitBotX, exitBotY,
     eDy / eLen, -eDx / eLen,
-    Math.max(14, side * 0.075),
-    '228, 242, 255',
-    anyHover ? 0.10 : 0.24
+    Math.max(10, side * 0.055),
+    '220, 236, 252',
+    anyHover ? 0.07 : 0.14
   );
 
-  // Soft radiant optical aura when hovering an individual strand
+  // Calm Gaussian optical aura when hovering an individual strand
   if (anyHover) {
     for (let i = 0; i < bandGeoms.length; i++) {
       const b = bandGeoms[i];
       if (!b.isHover) continue;
       const bandMidThick = ((b.by0Bot - b.by0Top) + (b.y1Bot - b.y1Top)) * 0.5;
-      const bloomPad = Math.max(22, bandMidThick * 2.2);
+      const bloomPad = Math.max(18, bandMidThick * 2.0);
       const tDx = W - b.bx0Top;
       const tDy = b.y1Top - b.by0Top;
       const tLen = Math.hypot(tDx, tDy) || 1;
-      drawFeatheredEdge(ctx, b.bx0Top, b.by0Top, W, b.y1Top, tDy / tLen, -tDx / tLen, bloomPad, b.col.rgb, 0.34);
+      drawFeatheredEdge(ctx, b.bx0Top, b.by0Top, W, b.y1Top, tDy / tLen, -tDx / tLen, bloomPad, b.col.rgb, 0.24);
       const bDx = W - b.bx0Bot;
       const bDy = b.y1Bot - b.by0Bot;
       const bLen = Math.hypot(bDx, bDy) || 1;
-      drawFeatheredEdge(ctx, b.bx0Bot, b.by0Bot, W, b.y1Bot, -bDy / bLen, bDx / bLen, bloomPad, b.col.rgb, 0.34);
+      drawFeatheredEdge(ctx, b.bx0Bot, b.by0Bot, W, b.y1Bot, -bDy / bLen, bDx / bLen, bloomPad, b.col.rgb, 0.24);
     }
   }
   ctx.restore();
@@ -635,8 +610,8 @@ function drawPrismFrame() {
     ctx.fill();
     ctx.restore();
   };
-  castInwardBevel(Math.max(12, side * 0.088), 'rgba(130, 192, 214, 0.42)');
-  castInwardBevel(Math.max(3, side * 0.018), 'rgba(196, 232, 240, 0.32)');
+  castInwardBevel(Math.max(12, side * 0.088), 'rgba(130, 192, 214, 0.34)');
+  castInwardBevel(Math.max(3, side * 0.018), 'rgba(196, 232, 240, 0.24)');
 
   const exitMidX = (exitTopX + exitBotX) * 0.5;
   const exitMidY = (exitTopY + exitBotY) * 0.5;
@@ -647,16 +622,16 @@ function drawPrismFrame() {
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
   const wedgeGrad = ctx.createLinearGradient(entryX, entryY, exitMidX, exitMidY);
-  wedgeGrad.addColorStop(0.00, 'rgba(255, 255, 255, 0.90)');
-  wedgeGrad.addColorStop(0.12, 'rgba(228, 240, 252, 0.60)');
-  wedgeGrad.addColorStop(0.28, 'rgba(186, 214, 240, 0.30)');
-  wedgeGrad.addColorStop(0.48, 'rgba(146, 182, 218, 0.12)');
-  wedgeGrad.addColorStop(0.70, 'rgba(116, 156, 198, 0.035)');
+  wedgeGrad.addColorStop(0.00, 'rgba(255, 255, 255, 0.86)');
+  wedgeGrad.addColorStop(0.12, 'rgba(228, 240, 252, 0.56)');
+  wedgeGrad.addColorStop(0.28, 'rgba(186, 214, 240, 0.28)');
+  wedgeGrad.addColorStop(0.48, 'rgba(146, 182, 218, 0.11)');
+  wedgeGrad.addColorStop(0.70, 'rgba(116, 156, 198, 0.03)');
   wedgeGrad.addColorStop(0.88, 'rgba(100, 142, 188, 0.008)');
   wedgeGrad.addColorStop(1.00, 'rgba(100, 142, 188, 0.0)');
 
-  ctx.shadowColor = 'rgba(205, 232, 255, 0.30)';
-  ctx.shadowBlur = Math.max(8, side * 0.030);
+  ctx.shadowColor = 'rgba(205, 232, 255, 0.24)';
+  ctx.shadowBlur = Math.max(7, side * 0.025);
   ctx.beginPath();
   ctx.moveTo(entryX - 1.5, wEntTopY);
   ctx.lineTo(exitTopX, exitTopY);

@@ -2,7 +2,7 @@
  * PRISM 5.0 — View 01: Standalone Dark Side of the Moon Optical Overview
  * ============================================================================ */
 
-import { S, spectralColor, parseRgb, desatObsidianRgb, fmtRate, fmtBytes } from '../state.js?v=5.6.6';
+import { S, spectralColor, parseRgb, desatObsidianRgb, opticalLoad, fmtRate, fmtBytes } from '../state.js?v=5.6.6';
 import { $, el } from '../dom.js?v=5.6.6';
 import { markPrismDirty } from '../canvas/prism.js?v=5.6.6';
 
@@ -80,7 +80,7 @@ export function renderOverview() {
   for (const x of strands) {
     if ((x.peak || 0) > peakBps) peakBps = x.peak;
   }
-  const rateScale = (bps) => (bps > 64 ? Math.min(1, Math.max(0.14, Math.log10(1 + ((bps * 8) / 1e6) * 6) / 1.45)) : 0.10);
+  const rateScale = (bps) => opticalLoad(bps, 6, 0.10);
   const downK = rateScale(st.rate || 0);
   const upK = rateScale(st.rate_up || 0);
   const loadK = rateScale((st.rate || 0) + (st.rate_up || 0));

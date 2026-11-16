@@ -1198,7 +1198,7 @@ export function renderBlueprint() {
       const passed = matched.filter(c => c.ok).length;
       const allOk = matched.length === 0 || passed === matched.length;
       gFrag.appendChild(el('div', { class: `guard-inv-cell ${allOk ? 'ok' : 'bad'}` },
-        el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: '0', overflow: 'hidden' } },
+        el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '5px', minWidth: '0' } },
           el('span', { class: `run-dot ${allOk ? 'violet' : 'crimson'}` }),
           el('span', { class: 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, grp.label)
         ),

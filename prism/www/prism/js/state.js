@@ -79,6 +79,13 @@ export function desatObsidianRgb(rgb, sat = 1) {
   return `${mix(r, 52)}, ${mix(g, 58)}, ${mix(b, 72)}`;
 }
 
+// Shared logarithmic perceptual throughput curve (0..1) across Overview / Blueprint / Spectrum / Terminal
+export function opticalLoad(bps, scale = 6, floor = 0.08) {
+  if (!bps || bps <= 64) return floor;
+  const mbps = (bps * 8) / 1e6;
+  return Math.min(1, Math.max(floor, 0.10 + Math.log10(1 + mbps * scale) / 1.45));
+}
+
 export function spectralColor(idx, total) {
   const t = Math.max(0, Math.min(1, idx / Math.max(1, total - 1)));
   const scaled = t * (DSOTM_STOPS.length - 1);

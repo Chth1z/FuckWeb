@@ -2,7 +2,7 @@
  * PRISM — View 04: Merged Wide Device Policy Matrix & Live Flows Explorer
  * ============================================================================ */
 
-import { S, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.6.6';
+import { S, desatObsidianRgb, opticalLoad, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.6.6';
 import { $, $$, el } from '../dom.js?v=5.6.6';
 import { write, openLoginModal } from '../api.js?v=5.6.6';
 
@@ -27,8 +27,7 @@ function deviceTileVisual(policy, online, bps) {
   const baseRgb = policy === 'auto'
     ? (bps > 400 ? '100, 174, 245' : '87, 209, 146')
     : (POLICY_META[policy]?.rgb || '100, 174, 245');
-  const mbps = (bps * 8) / 1e6;
-  const k = bps > 64 ? Math.min(1, Math.max(0.14, Math.log10(1 + mbps * 6) / 1.45)) : 0.10;
+  const k = opticalLoad(bps, 6, 0.10);
   const sat = 0.24 + 0.76 * Math.pow(k, 0.78);
   return {
     scRgb: baseRgb,

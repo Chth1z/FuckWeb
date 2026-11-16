@@ -51,10 +51,24 @@
     #3b82f6 84%,
     #8b5cf6 100%);
   --prism-rainbow-shadow:
-    -8px 0 22px rgba(232, 93, 80, 0.16),
-    0 0 22px rgba(87, 209, 146, 0.15),
-    8px 0 24px rgba(100, 174, 245, 0.18),
-    12px 0 32px rgba(170, 142, 240, 0.14);
+    -5px 0 14px rgba(232, 93, 80, 0.14),
+    0 0 14px rgba(87, 209, 146, 0.12),
+    5px 0 16px rgba(100, 174, 245, 0.16),
+    8px 0 20px rgba(170, 142, 240, 0.12);
+  /* Smooth C-infinity obsidian scrim & unified ink/tray surface tokens */
+  --prism-surface-scrim: linear-gradient(180deg,
+    rgba(4, 6, 12, 0.24) 0%,
+    rgba(4, 6, 12, 0.13) 12%,
+    rgba(4, 6, 12, 0.04) 26%,
+    rgba(4, 6, 12, 0.00) 42%,
+    rgba(4, 6, 12, 0.00) 58%,
+    rgba(4, 6, 12, 0.05) 74%,
+    rgba(4, 6, 12, 0.16) 88%,
+    rgba(4, 6, 12, 0.30) 100%);
+  --ink-shadow:    0 1px 3px rgba(0, 0, 0, 0.96), 0 0 8px rgba(0, 0, 0, 0.80);
+  --ink-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.94);
+  --tray-bg:       rgba(4, 6, 12, 0.56);
+  --tray-inset:    inset 0 0 0 0.5px rgba(0, 0, 0, 0.50);
   --c-amber-dim:   rgba(235, 154, 94, 0.14);
   --c-amber-glow:  rgba(235, 154, 94, 0.42);
 
