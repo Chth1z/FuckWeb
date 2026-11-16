@@ -59,6 +59,26 @@ const DSOTM_STOPS = [
   [139,  92, 246]  // Violet (380nm)
 ];
 
+export const SPECTRUM_STOPS = DSOTM_STOPS.map(s => `${s[0]}, ${s[1]}, ${s[2]}`);
+
+export function parseRgb(rgb) {
+  return String(rgb).split(',').map(v => Number(v.trim()) || 0);
+}
+
+export function mixWhiteRgb(rgb, whiteMix = 0.60) {
+  const [r, g, b] = parseRgb(rgb);
+  const mix = (c) => Math.round(c + (255 - c) * whiteMix);
+  return `${mix(r)}, ${mix(g)}, ${mix(b)}`;
+}
+
+// Unified PRISM obsidian desaturation curve: shifts idle hues smoothly toward obsidian slate rgb(52, 58, 72)
+export function desatObsidianRgb(rgb, sat = 1) {
+  const [r, g, b] = parseRgb(rgb);
+  const s = Math.max(0, Math.min(1, sat));
+  const mix = (c, base) => Math.round(base + (c - base) * s);
+  return `${mix(r, 52)}, ${mix(g, 58)}, ${mix(b, 72)}`;
+}
+
 export function spectralColor(idx, total) {
   const t = Math.max(0, Math.min(1, idx / Math.max(1, total - 1)));
   const scaled = t * (DSOTM_STOPS.length - 1);

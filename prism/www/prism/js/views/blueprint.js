@@ -2,7 +2,7 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, spectralColor, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6';
+import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6';
 import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.6';
 import { write, call } from '../api.js?v=5.6.6';
 
@@ -28,16 +28,6 @@ const liveFlow = {
 };
 
 // Dynamic optical saturation & glow state per pipeline card (0 = obsidian standby -> 1 = active hotspot)
-const SPECTRUM_STOPS = [
-  '239, 68, 68',
-  '249, 115, 22',
-  '250, 204, 21',
-  '34, 197, 94',
-  '6, 182, 212',
-  '59, 130, 246',
-  '139, 92, 246'
-];
-
 const moduleHeat = {
   guard:   { id: '#bp-card-guard',   kind: 'mono', rgb: '170, 142, 240', cur: 0.14, target: 0.14 },
   pregate: { id: '#bp-card-pregate', kind: 'spectrum', cur: 0.16, target: 0.16 },
@@ -87,24 +77,6 @@ function relBox(elNode, rootRect) {
     right: r.right - rootRect.left,
     bottom: r.bottom - rootRect.top
   };
-}
-
-function parseRgb(rgb) {
-  return String(rgb).split(',').map(v => Number(v.trim()) || 0);
-}
-
-function mixWhiteRgb(rgb, whiteMix = 0.60) {
-  const [r, g, b] = parseRgb(rgb);
-  const mix = (c) => Math.round(c + (255 - c) * whiteMix);
-  return `${mix(r)}, ${mix(g)}, ${mix(b)}`;
-}
-
-// Blend chromatic hue down toward dark obsidian slate when flow is idle/low (mirrors 03 光譜)
-function desatObsidianRgb(rgb, sat = 1) {
-  const [r, g, b] = parseRgb(rgb);
-  const s = Math.max(0, Math.min(1, sat));
-  const mix = (c, base) => Math.round(base + (c - base) * s);
-  return `${mix(r, 52)}, ${mix(g, 58)}, ${mix(b, 72)}`;
 }
 
 // Drive per-module border saturation and bloom luminance from hotspot intensity (0..1)

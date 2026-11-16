@@ -211,6 +211,17 @@ export function renderOscilloscope(activeStrand = lastFocus) {
     cursorLine.setAttribute('x2', cx);
     cursorLine.setAttribute('visibility', 'visible');
     if (tip) {
+      if (lastFocus) {
+        tip.classList.remove('spectrum');
+        tip.style.borderColor = lastFocus.css;
+        tip.style.borderImage = 'none';
+        tip.style.boxShadow = `0 0 18px rgba(${lastFocus.rgb}, 0.34), 0 0 36px rgba(${lastFocus.rgb}, 0.14), 0 14px 36px rgba(0,0,0,0.92)`;
+      } else {
+        tip.classList.add('spectrum');
+        tip.style.borderColor = '';
+        tip.style.borderImage = '';
+        tip.style.boxShadow = '';
+      }
       const fVal = hasFocus ? focus[idx] : null;
       const focusRow = (lastFocus && fVal != null)
         ? `<span class="tt-k" style="color:${lastFocus.css}">${lastFocus.dev}</span><span class="tt-v">${fmtRate(fVal).full}</span>`

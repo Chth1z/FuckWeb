@@ -2,7 +2,7 @@
  * PRISM — View 03: Full-Page Gapless 21-Ch Pure Color Matrix & Slot Bars
  * ============================================================================ */
 
-import { S, spectralColor, fmtRateCompact } from '../state.js?v=5.6.6';
+import { S, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRateCompact } from '../state.js?v=5.6.6';
 import { $, $$, el, svgEl } from '../dom.js?v=5.6.6';
 import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.6.6';
 
@@ -151,9 +151,7 @@ function syncStrandHighlight() {
       activeTag.textContent = `${modeLabel} · ${activeMeta.dev} (λ=${activeMeta.lambda}nm)`;
       activeTag.style.color = activeMeta.css;
     } else {
-      const strands = S.status?.strands || [];
-      const nOk = S.status?.healthy_count ?? strands.filter(s => s.healthy).length;
-      activeTag.textContent = `${nOk}/${strands.length || 21} 波長在線`;
+      activeTag.textContent = '';
       activeTag.style.color = '';
     }
   }
@@ -290,27 +288,29 @@ function updateHeatmap(strands) {
     const rateTotal = downBps + upBps;
     const mbps = mbpsList[i];
     const rel = maxMbps > 0.12 ? mbps / maxMbps : 0;
-    const absPulse = Math.min(1, Math.log10(1 + mbps * 6) / 1.45);
-    const activeIntensity = Math.max(absPulse, rel * 0.90);
+    const absPulse = Math.min(1, Math.log10(1 + mbps * 6) / 1.55);
+    const k = !s.healthy ? 0.04 : Math.max(0.08, Math.min(1, Math.max(absPulse * 0.85, rel * 0.72) + (s.vip ? 0.10 : 0)));
+    const sat = !s.healthy ? 0.18 : (0.26 + 0.74 * Math.pow(k, 0.78));
+    const litRgb = desatObsidianRgb(col.rgb, sat);
+    const coreRgb = k > 0.76 ? mixWhiteRgb(litRgb, (k - 0.76) * 0.28) : litRgb;
 
-    // Rich saturated pure color fill modulated by real-time load
-    const baseContrast = !s.healthy ? 0.06
-      : (s.bucket === 'depleted' ? 0.08
-        : (s.bucket === 'cooling' ? 0.10 : (0.12 + (pct / 100) * 0.06)));
-    const heat = s.healthy ? Math.min(1, activeIntensity * 0.88 + (s.vip ? 0.12 : 0)) : 0;
-    const fillAlpha = !s.healthy ? 0.08 : Math.min(0.88, baseContrast + activeIntensity * 0.74);
+    const baseFill = !s.healthy ? 0.10
+      : (s.bucket === 'depleted' ? 0.16
+        : (s.bucket === 'cooling' ? 0.19 : (0.22 + (pct / 100) * 0.04)));
+    const fillAlpha = !s.healthy ? 0.10 : Math.min(0.62, baseFill + k * 0.36);
 
     tile.classList.toggle('vip', !!s.vip);
     tile.classList.toggle('down', !s.healthy);
 
     tile.style.setProperty('--sc-rgb', col.rgb);
+    tile.style.setProperty('--lit-rgb', coreRgb);
     tile.style.setProperty('--heat-fill', fillAlpha.toFixed(2));
-    tile.style.setProperty('--heat-halo', (heat > 0.08 ? 0.14 + heat * 0.68 : 0.04).toFixed(2));
-    tile.style.setProperty('--heat-outer', (heat > 0.12 ? 0.06 + heat * 0.34 : 0.00).toFixed(2));
-    tile.style.setProperty('--heat-crest', (0.03 + heat * 0.24).toFixed(2));
-    tile.style.setProperty('--heat-blur', `${Math.round(12 + heat * 18)}px`);
-    tile.style.setProperty('--heat-bloom', `${Math.round(22 + heat * 26)}px`);
-    tile.style.setProperty('--heat-label-op', (!s.healthy ? 0.44 : (0.76 + heat * 0.24)).toFixed(2));
+    tile.style.setProperty('--heat-halo', (0.04 + 0.24 * Math.pow(k, 1.15)).toFixed(3));
+    tile.style.setProperty('--heat-outer', (0.01 + 0.11 * Math.pow(k, 1.25)).toFixed(3));
+    tile.style.setProperty('--heat-crest', (0.02 + 0.07 * Math.pow(k, 1.10)).toFixed(3));
+    tile.style.setProperty('--heat-blur', `${Math.round(8 + 16 * k)}px`);
+    tile.style.setProperty('--heat-bloom', `${Math.round(18 + 22 * k)}px`);
+    tile.style.setProperty('--heat-label-op', (!s.healthy ? 0.48 : (0.80 + k * 0.20)).toFixed(2));
 
     tile.title = `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ↓${fmtShortRate(downBps)} ↑${fmtShortRate(upBps)} · pk ${fmtShortRate(s.peak)} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}% · slots ${s.slots ?? 0}`;
 
@@ -377,42 +377,39 @@ export function renderSpectrum() {
     S.pinnedStrandId = null;
   }
 
-  // 1. Header capacity & compact summary KPIs
+  // 1. Header scheduler params (non-duplicate with bottom ribbon HUD)
   const capEl = $('#weave-cap');
-  if (capEl) capEl.textContent = `${w.slots || pat.length || 126} slots · VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`;
+  if (capEl) capEl.textContent = `VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`;
   const downNow = st.rate || 0;
   const upNow = st.rate_up || 0;
   const totBps = downNow + upNow;
-  const kpiEl = $('#spec-summary-kpi');
-  if (kpiEl) {
-    kpiEl.textContent = `${w.charged_count ?? 0}/${st.healthy_count ?? strands.length} 滿桶 · ↓ ${fmtShortRate(downNow)} · ↑ ${fmtShortRate(upNow)}`;
-  }
 
-  // 2. Full-Page Gapless 21-Wavelength Pure Color Matrix
+  // 2. Full-Page Gapless 21-Wavelength Matrix (unified obsidian saturation & glow)
   updateHeatmap(strands);
 
-  // 3. Modulate rainbow bar luminance, saturation & dominant spectral glow by total network speed
+  // 3. Modulate rainbow bar fill, obsidian saturation & 4-stop prism bloom smoothly by total network speed
+  const totMbps = (totBps * 8) / 1e6;
+  const ribK = totMbps > 0.01 ? Math.min(1, Math.max(0.08, Math.log10(1 + totMbps * 4.5) / 1.65)) : 0.08;
+  const ribSat = 0.34 + 0.66 * Math.pow(ribK, 0.78);
+  const ribFill = (0.36 + 0.30 * Math.pow(ribK, 0.85)).toFixed(2);
   const ribScope = $('#spec-ribbon-scope');
   if (ribScope) {
-    const totMbps = (totBps * 8) / 1e6;
-    const ribPulse = totMbps > 0.01 ? Math.min(1, Math.log10(1 + totMbps * 3.5) / 1.65) : 0;
-    let peakStrand = null;
-    let peakRate = 0;
-    for (const s of strands) {
-      const r = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
-      if (r > peakRate) {
-        peakRate = r;
-        peakStrand = s;
-      }
-    }
-    const domRgb = (peakStrand && colorById[peakStrand.id]?.rgb) || '100, 174, 245';
-    ribScope.style.setProperty('--ribbon-glow-rgb', domRgb);
-    ribScope.style.setProperty('--ribbon-fill', (0.14 + ribPulse * 0.72).toFixed(2));
-    ribScope.style.setProperty('--ribbon-sat', (0.42 + ribPulse * 0.78).toFixed(2));
-    ribScope.style.setProperty('--ribbon-blur', `${Math.round(12 + ribPulse * 18)}px`);
-    ribScope.style.setProperty('--ribbon-bloom', `${Math.round(22 + ribPulse * 28)}px`);
-    ribScope.style.setProperty('--ribbon-halo', (0.04 + ribPulse * 0.42).toFixed(2));
-    ribScope.style.setProperty('--ribbon-outer', (0.00 + ribPulse * 0.22).toFixed(2));
+    const rLit = desatObsidianRgb(SPECTRUM_STOPS[0], ribSat);
+    const gLit = desatObsidianRgb(SPECTRUM_STOPS[3], ribSat);
+    const bLit = desatObsidianRgb(SPECTRUM_STOPS[5], ribSat);
+    const vLit = desatObsidianRgb(SPECTRUM_STOPS[6], ribSat);
+    const sA = (0.03 + 0.16 * Math.pow(ribK, 1.12)).toFixed(3);
+    const vA = (0.02 + 0.12 * Math.pow(ribK, 1.18)).toFixed(3);
+    const blur1 = Math.round(8 + 14 * ribK);
+    const blur2 = Math.round(18 + 20 * ribK);
+    ribScope.style.setProperty('--ribbon-fill', ribFill);
+    ribScope.style.setProperty('--ribbon-shadow',
+      `-6px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
+      `0 0 ${blur1}px rgba(${gLit}, ${sA}), ` +
+      `6px 0 ${blur1}px rgba(${bLit}, ${sA}), ` +
+      `10px 0 ${blur2}px rgba(${vLit}, ${vA}), ` +
+      `inset 0 0 0 0.5px rgba(0, 0, 0, 0.45)`
+    );
   }
 
   const ribDownEl = $('#ribbon-rate-down');
@@ -432,12 +429,14 @@ export function renderSpectrum() {
     ribHealthEl.textContent = `${st.healthy_count ?? strands.length}/${strands.length || 21} UP · ${w.charged_count ?? 0} 滿桶`;
   }
 
-  // 4. Full-Width 126-Slot Kernel Timeline Ribbon
+  // 4. Full-Width 126-Slot Kernel Timeline Ribbon with shared obsidian desaturation
   const mat = $('#pattern');
   if (mat) {
     const sig = pat.join(',');
+    const satKey = String(Math.round(ribSat * 50));
     if (mat.dataset.sig !== sig) {
       mat.dataset.sig = sig;
+      mat.dataset.satKey = satKey;
       const frag = document.createDocumentFragment();
       for (let i = 0; i < pat.length; i++) {
         const sid = pat[i];
@@ -446,8 +445,9 @@ export function renderSpectrum() {
           class: 'slot-tick',
           'data-sid': sid,
           title: `slot #${i} → strand ${sid} (λ=${col.lambda}nm)`,
-          style: { '--tick-rgb': col.rgb, color: col.css }
+          style: { '--pure-rgb': col.rgb, '--tick-rgb': desatObsidianRgb(col.rgb, ribSat), color: col.css }
         });
+        tick._pureRgb = col.rgb;
         tick.addEventListener('mouseenter', () => setHoverStrand(sid));
         tick.addEventListener('mouseleave', () => setHoverStrand(null));
         tick.addEventListener('click', () => togglePinStrand(sid));
@@ -455,6 +455,11 @@ export function renderSpectrum() {
       }
       mat.innerHTML = '';
       mat.appendChild(frag);
+    } else if (mat.dataset.satKey !== satKey) {
+      mat.dataset.satKey = satKey;
+      for (const tick of mat.children) {
+        if (tick._pureRgb) tick.style.setProperty('--tick-rgb', desatObsidianRgb(tick._pureRgb, ribSat));
+      }
     }
   }
 
