@@ -27,17 +27,17 @@ flowchart TB
 
     subgraph ProxyLayer["Mihomo 零分裂台灣家寬隧道 (TW-HOME)"]
         TW1["主力 #1: 🇹🇼 台灣家寬01丨專線 (Trojan TCP 多路編織)<br/>落地：中華電信 HiNet 家寬"]
-        TW1_Chain["同出口備援 #2: 🔗 JP-Lightsail -> 台灣家寬01 鏈式<br/>(主備切換 0 出口 IP 變化)"]
-        TW2["異機備援 #3/#4: 🇹🇼 台灣家寬02丨專線 / Lightsail 鏈式<br/>落地：中華電信 HiNet 家寬"]
+        TW1_Chain["同出口備援 #2: 🔗 JP-Lightsail (MPTCP) -> 台灣家寬01直連 (Hy2)<br/>(直出東京→台北無大陸折返，主備切換 0 出口 IP 變化)"]
+        TW2["異機/備援 #3/#4: 🇹🇼 台灣家寬02丨專線 / Lightsail 鏈式<br/>落地：中華電信 HiNet 家寬"]
     end
 
     subgraph WeaveLayer["21 鏈路雙平面物理隔離編織層 (VIP + Burst-Harvest 2.0)"]
         VIPLane["⚡ VIP 遊戲專線 (@vip_lane: 最低純網路 RTT 鏈路)<br/>嚴禁視頻與下載進入！令牌桶 100% 滿電，0% 網關丟包，固定 NAT 端口"]
-        HarvestPool["🌾 Burst-Harvest 2.0 收割池 (@pattern: 其餘 20 條鏈路)<br/>2s 高頻令牌桶狀態機 (charged -> draining -> depleted -> cooling)<br/>新連接優先命中滿桶鏈路收割 18~70 Mbps 首秒突發，耗盡鏈路 0 槽位冷卻"]
+        HarvestPool["🌾 Burst-Harvest 2.0 收割池 (@pattern: 其餘 20 條鏈路)<br/>1s 高頻令牌桶狀態機 (charged -> draining -> depleted -> cooling) + 活躍流數均衡<br/>新連接優先命中滿桶空載鏈路收割 18~70 Mbps 首秒突發，耗盡鏈路 0 槽位冷卻"]
     end
 
     subgraph QoSLayer["三級 DiffServ 優先級隊列 (HTB + fq_codel)"]
-        QoS["Band 1:10 (Prio 0, target 2ms): 遊戲 UDP / TCP SYN+ACK / DNS (零延遲插隊)<br/>Band 1:20 (Prio 1, target 5ms): 網頁與 4K 視頻分片突發流 (ct bytes < 4MB)<br/>Band 1:30 (Prio 2, target 5ms): 大文件持續下載流 (ct bytes >= 4MB)"]
+        QoS["Band 1:10 (Prio 0, target 2ms): 遊戲 UDP / ≤256B TCP SYN+ACK / DNS (零延遲插隊)<br/>Band 1:20 (Prio 1, target 5ms): 網頁與 4K 視頻分片突發流 (ct bytes < 8MB)<br/>Band 1:30 (Prio 2, target 5ms): 大文件持續下載流 (ct bytes >= 8MB)"]
     end
 
     PC --> QReject --> GameCheck

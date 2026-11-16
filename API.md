@@ -72,7 +72,7 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
 
 ### 3.1 `status` — Global Snapshot, 21 Strands, Token Buckets & Weave State
 - **Args**: `{}`
-- **Cadence**: Updated in-memory every `2` seconds by `prismd` (`weave.interval`), and reconciled every `60` seconds by `prism reconcile`.
+- **Cadence**: Updated every `1` second by `prismd` (`weave.interval = 1`, historical `series` sampled every `2` seconds), and reconciled every `45` seconds by `prism reconcile`.
 
 ```typescript
 interface PrismStatusResponse {
@@ -167,6 +167,8 @@ interface StrandStatus {
   http: number;             // Last HTTP status code from probe (204 = healthy, 0 = timeout)
   ttfb: number;             // Pure network RTT (`time_starttransfer - time_namelookup`) in seconds
   ttfb_ms: number;          // Pure network RTT rounded to integer milliseconds (e.g. 16)
+  loss: number;             // EWMA data-plane TCP/HTTP retransmission & probe-failure loss (0..1)
+  loss_pct: number;         // Rounded integer percentage of `loss` (0..100)
 
   // Bandwidth metrics (all in bytes/second unless suffixed with `_bytes`)
   rate: number;             // EWMA-smoothed download rate (bytes/s)
@@ -290,8 +292,9 @@ interface PrismRulesResponse {
     domestic4: number;      // Number of CIDRs in domestic4.list (~6451)
     tunnel4: number;        // Number of CIDRs in tunnel4.list (~26)
     tunnel_domains: number; // Number of forced-tunnel domains (~42)
-    tunnel4_dns: number;    // Live SmartDNS-populated IPs in `@tunnel4_dns`
-    relay4: number;         // Live resolved relay server IPs in `@relay4`
+    tunnel4_dns: number;    // Live SmartDNS-populated IPs in `@tunnel4_dns` (cached 20s)
+    domestic4_dns: number;  // Live SmartDNS-populated IPs in `@domestic4_dns` (cached 20s)
+    relay4: number;         // Live resolved relay server IPs in `@relay4` (cached 20s)
   };
   ports: number[];
 }

@@ -14,6 +14,8 @@ import * as weave from "./weave.uc";
 import { save_selected } from "./tunnel.uc";
 
 let list_cache = {};
+let size_cache = {};
+const SET_SIZE_TTL = 20;
 
 function list_count(file) {
 	let st = fs.stat(file);
@@ -117,16 +119,24 @@ function rules() {
 }
 
 function set_size(name) {
+	let now = time(), cached = size_cache[name];
+	if (cached && now - cached.ts < SET_SIZE_TTL)
+		return cached.count;
 	let r = core.sh(sprintf("nft -j list set inet prism %s", name));
+	let count = cached?.count ?? 0;
 	try {
-		for (let item in json(r.out).nftables)
-			if (item.set)
-				return length(item.set.elem ?? []);
+		for (let item in json(r.out).nftables) {
+			if (item.set) {
+				count = length(item.set.elem ?? []);
+				break;
+			}
+		}
+		size_cache[name] = { ts: now, count };
 	}
 	catch (e) {
-		return 0;
+		return count;
 	}
-	return 0;
+	return count;
 }
 
 // d: the daemon's view — { cfg(), snapshot(), load(), pattern(), history(),
@@ -219,7 +229,8 @@ export function methods(d) {
 		series: {
 			args: { limit: 0 },
 			call: function(req) {
-				return { interval: d.interval(), ...series.dump(d.history(), req.args?.limit ?? 0) };
+				let iv = d.series_interval ? d.series_interval() : d.interval();
+				return { interval: iv, ...series.dump(d.history(), req.args?.limit ?? 0) };
 			},
 		},
 
@@ -348,8 +359,11 @@ export function methods(d) {
 		remember: {
 			args: { name: "", aggregate: true, portal: "" },
 			call: function(req) {
-				let a = req.args ?? {};
-				let res = config.site_store(d.snapshot()?.site?.gateway, a.name, !!a.aggregate, a.portal);
+				let a = req.args ?? {}, gw = d.snapshot()?.site?.gateway;
+				let prev = gw ? core.load_json(core.RUN + "/state.json", {})?.site_portals?.[gw] : null;
+				let portal = length(a.portal) ? a.portal : (prev?.portal ?? "");
+				let secret = prev?.portal_secret ?? "";
+				let res = config.site_store(gw, a.name, !!a.aggregate, portal, secret);
 				if (res.ok) {
 					core.event("SITE remembered: %s aggregate=%s", a.name ?? "", a.aggregate ? "on" : "off");
 					d.reload();

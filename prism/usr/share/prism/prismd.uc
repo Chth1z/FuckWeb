@@ -19,8 +19,9 @@ import * as api from "./mod/api.uc";
 const PRISM = "/usr/sbin/prism";
 const STATUS = core.RUN + "/status.json";
 const DEBOUNCE_MS = 2000;
-const HISTORY = 720;                    // samples kept
-const PEAK_DECAY = 0.998;               // per sample
+const HISTORY = 720;                    // samples kept (2s cadence -> 24 min window)
+const SERIES_CADENCE = 1.9;
+const PEAK_DECAY_PER_SEC = 0.999;       // ~0.998 per 2s
 const SETTLE = 2;                       // slot changes needed to trigger an update
 const DEVICE_SCAN = 5;                  // look for devices every this many samples
 
@@ -29,9 +30,10 @@ let snapshot = core.load_json(STATUS, null);
 let pattern = weave.current();
 let vip_lane = weave.current_vip();
 let history = series.create(HISTORY);
-let load = {};                          // dev -> { down, up, bucket }
+let load = {};                          // dev -> { down, up, bucket, flows }
+let flow_counts = {};                   // strand id -> ESTABLISHED flow count
 let lan = { list: [], rate: {}, samples: 0 };
-let sampled = 0;
+let sampled = 0, series_at = 0;
 let running = false, again = false, first = true;
 let reconcile_timer, sample_timer;
 let kick_pending = false;
@@ -98,13 +100,22 @@ function sample() {
 	if (!counted.down)
 		return;
 	let dt = sampled ? now - sampled : 0, alpha = cfg.weave.smoothing;
-	sample_devices(dt);
+	let record_series = !series_at || (now - series_at >= SERIES_CADENCE);
+	if (record_series) {
+		sample_devices(series_at ? now - series_at : dt);
+		flow_counts = weave.active_flows();
+	}
+	let id_by_dev = {};
+	for (let s in snapshot?.strands ?? [])
+		id_by_dev[s.dev] = s.id;
+	let decay = dt > 0 ? max(0.90, 1.0 - (1.0 - PEAK_DECAY_PER_SEC) * dt) : PEAK_DECAY_PER_SEC;
 	let total = { down: 0, up: 0 }, per = {}, per_up = {};
 	for (let dev in keys(counted.down)) {
 		let l = (load[dev] ??= {
 			down: { bytes: null, now: 0, rate: 0, peak: 0 },
 			up: { bytes: null, now: 0, rate: 0, peak: 0 },
 			bucket: { tokens: weave.BURST_MAX, state: "charged", cooldown_until: 0 },
+			flows: 0,
 		});
 		for (let dir in [ "down", "up" ]) {
 			let d = l[dir], bytes = counted[dir]?.[dev] ?? 0;
@@ -113,9 +124,10 @@ function sample() {
 				d.rate = alpha * d.now + (1 - alpha) * d.rate;
 			}
 			d.bytes = bytes;
-			d.peak = max(d.rate, d.peak * PEAK_DECAY);
+			d.peak = max(d.rate, d.peak * decay);
 			total[dir] += d.now;
 		}
+		l.flows = flow_counts[id_by_dev[dev]] ?? 0;
 		per[dev] = l.down.now;
 		per_up[dev] = l.up.now;
 	}
@@ -124,7 +136,10 @@ function sample() {
 			delete load[dev];
 	weave.update_buckets(load, dt, now);
 	sampled = now;
-	series.add(history, time(), total.down, total.up, per, per_up);
+	if (record_series) {
+		series_at = now;
+		series.add(history, time(), total.down, total.up, per, per_up);
+	}
 	relay();
 }
 
@@ -182,6 +197,7 @@ let published = bus.publish("prism", api.methods({
 	history: () => history,
 	devices: device_view,
 	interval: () => cfg.weave.interval,
+	series_interval: () => max(2, cfg.weave.interval),
 	now: monotonic,
 	kick: () => kick(DEBOUNCE_MS / 4),
 	reload: () => (cfg = config.load()),

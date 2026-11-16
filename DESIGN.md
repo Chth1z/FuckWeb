@@ -149,15 +149,16 @@ chain postrouting {
     # 默認歸入 Band 2 (1:20 突發交互通道)
     meta priority set 1:20
 
-    # Band 3 (1:30 後台大流通道)：單連接累計超過 4 MB 的持續下載流
-    ct bytes >= 4194304 meta priority set 1:30
+    # Band 3 (1:30 後台大流通道)：單連接累計超過 8 MB 的持續下載流
+    ct bytes >= 8388608 meta priority set 1:30
 
     # Band 1 (1:10 皇冠實時通道，最高優先級插隊)：
     #   - 帶有 VIP 標記 (0x100) 的遊戲專道流
-    #   - 所有小於 128 Bytes 的 TCP SYN / ACK / FIN 控制包（加速下載時的 ACK 回傳！）
-    #   - DNS / ICMP / 高 DSCP 報文
+    #   - 所有 <= 256 Bytes 的 TCP SYN / ACK / FIN / RST 控制包與非 80/443 短包 UDP
+    #   - DNS / ICMP 報文
     ct mark & 0x00000100 != 0x00000000 meta priority set 1:10
-    meta l4proto tcp tcp flags & (syn | ack | fin | rst) != 0 meta length < 128 meta priority set 1:10
+    meta l4proto tcp tcp flags & (syn | ack | fin | rst) != 0 meta length <= 256 meta priority set 1:10
+    meta l4proto udp th dport != { 80, 443 } meta length <= 256 ct bytes < 50000000 meta priority set 1:10
     meta l4proto icmp meta priority set 1:10
     th sport 53 meta priority set 1:10
     th dport 53 meta priority set 1:10
@@ -171,7 +172,7 @@ chain postrouting {
 ### 3.3 模塊二：`Burst-Harvest 2.0` 演算法與 VIP 專道選舉（`weave.uc` & `prismd.uc`）
 
 #### 1. 狀態數據結構（`prismd.uc`）
-將 `prismd` 的默認採樣間隔 `weave.interval` 從 `5s` 調優為 **`2s`**。在 `prismd.uc` 的 `load[dev]` 中擴展令牌桶狀態字段：
+將 `prismd` 的採樣間隔 `weave.interval` 調優為 **`1s`**（同時保留 `2s` 節拍寫入歷史序列以維持面板 5m/12m/24m 時間窗準確性）。在 `prismd.uc` 的 `load[dev]` 中擴展令牌桶與活躍流字段：
 ```javascript
 // load[dev] 結構：
 {
@@ -179,10 +180,11 @@ chain postrouting {
     up:   { bytes: 65432,  now: 0, rate: 0, peak: 0 },
     bucket: {
         tokens: 1000000,   // 當前剩餘突發令牌 (Bytes)，範圍 [0, BURST_MAX]
-        state: "charged",  // "charged" | "draining" | "cooldown"
+        state: "charged",  // "charged" | "draining" | "depleted" | "cooling"
         cooldown_until: 0, // 強制冷卻截止時間戳 (monotonic seconds)
     },
-    ttfb: 0.24,            // 最近一次 HTTP 204 探測 TTFB (秒)
+    flows: 0,              // nf_conntrack 中該鏈路當前 ESTABLISHED 活躍流數
+    ttfb: 0.13,            // 最近一次 HTTP 204 探測純網路 TTFB (秒)
 }
 ```
 
@@ -246,16 +248,16 @@ tc qdisc add dev $DEV root handle 1: htb default 20
 tc class add dev $DEV parent 1: classid 1:1 htb rate ${RATE}mbit ceil ${RATE}mbit quantum 1514
 
 # Band 1 (1:10, prio 0 最高優先級): 遊戲專道 UDP + TCP 小包 SYN/ACK + DNS + ICMP
-tc class add dev $DEV parent 1:1 classid 1:10 htb rate $((RATE * 30 / 100))mbit ceil ${RATE}mbit prio 0 quantum 1514
-tc qdisc add dev $DEV parent 1:10 handle 10: fq_codel limit 1024 target 2ms interval 50ms memory_limit 1048576 noecn
+tc class add dev $DEV parent 1:1 classid 1:10 htb rate $((RATE * 20 / 100))mbit ceil ${RATE}mbit prio 0 quantum 1514
+tc qdisc add dev $DEV parent 1:10 handle 10: fq_codel limit 1000 target 2ms interval 50ms quantum 300 memory_limit 2097152 noecn
 
-# Band 2 (1:20, prio 1 突發交互優先級): 網頁、API、Claude、首 4MB 視頻分片突發流
+# Band 2 (1:20, prio 1 突發交互優先級): 網頁、API、Claude、首 8MB 視頻分片突發流 (4MB GSO 緩衝)
 tc class add dev $DEV parent 1:1 classid 1:20 htb rate $((RATE * 50 / 100))mbit ceil ${RATE}mbit prio 1 quantum 1514
-tc qdisc add dev $DEV parent 1:20 handle 20: fq_codel limit 2048 target 5ms interval 100ms memory_limit 2097152 noecn
+tc qdisc add dev $DEV parent 1:20 handle 20: fq_codel limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 4194304 noecn
 
-# Band 3 (1:30, prio 2 後台吞吐優先級): 累計 >= 4MB 的大文件持續下載流
-tc class add dev $DEV parent 1:1 classid 1:30 htb rate $((RATE * 20 / 100))mbit ceil $((RATE * 95 / 100))mbit prio 2 quantum 1514
-tc qdisc add dev $DEV parent 1:30 handle 30: fq_codel limit 2048 target 5ms interval 100ms memory_limit 2097152 noecn
+# Band 3 (1:30, prio 2 後台吞吐優先級): 累計 >= 8MB 的大文件持續下載流 (4MB GSO 緩衝)
+tc class add dev $DEV parent 1:1 classid 1:30 htb rate $((RATE * 30 / 100))mbit ceil ${RATE}mbit prio 2 quantum 1514
+tc qdisc add dev $DEV parent 1:30 handle 30: fq_codel limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 4194304 noecn
 ```
 
 ---
@@ -270,13 +272,15 @@ tc qdisc add dev $DEV parent 1:30 handle 30: fq_codel limit 2048 target 5ms inte
      - 專線組（`专线` / `專線`，Trojan TCP）：`tw_iplc`（如 `🇹🇼【亚洲】台湾家宽01丨专线【3x】`、`🇹🇼【亚洲】台湾家宽02丨专线【3x】`）；
      - 直連組（`直连` / `直連`，Hysteria2）：`tw_direct`（如 `🇨🇳【亚洲】台湾家宽01丨直连`、`🇨🇳【亚洲】台湾家宽02丨直连`）。
 2. **合成鏈式備援節點**：
-   - 當存在 `JP-Lightsail-owner` 時，為台灣家寬節點自動克隆生成附加 `"dialer-proxy": "JP-Lightsail-owner"` 的鏈式節點（如 `🔗 台灣家寬01丨Lightsail鏈式`），使其流量走：`Router (多路編織 VLESS TCP) -> 東京 JP-Lightsail -> 台灣家寬01 (1.170.213.93)`。
+   - 當存在 `JP-Lightsail-owner` 時，為台灣家寬**直連**節點自動克隆生成附加 `"dialer-proxy": "JP-Lightsail-owner"` 的鏈式節點（如 `🔗 台湾家宽01丨Lightsail链式`，僅在無直連節點時退回專線），使其流量走：`Router (多路徑 MPTCP 6 端點) -> 東京 JP-Lightsail -> 台灣家寬直連節點`（直出海纜，不回繞大陸 IPLC 入口，延遲從 874–3001ms 降至 ~418ms）。
 3. **構建嚴格按序容災的 `TW-HOME` 策略組（`type: "fallback"`）**：
    - `proxies` 順序嚴格排列為：
-     1. `🇹🇼【亚洲】台湾家宽01丨专线【3x】`（主用，落地 IP `1.170.213.93`）
-     2. `🔗 台灣家寬01丨Lightsail鏈式`（**同 IP 第一備援，落地 IP 依然是 `1.170.213.93`！主備切換 0 IP 跳變！**）
-     3. `🇹🇼【亚洲】台湾家宽02丨专线【3x】`（同中華電信 HiNet AS3462 第二備援，落地 IP `1.168.162.232`）
-     4. `🔗 台灣家寬02丨Lightsail鏈式`（落地 IP `1.168.162.232`）
+     1. `🇹🇼【亚洲】台湾家宽01丨专线【3x】`（主用，最低直連跳數）
+     2. `🔗 台湾家宽01丨Lightsail链式`（**同 IP 第一備援：MPTCP -> JP-Lightsail -> 台灣直連，無大陸入口依賴，0 IP 跳變！**）
+     3. `🇨🇳【亚洲】台湾家宽01丨直连`
+     4. `🇹🇼【亚洲】台湾家宽02丨专线【3x】`
+     5. `🔗 台湾家宽02丨Lightsail链式`
+     6. `🇨🇳【亚洲】台湾家宽02丨直连`
    - **為什麼用 `fallback` 而不用 `url-test` 或 `load-balance`**：
      - `url-test` 會因為兩條線路延遲相差幾毫秒而在 `01`（`1.170.213.93`）和 `02`（`1.168.162.232`）之間來回切換，導致 Claude 檢測到用戶 IP 頻繁在台灣不同城市間跳躍；
      - `fallback` 則保證：**只要 `台灣家寬01丨專線` 連通，100% 流量永遠釘死在 `1.170.213.93` 絕不晃動**；就算大陸專線入口短暫故障，切到第 2 順位 `🔗 台灣家寬01丨Lightsail鏈式` 時，**出口 IP 仍然是同一個 `1.170.213.93`**！
@@ -286,9 +290,10 @@ tc qdisc add dev $DEV parent 1:30 handle 30: fq_codel limit 2048 target 5ms inte
 5. **替換台灣家寬兼容的高可用遠程 DoH**：
    ```javascript
    nameserver: [
+       "https://9.9.9.9/dns-query#PROXY",
+       "https://dns.quad9.net/dns-query#PROXY",
        "https://dns.adguard-dns.com/dns-query#PROXY",
        "https://208.67.222.222/dns-query#PROXY",
-       "https://dns.quad9.net/dns-query#PROXY",
    ]
    ```
 6. **同步動態解析的 `@relay4` 至 `prism_guard`**（[guard.uc](file:///d:/Github/FuckWeb/prism/usr/share/prism/mod/guard.uc)）：

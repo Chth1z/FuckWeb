@@ -116,16 +116,16 @@ export function load_relays(cfg) {
 		if (length(n.server) && !(n.server in list))
 			push(list, n.server);
 	}
-	// Synthesize Lightsail -> Taiwan residential chained backups so even if the
-	// domestic relay entry fails, traffic still exits from the exact same Taiwan
-	// Chunghwa Telecom residential IP (1.170.213.93).
+	// Synthesize Lightsail (MPTCP) -> Taiwan direct residential chained backups
+	// so even if the Mainland IPLC entry fails, traffic routes Tokyo -> Taiwan
+	// directly (no China hairpin) and exits from the exact same Taiwan IP.
 	if (by_name["JP-Lightsail-owner"]) {
 		let chains = [
-			[ "🇹🇼【亚洲】台湾家宽01丨专线【3x】", "🔗 台湾家宽01丨Lightsail链式" ],
-			[ "🇹🇼【亚洲】台湾家宽02丨专线【3x】", "🔗 台湾家宽02丨Lightsail链式" ],
+			[ "🇨🇳【亚洲】台湾家宽01丨直连", "🇹🇼【亚洲】台湾家宽01丨专线【3x】", "🔗 台湾家宽01丨Lightsail链式" ],
+			[ "🇨🇳【亚洲】台湾家宽02丨直连", "🇹🇼【亚洲】台湾家宽02丨专线【3x】", "🔗 台湾家宽02丨Lightsail链式" ],
 		];
-		for (let pair in chains) {
-			let base = by_name[pair[0]], tag = pair[1];
+		for (let spec in chains) {
+			let base = by_name[spec[0]] ?? by_name[spec[1]], tag = spec[2];
 			if (base && !seen[tag]) {
 				seen[tag] = true;
 				let cp = { ...base, name: tag, "dialer-proxy": "JP-Lightsail-owner" };
@@ -225,8 +225,9 @@ function build_config(cfg, lan_ip, proxies) {
 			"default-nameserver": cn_doh,
 			"proxy-server-nameserver": cn_doh,
 			nameserver: length(names) ? [
-				"https://1.1.1.1/dns-query#PROXY",
-				"https://8.8.8.8/dns-query#PROXY",
+				"https://9.9.9.9/dns-query#PROXY",
+				"https://dns.quad9.net/dns-query#PROXY",
+				"https://dns.adguard-dns.com/dns-query#PROXY",
 				"https://208.67.222.222/dns-query#PROXY",
 			] : cn_doh,
 		},
@@ -315,14 +316,16 @@ function urlenc(s) {
 	return replace(s, /[^A-Za-z0-9_.~-]/g, (c) => sprintf("%%%02X", ord(c)));
 }
 
-// Delay through AUTO, the group that carries traffic. Falls back to a real
-// request through the mixed port when the API cannot answer.
+// Delay through PROXY (falling back to AUTO), or a real request through the
+// mixed port when the API cannot answer.
 function canary(cfg, lan_ip) {
 	let c = cfg.tunnel;
-	let r = api(cfg, lan_ip, "GET", sprintf("/proxies/AUTO/delay?timeout=%d&url=%s", c.canary_timeout, urlenc(c.canary_url)));
-	let m = match(r.body, /"delay":([0-9]+)/);
-	if (m && int(m[1]) > 0)
-		return int(m[1]);
+	for (let grp in [ "PROXY", "AUTO" ]) {
+		let r = api(cfg, lan_ip, "GET", sprintf("/proxies/%s/delay?timeout=%d&url=%s", grp, c.canary_timeout, urlenc(c.canary_url)));
+		let m = match(r.body, /"delay":([0-9]+)/);
+		if (m && int(m[1]) > 0)
+			return int(m[1]);
+	}
 	let code = trim(core.sh(sprintf("curl -4 -m 8 -sS -o /dev/null -w '%%{http_code}' -x http://127.0.0.1:%d %s 2>/dev/null",
 		c.mixed_port, core.shq(c.canary_url))).out);
 	return (code == "204" || code == "200") ? 1 : 0;
@@ -330,7 +333,8 @@ function canary(cfg, lan_ip) {
 
 // Addresses of every relay, so a LAN client running its own proxy client
 // reaches them directly instead of being proxied twice. Hostnames are
-// resolved here, through the same resolver the LAN uses, and cached.
+// resolved here, through the same resolver the LAN uses, and retained in a
+// 24h sliding window so CDN/GTM round-robin rotation does not churn @relay4.
 function relay_addresses(prep, st, now) {
 	let key = join(" ", prep.hosts);
 	let cache = st.resolved ?? {};
@@ -339,9 +343,20 @@ function relay_addresses(prep, st, now) {
 			"nslookup -type=a %s 127.0.0.1 2>/dev/null | awk '/^Name:/ { named = 1 } named && /^Address/ { print $2 }' &", core.shq(h)));
 		push(cmds, "wait");
 		let found = filter(split(core.sh(join("\n", cmds)).out, "\n"), (a) => match(a, /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/));
-		// A failed lookup must not shrink the set: keep the last good answer.
-		if (length(found) || cache.key != key)
-			cache = { key, ips: sort(uniq(found)) };
+		let seen = cache.key == key ? { ...(cache.seen ?? {}) } : {};
+		for (let ip in cache.key == key ? (cache.ips ?? []) : [])
+			seen[ip] ??= now;
+		for (let ip in found)
+			seen[ip] = now;
+		let ips = [];
+		for (let ip, seen_ts in seen) {
+			if (now - seen_ts < 86400)
+				push(ips, ip);
+			else
+				delete seen[ip];
+		}
+		if (length(ips) || cache.key != key)
+			cache = { key, seen, ips: sort(uniq(ips)) };
 		// Nothing resolved (resolver still starting): try again in a minute.
 		cache.ts = length(found) ? now : now - RELAY_RESOLVE_SEC + 60;
 		st.resolved = cache;

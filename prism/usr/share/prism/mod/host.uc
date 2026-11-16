@@ -107,8 +107,8 @@ function aql(limits) {
 
 // 3-Band Priority HTB at `rate` Mbit with fq_codel leaves, or nothing when rate is 0.
 //   1:10 (prio 0): VIP gaming/realtime, TCP SYN/ACK, DNS, ICMP (target 2ms, quantum 300)
-//   1:20 (prio 1): Interactive & short bursts < 4 MB (target 5ms, 2 MB buffer)
-//   1:30 (prio 2): Bulk transfers >= 4 MB (target 5ms, 2 MB buffer)
+//   1:20 (prio 1): Interactive & short bursts < 8 MB (target 5ms, 4 MB GSO-safe buffer)
+//   1:30 (prio 2): Bulk transfers >= 8 MB (target 5ms, 4 MB GSO-safe buffer)
 // Returns true when it changed something.
 function shape(dev, rate) {
 	let have = core.sh("tc qdisc show dev " + dev).out, ours = index(have, "htb") >= 0;
@@ -118,7 +118,7 @@ function shape(dev, rate) {
 		return ours;
 	}
 	let classes = ours ? core.sh("tc class show dev " + dev).out : "";
-	let stale_10 = index(classes, "burst 1600b") >= 0;
+	let stale_10 = index(classes, "burst 1600b") >= 0 || index(have, "memory_limit 4Mb") < 0;
 	if (ours && !stale_10 && index(classes, sprintf("1:1 root rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
 		return false;
 	if (ours && !stale_10 && index(classes, sprintf("1:1 htb rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
@@ -136,9 +136,9 @@ function shape(dev, rate) {
 		sprintf("tc class add dev %s parent 1:1 classid 1:10 htb rate %dmbit ceil %dmbit prio 0 burst 32k cburst 32k quantum 1514", dev, r10, rate),
 		sprintf("tc class add dev %s parent 1:1 classid 1:20 htb rate %dmbit ceil %dmbit prio 1 burst 64k cburst 64k quantum 1514", dev, r20, rate),
 		sprintf("tc class add dev %s parent 1:1 classid 1:30 htb rate %dmbit ceil %dmbit prio 2 burst 64k cburst 64k quantum 1514", dev, r30, rate),
-		sprintf("%s limit 1000 target 2ms interval 50ms quantum 300 memory_limit 1048576 noecn || %s noecn || %s", q10, q10, q10),
-		sprintf("%s limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 2097152 noecn || %s noecn || %s", q20, q20, q20),
-		sprintf("%s limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 2097152 noecn || %s noecn || %s", q30, q30, q30),
+		sprintf("%s limit 1000 target 2ms interval 50ms quantum 300 memory_limit 2097152 noecn || %s noecn || %s", q10, q10, q10),
+		sprintf("%s limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 4194304 noecn || %s noecn || %s", q20, q20, q20),
+		sprintf("%s limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 4194304 noecn || %s noecn || %s", q30, q30, q30),
 	]));
 	return true;
 }

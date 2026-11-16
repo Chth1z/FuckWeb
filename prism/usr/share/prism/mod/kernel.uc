@@ -347,28 +347,68 @@ function plan_default(ctx, cmds) {
 	}
 }
 
-// Pick top-scoring clean primary strands as MPTCP in-kernel path-manager endpoints
-// so tunnel sockets spread MP_JOIN subflows across distinct uplinks concurrently.
-export function mptcp_candidates(ctx) {
+// Pick up to 6 clean, non-VIP primary vwan* strands as MPTCP in-kernel
+// path-manager endpoints with sticky hysteresis so active MP_JOIN subflows
+// never churn on minor 45s RTT jitter and never touch @vip_lane.
+export function mptcp_candidates(ctx, current_eps) {
 	if (!ctx.site?.aggregate)
 		return [];
+	let vip_id = (ctx.weave?.vip?.[0] ?? 0) & 0xff;
 	let healthy = filter(ctx.health?.healthy ?? [], (l) => l.role == "primary" && !l.parked && l.ip && l.gw);
+	if (length(healthy) >= 4 && vip_id > 0)
+		healthy = filter(healthy, (l) => l.id != vip_id);
+	if (length(healthy) >= 7)
+		healthy = filter(healthy, (l) => l.id != 1);
 	if (length(healthy) < 2)
 		return [];
+
+	let score = (l) => (l.loss ?? 0.0) * 100.0 + ((l.ttfb && l.ttfb >= 0.008) ? l.ttfb : 0.25);
 	let sorted = sort(slice(healthy), (a, b) => {
-		let sa = (a.loss ?? 0.0) * 100.0 + ((a.ttfb && a.ttfb >= 0.008) ? a.ttfb : 0.25);
-		let sb = (b.loss ?? 0.0) * 100.0 + ((b.ttfb && b.ttfb >= 0.008) ? b.ttfb : 0.25);
+		let sa = score(a), sb = score(b);
 		return sa < sb ? -1 : (sa > sb ? 1 : a.id - b.id);
 	});
 	let clean = filter(sorted, (l) => (l.loss ?? 0.0) < 0.14);
 	let pool = length(clean) >= 2 ? clean : sorted;
-	return slice(pool, 0, min(6, length(pool)));
+	let min_ttfb = 10.0;
+	for (let l in pool) {
+		let t = (l.ttfb && l.ttfb >= 0.008) ? l.ttfb : 0.25;
+		if (t < min_ttfb)
+			min_ttfb = t;
+	}
+	let ttfb_ceil = max(min_ttfb + 0.060, min_ttfb * 1.60);
+
+	let by_id = {};
+	for (let l in pool)
+		by_id["" + l.id] = l;
+	let selected = [], picked = {};
+	for (let e in (current_eps ?? facts.ip("mptcp endpoint show"))) {
+		if (e.id == null || !e.subflow)
+			continue;
+		let cand = by_id["" + e.id];
+		if (!cand || cand.ip != e.address || cand.dev != e.dev)
+			continue;
+		let t = (cand.ttfb && cand.ttfb >= 0.008) ? cand.ttfb : 0.25;
+		if (t <= ttfb_ceil && !picked["" + cand.id] && length(selected) < 6) {
+			push(selected, cand);
+			picked["" + cand.id] = true;
+		}
+	}
+	for (let l in pool) {
+		if (length(selected) >= 6)
+			break;
+		if (!picked["" + l.id]) {
+			push(selected, l);
+			picked["" + l.id] = true;
+		}
+	}
+	return selected;
 };
 
 function plan_mptcp(ctx, cmds) {
 	if (!fs.stat("/proc/sys/net/mptcp/enabled"))
 		return;
-	let eps = mptcp_candidates(ctx);
+	let cur_eps = facts.ip("mptcp endpoint show");
+	let eps = mptcp_candidates(ctx, cur_eps);
 	let want_subflows = length(eps) >= 2 ? min(5, length(eps) - 1) : 0;
 
 	let lr = core.sh("ip mptcp limits show");
@@ -382,7 +422,7 @@ function plan_mptcp(ctx, cmds) {
 		want[l.id] = { ip: l.ip, dev: l.dev };
 
 	let have = {};
-	for (let e in facts.ip("mptcp endpoint show")) {
+	for (let e in cur_eps) {
 		if (e.id == null)
 			continue;
 		have["" + e.id] = e;

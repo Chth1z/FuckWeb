@@ -36,8 +36,8 @@ const SCHEMA = {
 		affinity: "flow",               // auto | flow | dest
 		spill: 6,                       // auto: connections a pair may open in a burst before spreading
 		slots: 0,                       // pattern length, 0 = 6 per healthy strand
-		interval: 2,                    // seconds between load samples
-		smoothing: 0.3,                 // EWMA weight of the newest sample
+		interval: 1,                    // seconds between load samples & token-bucket updates
+		smoothing: 0.35,                // EWMA weight of the newest sample
 		strand_kbit: 0,                 // per-strand ceiling, 0 = learn from peaks
 	},
 	classify: {
@@ -77,8 +77,6 @@ const SCHEMA = {
 		cn_upstream: [
 			"https://223.5.5.5/dns-query dns.alidns.com",
 			"https://223.6.6.6/dns-query dns.alidns.com",
-			"https://1.12.12.12/dns-query dot.pub",
-			"https://120.53.53.53/dns-query dot.pub",
 		],
 		ads: 1,
 		cache_size: 32768,
@@ -236,17 +234,22 @@ export function device_store(mac, name, policy) {
 };
 
 // Remember the network behind this gateway and what to do on it.
-export function site_store(gateway, name, aggregate, portal) {
+export function site_store(gateway, name, aggregate, portal, portal_secret) {
 	if (!match(gateway ?? "", /^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/))
 		return { ok: false, error: "gateway unknown" };
 	let uci = cursor(core.UCI_DIR);
 	let has = (s) => gateway in map(type(s.gateway) == "array" ? s.gateway : [ s.gateway ?? "" ], lc);
-	let id = find(uci, "site", has) ?? uci.add("prism", "site");
+	let existing = find(uci, "site", has);
+	let id = existing ?? uci.add("prism", "site");
 	uci.set("prism", id, "name", clean(name) || "site");
 	uci.set("prism", id, "gateway", [ gateway ]);
 	uci.set("prism", id, "aggregate", aggregate ? "1" : "0");
-	if (portal != null)
-		uci.set("prism", id, "portal", portal);
+	let keep_portal = length(portal) ? portal : (existing ? (uci.get("prism", existing, "portal") ?? "") : "");
+	let keep_secret = length(portal_secret) ? portal_secret : (existing ? (uci.get("prism", existing, "portal_secret") ?? "") : "");
+	if (length(keep_portal))
+		uci.set("prism", id, "portal", keep_portal);
+	if (length(keep_secret))
+		uci.set("prism", id, "portal_secret", keep_secret);
 	uci.commit("prism");
 	return { ok: true };
 };

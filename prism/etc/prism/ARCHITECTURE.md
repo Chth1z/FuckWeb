@@ -26,7 +26,7 @@ DNS 全程防劫持。运行在 ImmortalWrt（fw4 / nftables / procd / ucode）�
             慢、会失败、可重试                     快、常驻、只读内核计数
    ┌──────────────────────────────┐      ┌──────────────────────────────┐
    │ prism reconcile  (一次性进程) │      │ prismd  (守护进程)            │
-   │  发现线路 → 探测 → portal 登录 │◀─启动─│  每 2s 读线路计数 → 负载       │
+   │  发现线路 → 探测 → portal 登录 │◀─启动─│  每 1s 读线路计数 → 负载       │
    │  路由/规则 → nft 原子事务      │      │  → 重排图样（只动 @pattern）   │
    │  隧道/DNS 配置 → 体检         │─快照─▶│  定时/按需拉起 reconcile       │
    └──────────────────────────────┘      │  发布 ubus 对象 prism（API）   │
@@ -116,10 +116,14 @@ LAN 包
 
 **@pattern：Burst-Harvest 2.0 脉冲令牌桶调度**
 
-- `harvest`（锁定默认）：由 `prismd` 每 2 秒追踪其余 20 条线路的虚拟令牌桶状态（`charged` 满桶脉冲 → `draining` 脉冲释放 → `depleted` 限速压制 → `cooling` 冷却回血）：
+- `harvest`（锁定默认）：由 `prismd` 每 1 秒追踪其余 20 条线路的虚拟令牌桶状态（`charged` 满桶脉冲 → `draining` 脉冲释放 → `depleted` 限速压制 → `cooling` 冷却回血），并结合 `nf_conntrack` `ESTABLISHED` 活跃流数加权：
   - `charged` 满桶线路赋予 `10.0 * ratio^2` 平方级高权重，优先承接一切新连接的首秒脉冲；
-  - `depleted` 耗尽线路权重直接归零（`0 slots`），在进入冷却回血前不再分配任何新连接，彻底规避网关尾丢弃导致的 TCP 拥塞窗口腰斩。
+  - `depleted` 耗尽线路或真实 TCP/HTTP 探测丢包 `>= 14%` 线路权重直接归零（`0 slots`），在进入冷却回血前不再分配任何新连接，彻底规避网关尾丢弃导致的 TCP 拥塞窗口腰斩。
 - 槽位用平滑加权轮转（SWRR）交错排列，连续到来的连接均匀散布在不同满桶线路上。
+
+**MPTCP 池与 VIP 物理隔离**
+
+- `plan_mptcp` 挑选最多 6 条洁净的非 VIP `vwan*` 主线路注册为 `ip mptcp endpoint`（带 RTT 滞回保护，避免每轮 45s 探测抖动导致拆建端點）；`chain weave_out` 对 `MP_JOIN` 子流保持 `mark=0` 由 `PREF_FROM` 各自送出，严防多路径大流踏入 `@vip_lane`。
 
 **亲和性**
 

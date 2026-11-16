@@ -47,6 +47,10 @@ export function site(ctx) {
 		here = { gateway: mac, known: true, name: s.name, portal: s.portal, portal_secret: s.portal_secret, wants: !!s.aggregate };
 		break;
 	}
+	if (here.known && length(here.portal)) {
+		st.site_portals ??= {};
+		st.site_portals[mac] = { portal: here.portal, portal_secret: here.portal_secret };
+	}
 
 	// auto follows the site. An unresolved gateway decides nothing: keep
 	// whatever was in force, or a slow ARP reply would drop every identity.
@@ -121,41 +125,42 @@ export function discover(ctx) {
 
 // --- health ----------------------------------------------------------------
 
+// Stagger HTTP 204 probes across small waves to avoid gateway ARP/DNS thundering
+// herds, and measure real data-plane TCP SYN/HTTP retransmit loss instead of
+// gateway control-plane ICMP echo (which upstream switches rate-limit).
 function probe(set, cfg) {
-	let res = {}, pings = {};
+	let res = {};
 	if (!length(set))
 		return res;
-	let cmds = map(set, (s) => sprintf(
-		"curl -4 --interface %s -m %d --connect-timeout 2 -sS -o /dev/null -w '%s %%{http_code} %%{time_starttransfer} %%{time_namelookup}\\n' %s 2>/dev/null &",
-		s.dev, cfg.probe_timeout, s.dev, core.shq(cfg.probe_url)));
-	let gw_strands = filter(set, (s) => s.gw);
-	const PING_WAVES = 4;
-	if (length(gw_strands)) {
-		for (let w = 0; w < PING_WAVES; w++) {
-			if (w > 0)
-				push(cmds, "ucode -e 'sleep(150)'");
-			for (let s in gw_strands)
-				push(cmds, sprintf("ping -I %s -c 1 -W 1 %s >/dev/null 2>&1 && echo 'PING %s' &", s.dev, s.gw, s.dev));
-		}
+	let cmds = [];
+	const WAVE_SIZE = 7;
+	for (let i = 0; i < length(set); i++) {
+		if (i > 0 && i % WAVE_SIZE == 0)
+			push(cmds, "ucode -e 'sleep(60)'");
+		let s = set[i];
+		push(cmds, sprintf(
+			"curl -4 --interface %s -m %d --connect-timeout 2 -sS -o /dev/null -w '%s %%{http_code} %%{time_connect} %%{time_starttransfer} %%{time_namelookup}\\n' %s 2>/dev/null &",
+			s.dev, cfg.probe_timeout, s.dev, core.shq(cfg.probe_url)));
 	}
 	push(cmds, "wait");
 	for (let line in split(core.sh(join("\n", cmds)).out, "\n")) {
-		let pm = match(line, /^PING (\S+)$/);
-		if (pm) {
-			pings[pm[1]] = (pings[pm[1]] ?? 0) + 1;
-			continue;
-		}
-		let m = match(line, /^(\S+) ([0-9]+) ([0-9.]+) ([0-9.]+)$/);
+		let m = match(line, /^(\S+) ([0-9]+) ([0-9.]+) ([0-9.]+) ([0-9.]+)$/);
 		if (m && !res[m[1]]) {
 			let code = int(m[2]);
-			let pure = code > 0 ? max(0.005, (+m[3]) - (+m[4])) : 0;
-			res[m[1]] = { code, ttfb: pure };
+			let tcp_rtt = code > 0 ? max(0.005, (+m[3]) - (+m[5])) : 0;
+			let pure = code > 0 ? max(0.005, (+m[4]) - (+m[5])) : 0;
+			let sloss = 0.0;
+			if (code != cfg.probe_expect)
+				sloss = 1.0;
+			else if (tcp_rtt >= 0.90)
+				sloss = 0.50;
+			else if (pure - tcp_rtt >= 0.50)
+				sloss = 0.25;
+			res[m[1]] = { code, ttfb: pure, tcp_rtt, loss: sloss };
 		}
 	}
-	for (let s in set) {
-		let cur = (res[s.dev] ??= { code: 0, ttfb: 0 });
-		cur.loss = s.gw ? max(0.0, 1.0 - (pings[s.dev] ?? 0) * 1.0 / PING_WAVES) : 0.0;
-	}
+	for (let s in set)
+		res[s.dev] ??= { code: 0, ttfb: 0, tcp_rtt: 0, loss: 1.0 };
 	return res;
 }
 
@@ -204,8 +209,12 @@ export function check(ctx) {
 				h.loss = sloss;
 			else if (sloss >= 0.5)
 				h.loss = max(0.45 * sloss + 0.55 * h.loss, sloss * 0.7);
-			else
+			else if (sloss > 0)
 				h.loss = 0.40 * sloss + 0.60 * h.loss;
+			else
+				h.loss = h.loss * 0.35;
+			if (h.loss < 0.002)
+				h.loss = 0.0;
 			if (r.code == cfg.probe_expect && r.ttfb > 0) {
 				let sample = (h.ttfb > 0 && h.ttfb < 0.45 && r.ttfb > h.ttfb * 1.8) ? (h.ttfb * 1.25) : r.ttfb;
 				h.ttfb = (h.ttfb > 0 && h.ttfb < 0.45) ? (0.35 * sample + 0.65 * h.ttfb) : sample;
