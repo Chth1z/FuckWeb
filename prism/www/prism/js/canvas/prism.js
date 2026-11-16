@@ -149,18 +149,21 @@ function handlePrismHover(rect) {
   if (hit.kind === 'band') {
     const s = hit.data;
     const col = hit.col;
-    const bucketNames = {
-      charged: '⚡ 滿桶蓄能 (CHARGED)',
-      draining: '🔥 脈衝釋放 (DRAINING)',
-      cooling: '❄️ 冷卻回充 (COOLING)',
-      depleted: '🛑 觸頂退避 (DEPLETED)'
-    };
-    const stateTxt = !s.healthy ? '離線 / 待認證' : (s.vip ? '💎 @vip_lane 極速光道' : (bucketNames[s.bucket] || s.bucket));
-    tip.classList.remove('spectrum');
-    tip.style.borderImage = '';
-    tip.style.borderColor = `rgba(${col.rgb}, 0.85)`;
-    tip.style.boxShadow = `0 0 18px rgba(${col.rgb}, 0.30), 0 0 38px rgba(${col.rgb}, 0.14), inset 0 0 14px rgba(${col.rgb}, 0.10), 0 14px 36px rgba(0, 0, 0, 0.90)`;
-    tip.innerHTML = `
+    const tKey = `b:${s.id}:${s.healthy ? 1 : 0}:${s.vip ? 1 : 0}:${s.bucket}:${s.now ?? s.rate}:${s.up_now ?? s.up}:${s.peak}:${s.ttfb_ms}:${s.tokens_pct}:${s.slots}:${s.ip || ''}`;
+    if (tip._lastHoverKey !== tKey) {
+      tip._lastHoverKey = tKey;
+      const bucketNames = {
+        charged: '⚡ 滿桶蓄能 (CHARGED)',
+        draining: '🔥 脈衝釋放 (DRAINING)',
+        cooling: '❄️ 冷卻回充 (COOLING)',
+        depleted: '🛑 觸頂退避 (DEPLETED)'
+      };
+      const stateTxt = !s.healthy ? '離線 / 待認證' : (s.vip ? '💎 @vip_lane 極速光道' : (bucketNames[s.bucket] || s.bucket));
+      tip.classList.remove('spectrum');
+      tip.style.borderImage = '';
+      tip.style.borderColor = `rgba(${col.rgb}, 0.85)`;
+      tip.style.boxShadow = `0 0 18px rgba(${col.rgb}, 0.30), 0 0 38px rgba(${col.rgb}, 0.14), inset 0 0 14px rgba(${col.rgb}, 0.10), 0 14px 36px rgba(0, 0, 0, 0.90)`;
+      tip.innerHTML = `
       <div class="tt-head">
         <span style="color:${col.css}">${s.dev} (#${s.id})</span>
         <span class="c-muted">λ = ${col.lambda} nm</span>
@@ -176,14 +179,18 @@ function handlePrismHover(rect) {
         <span class="tt-k">線路 IP</span><span class="tt-v">${s.ip || '—'}</span>
       </div>
     `;
+    }
   } else {
     const st = S.status || {};
     const devs = S.devices?.devices || [];
-    tip.classList.add('spectrum');
-    tip.style.borderColor = '';
-    tip.style.borderImage = '';
-    tip.style.boxShadow = '';
-    tip.innerHTML = `
+    const tKey = `beam:${devs.length}:${st.rate}:${st.rate_up}:${st.healthy_count}:${st.weave?.vip_dev || ''}:${st.weave?.charged_count}`;
+    if (tip._lastHoverKey !== tKey) {
+      tip._lastHoverKey = tKey;
+      tip.classList.add('spectrum');
+      tip.style.borderColor = '';
+      tip.style.borderImage = '';
+      tip.style.boxShadow = '';
+      tip.innerHTML = `
       <div class="tt-head">
         <span class="c-bright">INCIDENT BEAM · 原初聚合白光</span>
         <span class="c-spectrum">${devs.length} 終端</span>
@@ -196,6 +203,7 @@ function handlePrismHover(rect) {
         <span class="tt-k">滿桶待命</span><span class="tt-v">${st.weave?.charged_count ?? 0} 條</span>
       </div>
     `;
+    }
   }
 
   const tipW = 248, tipH = 190;

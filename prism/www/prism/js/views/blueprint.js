@@ -3,7 +3,7 @@
  * ============================================================================ */
 
 import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6';
-import { $, $$, el, renderSegMeter, renderSessionLog, setTxt, setCls, setTitle, setVar } from '../dom.js?v=5.6.6';
+import { $, $$, el, renderSegMeter, renderSessionLog, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.6.6';
 import { write, call } from '../api.js?v=5.6.6';
 
 let drawerOpen = false;
@@ -1078,18 +1078,18 @@ function renderClassifyStrip() {
       rec = { card, labelEl, statEl, segEl };
       rowsByTag.set(r.tag, rec);
     } else {
-      rec.card.className = `classify-bar-card ${pkts > 0 ? 'active' : ''}`;
-      rec.card.title = `${label} · ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt})`;
-      rec.card.style.setProperty('--cb-rgb', heatRgb);
-      rec.card.style.setProperty('--cb-fill', fillA);
-      rec.card.style.setProperty('--cb-bdr-a', bdrA);
-      rec.card.style.setProperty('--cb-glow-blur', glowBlur);
-      rec.card.style.setProperty('--cb-glow-a', glowA);
-      rec.labelEl.className = pkts > 0 ? 'c-bright' : 'c-muted';
-      rec.labelEl.style.fontWeight = pkts > 0 ? '600' : '400';
-      rec.statEl.className = pkts > 0 ? textCls : 'c-muted';
-      rec.statEl.textContent = statTxt;
-      rec.segEl.className = `seg-meter${pkts > 0 ? ' active' : ''}`;
+      setCls(rec.card, `classify-bar-card ${pkts > 0 ? 'active' : ''}`);
+      setTitle(rec.card, `${label} · ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt})`);
+      setVar(rec.card, '--cb-rgb', heatRgb);
+      setVar(rec.card, '--cb-fill', fillA);
+      setVar(rec.card, '--cb-bdr-a', bdrA);
+      setVar(rec.card, '--cb-glow-blur', glowBlur);
+      setVar(rec.card, '--cb-glow-a', glowA);
+      setCls(rec.labelEl, pkts > 0 ? 'c-bright' : 'c-muted');
+      setStyleProp(rec.labelEl, 'fontWeight', pkts > 0 ? '600' : '400');
+      setCls(rec.statEl, pkts > 0 ? textCls : 'c-muted');
+      setTxt(rec.statEl, statTxt);
+      setCls(rec.segEl, `seg-meter${pkts > 0 ? ' active' : ''}`);
     }
     renderSegMeter(rec.segEl, fillPct / 100, 16, colorName, false);
     if (frag) frag.appendChild(rec.card);
@@ -1312,58 +1312,49 @@ export function renderBlueprint() {
     }
   }
 
-  if ($('#adv-relays')) {
-    $('#adv-relays').textContent = `:${st.tunnel?.mixed_port || 61235}·${st.tunnel?.relays ?? 0}r·${st.mptcp?.endpoints?.length ?? 0}ep`;
-  }
-  if ($('#adv-classify-mode')) {
-    const rem = st.settings?.['classify.remainder'] || 'tunnel';
-    const q = st.settings?.['classify.quic'] === 'reject' ? 'quic✕' : 'quic✓';
-    $('#adv-classify-mode').textContent = `${rem} · ${q}`;
-  }
-  if ($('#adv-guard-dot')) {
-    $('#adv-guard-dot').className = `run-dot ${st.ok ? 'violet' : 'crimson'}`;
-  }
-  if ($('#adv-reconcile')) {
-    const recTs = st.reconciled || st.ts;
-    $('#adv-reconcile').textContent = recTs ? `sync ${fmtClock(recTs)}` : 'live';
-  }
+  setTxt('#adv-relays', `:${st.tunnel?.mixed_port || 61235}·${st.tunnel?.relays ?? 0}r·${st.mptcp?.endpoints?.length ?? 0}ep`);
+  const rem = st.settings?.['classify.remainder'] || 'tunnel';
+  const q = st.settings?.['classify.quic'] === 'reject' ? 'quic✕' : 'quic✓';
+  setTxt('#adv-classify-mode', `${rem} · ${q}`);
+  setCls('#adv-guard-dot', `run-dot ${st.ok ? 'violet' : 'crimson'}`);
+  const recTs = st.reconciled || st.ts;
+  setTxt('#adv-reconcile', recTs ? `sync ${fmtClock(recTs)}` : 'live');
   const docEl = $('#adv-doctor');
   if (docEl) {
-    docEl.textContent = st.ok
+    setTxt(docEl, st.ok
       ? `all ${totChecks} invariants ok`
-      : `${st.fail?.length || 1} fail · ${st.warn?.length || 0} warn`;
-    docEl.className = st.ok ? 'c-violet' : 'c-crimson';
+      : `${st.fail?.length || 1} fail · ${st.warn?.length || 0} warn`);
+    setCls(docEl, st.ok ? 'c-violet' : 'c-crimson');
   }
 
   const evList = S.events?.events || [];
-  if ($('#log-count')) $('#log-count').textContent = `${evList.length} 條`;
-  if ($('#log-latest-ts')) $('#log-latest-ts').textContent = evList[0]?.ts ? fmtClock(evList[0].ts) : 'live';
+  setTxt('#log-count', `${evList.length} 條`);
+  setTxt('#log-latest-ts', evList[0]?.ts ? fmtClock(evList[0].ts) : 'live');
   renderSessionLog($('#ov-session-log'), evList, 60);
 
   // Tier 1A: Pre-Gate & SmartDNS
-  $('#bp-quic-pkts').textContent = liveFlow.quicPkts >= 1000
+  setTxt('#bp-quic-pkts', liveFlow.quicPkts >= 1000
     ? `${(liveFlow.quicPkts / 1000).toFixed(1)}k pkts`
-    : `${liveFlow.quicPkts} pkts`;
+    : `${liveFlow.quicPkts} pkts`);
   const quicMode = st.settings?.['classify.quic'] || 'reject';
   const dnsTagEl = $('#bp-dns-mode-tag');
   if (dnsTagEl) {
-    dnsTagEl.textContent = quicMode === 'reject' ? 'QUIC reject' : 'QUIC pass';
-    dnsTagEl.className = `bp-head-sub ${quicMode === 'reject' ? 'c-sec' : 'c-amber'}`;
+    setTxt(dnsTagEl, quicMode === 'reject' ? 'QUIC reject' : 'QUIC pass');
+    setCls(dnsTagEl, `bp-head-sub ${quicMode === 'reject' ? 'c-sec' : 'c-amber'}`);
   }
 
   const sz = S.rules?.sizes || {};
-  if ($('#bp-dns-port')) {
-    $('#bp-dns-port').textContent = st.dns?.smartdns ? `53→:${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}` : 'offline';
-  }
-  $('#bp-dns-st').textContent = `${sz.domestic4 ?? 0}+${sz.domestic4_dns ?? 0}`;
-  if ($('#bp-dns-tun')) $('#bp-dns-tun').textContent = `${sz.tunnel4 ?? 0}IP · ${sz.tunnel_domains ?? 0}域`;
-  if ($('#bp-dns-dyn')) $('#bp-dns-dyn').textContent = `${sz.relay4 ?? 0}r · ${sz.tunnel4_dns ?? 0}條`;
-  if ($('#bp-quic-bytes')) $('#bp-quic-bytes').textContent = fmtBytes(liveFlow.quicBytes);
+  setTxt('#bp-dns-port', st.dns?.smartdns ? `53→:${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}` : 'offline');
+  setTxt('#bp-dns-st', `${sz.domestic4 ?? 0}+${sz.domestic4_dns ?? 0}`);
+  setTxt('#bp-dns-tun', `${sz.tunnel4 ?? 0}IP · ${sz.tunnel_domains ?? 0}域`);
+  setTxt('#bp-dns-dyn', `${sz.relay4 ?? 0}r · ${sz.tunnel4_dns ?? 0}條`);
+  setTxt('#bp-quic-bytes', fmtBytes(liveFlow.quicBytes));
   const curMode = st.settings?.['strands.aggregate'] || st.site?.mode || 'auto';
-  if ($('#bp-site-name')) {
+  const siteNameEl = $('#bp-site-name');
+  if (siteNameEl) {
     const siteName = st.site?.name || 'direct';
-    $('#bp-site-name').textContent = siteName;
-    $('#bp-site-name').title = `${siteName} (${curMode})`;
+    setTxt(siteNameEl, siteName);
+    setTitle(siteNameEl, `${siteName} (${curMode})`);
   }
   const preEl = $('#bp-pregate-rules');
   if (preEl) {
@@ -1382,47 +1373,36 @@ export function renderBlueprint() {
 
   const chargedRatio = (w.charged_count || 0) / nH;
   renderSegMeter($('#bp-harvest-meter'), chargedRatio, 10, 'spectrum');
-  $('#bp-harvest-txt').textContent = `${w.policy || 'harvest'} ${Math.round(chargedRatio * 100)}%`;
+  setTxt('#bp-harvest-txt', `${w.policy || 'harvest'} ${Math.round(chargedRatio * 100)}%`);
 
-  $$('#site-mode-seg .seg-btn').forEach(b => b.classList.toggle('on', b.dataset.mode === curMode));
+  $$('#site-mode-seg .seg-btn').forEach(b => {
+    const want = b.dataset.mode === curMode;
+    if (b.classList.contains('on') !== want) b.classList.toggle('on', want);
+  });
 
   const memBtn = $('#site-mem-btn');
   if (memBtn) {
-    if (!st.site?.gateway) {
-      memBtn.disabled = true;
-      memBtn.textContent = '無網關';
-    } else if (st.site?.known) {
-      memBtn.disabled = false;
-      memBtn.textContent = `忘記: ${st.site.name}`;
-    } else {
-      memBtn.disabled = false;
-      memBtn.textContent = '記住座標';
-    }
+    const wantDisabled = !st.site?.gateway;
+    const wantTxt = wantDisabled ? '無網關' : (st.site?.known ? `忘記: ${st.site.name}` : '記住座標');
+    if (memBtn.disabled !== wantDisabled) memBtn.disabled = wantDisabled;
+    setTxt(memBtn, wantTxt);
   }
 
   // Tier 1B: Nftables Classify Engine
-  if ($('#bp-classify-sub')) {
-    const remMode = st.settings?.['classify.remainder'] === 'direct' ? '直連' : '歸籠';
-    $('#bp-classify-sub').textContent = `mangle · @dev_policy · 餘量${remMode}`;
-  }
-  $('#bp-ingress-rate').textContent = fmtRate(totalRate).full;
-  $('#bp-ingress-pkts').textContent = liveFlow.totPkts >= 1e6
+  const remMode = st.settings?.['classify.remainder'] === 'direct' ? '直連' : '歸籠';
+  setTxt('#bp-classify-sub', `mangle · @dev_policy · 餘量${remMode}`);
+  setTxt('#bp-ingress-rate', fmtRate(totalRate).full);
+  setTxt('#bp-ingress-pkts', liveFlow.totPkts >= 1e6
     ? `${(liveFlow.totPkts / 1e6).toFixed(2)}M pkts`
-    : `${(liveFlow.totPkts / 1000).toFixed(1)}k pkts`;
+    : `${(liveFlow.totPkts / 1000).toFixed(1)}k pkts`);
   renderClassifyStrip();
-  if ($('#bp-classify-mix')) {
-    const mixTot = Math.max(1, liveFlow.totPkts);
-    const domShare = Math.round((liveFlow.domPkts / mixTot) * 100);
-    const tunShare = Math.round((liveFlow.tunPkts / mixTot) * 100);
-    const dropShare = Math.max(0, ((liveFlow.quicPkts / mixTot) * 100)).toFixed(1);
-    $('#bp-classify-mix').textContent = `直連 ${domShare}% · 歸籠 ${tunShare}% · 阻斷 ${dropShare}%`;
-  }
-  if ($('#bp-classify-foot')) {
-    $('#bp-classify-foot').textContent = `prerouting · ${(S.rules?.rules || []).length} rules`;
-  }
-  if ($('#bp-classify-bytes')) {
-    $('#bp-classify-bytes').textContent = `累計 ${fmtBytes(liveFlow.totBytes)}`;
-  }
+  const mixTot = Math.max(1, liveFlow.totPkts);
+  const domShare = Math.round((liveFlow.domPkts / mixTot) * 100);
+  const tunShare = Math.round((liveFlow.tunPkts / mixTot) * 100);
+  const dropShare = Math.max(0, ((liveFlow.quicPkts / mixTot) * 100)).toFixed(1);
+  setTxt('#bp-classify-mix', `直連 ${domShare}% · 歸籠 ${tunShare}% · 阻斷 ${dropShare}%`);
+  setTxt('#bp-classify-foot', `prerouting · ${(S.rules?.rules || []).length} rules`);
+  setTxt('#bp-classify-bytes', `累計 ${fmtBytes(liveFlow.totBytes)}`);
 
   // Tier 2 · Branch 0: @vip_lane
   const vipS = strands.find(s => s.vip);
@@ -1466,39 +1446,27 @@ export function renderBlueprint() {
   setTxt('#bp-tun-rate', mihomoOk ? fmtRate(liveFlow.tunBps).full : '0 bps');
   renderSegMeter($('#bp-tun-meter'), tunShareBar, 10, mihomoOk ? 'mint' : 'amber');
   setTxt('#bp-tun-pct', `${tunSharePct}% 流佔比`);
-  $('#bp-tun-desc').textContent = tun?.tw_home || tun?.selected || 'TW-HOME';
-  if ($('#bp-tun-bytes')) $('#bp-tun-bytes').textContent = fmtBytes(liveFlow.tunBytes);
-  if ($('#bp-tun-pkts')) {
-    $('#bp-tun-pkts').textContent = liveFlow.tunPkts >= 1e6
-      ? `${(liveFlow.tunPkts / 1e6).toFixed(2)}M pkts`
-      : (liveFlow.tunPkts >= 1000 ? `${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts` : `${liveFlow.tunPkts} pkts`);
-  }
+  setTxt('#bp-tun-desc', tun?.tw_home || tun?.selected || 'TW-HOME');
+  setTxt('#bp-tun-bytes', fmtBytes(liveFlow.tunBytes));
+  setTxt('#bp-tun-pkts', liveFlow.tunPkts >= 1e6
+    ? `${(liveFlow.tunPkts / 1e6).toFixed(2)}M pkts`
+    : (liveFlow.tunPkts >= 1000 ? `${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts` : `${liveFlow.tunPkts} pkts`));
   const eps = st.mptcp?.endpoints || [];
-  const mptcpEl = $('#bp-tun-mptcp');
-  if (mptcpEl) {
-    mptcpEl.textContent = st.mptcp?.enabled ? `${st.mptcp.subflows} sub · ${eps.length} ep` : 'single-path';
-  }
-  if ($('#bp-tun-eps')) {
+  setTxt('#bp-tun-mptcp', st.mptcp?.enabled ? `${st.mptcp.subflows} sub · ${eps.length} ep` : 'single-path');
+  const epEl = $('#bp-tun-eps');
+  if (epEl) {
     const epFull = eps.length ? eps.map(e => e.dev).join(',') : '0 ep';
-    $('#bp-tun-eps').textContent = eps.length > 4
+    setTxt(epEl, eps.length > 4
       ? `${eps.slice(0, 4).map(e => e.dev).join(',')}+${eps.length - 4}`
-      : epFull;
-    $('#bp-tun-eps').title = epFull;
+      : epFull);
+    setTitle(epEl, epFull);
   }
-  if ($('#bp-tun-relays')) {
-    $('#bp-tun-relays').textContent = `${st.tunnel?.relays ?? 0} nodes`;
-  }
-  if ($('#bp-tun-auto')) {
-    const autoName = tun?.auto || tun?.selected || '—';
-    $('#bp-tun-auto').textContent = autoName;
-    $('#bp-tun-auto').title = autoName;
-  }
-  if ($('#bp-tun-canary')) {
-    $('#bp-tun-canary').textContent = canaryMs > 0 ? `${canaryMs} ms · ${canaryFails}f` : '— ms';
-  }
-  if ($('#bp-tun-meta')) {
-    $('#bp-tun-meta').textContent = st.tunnel?.fail_open ? 'fail-open' : 'fail-closed';
-  }
+  setTxt('#bp-tun-relays', `${st.tunnel?.relays ?? 0} nodes`);
+  const autoName = tun?.auto || tun?.selected || '—';
+  setTxt('#bp-tun-auto', autoName);
+  setTitle('#bp-tun-auto', autoName);
+  setTxt('#bp-tun-canary', canaryMs > 0 ? `${canaryMs} ms · ${canaryFails}f` : '— ms');
+  setTxt('#bp-tun-meta', st.tunnel?.fail_open ? 'fail-open' : 'fail-closed');
   const relayListEl = $('#bp-tun-relay-list');
   if (relayListEl) {
     const relays = Array.isArray(tun?.relays) ? tun.relays : [];
@@ -1550,16 +1518,16 @@ export function renderBlueprint() {
       relayListEl.appendChild(rFrag);
     }
   }
-  if ($('#bp-tun-dot')) {
-    $('#bp-tun-dot').className = `run-dot ${mihomoOk ? 'mint' : 'amber'}`;
-  }
-  if ($('#bp-tun-st')) {
-    $('#bp-tun-st').textContent = mihomoOk ? (canaryMs > 0 ? `canary ${canaryMs} ms ok` : 'cage encrypted') : 'offline / direct';
-    $('#bp-tun-st').className = mihomoOk ? 'c-mint' : 'c-amber';
+  setCls('#bp-tun-dot', `run-dot ${mihomoOk ? 'mint' : 'amber'}`);
+  const tunSt = $('#bp-tun-st');
+  if (tunSt) {
+    setTxt(tunSt, mihomoOk ? (canaryMs > 0 ? `canary ${canaryMs} ms ok` : 'cage encrypted') : 'offline / direct');
+    setCls(tunSt, mihomoOk ? 'c-mint' : 'c-amber');
   }
   const zBtn = $('#zashboard-link');
   if (zBtn) {
-    zBtn.href = tun?.dashboard || `http://${st.lan_ip || location.hostname || '192.168.16.1'}:9090/ui/`;
+    const nextHref = tun?.dashboard || `http://${st.lan_ip || location.hostname || '192.168.16.1'}:9090/ui/`;
+    if (zBtn.getAttribute('href') !== nextHref) zBtn.href = nextHref;
   }
 
   // Tier 2 · Branch 2: Domestic Direct + Burst-Harvest
@@ -1573,57 +1541,52 @@ export function renderBlueprint() {
   setTxt('#bp-dom-pct', `${w.charged_count ?? 0}/${nH} 滿桶`);
   setTxt('#bp-dom-share', `${directPct}% 流佔比`);
   renderMiniSpectrum(strands);
-  if ($('#bp-dom-slots')) $('#bp-dom-slots').textContent = `${w.slots ?? 126} (${w.affinity || 'flow'})`;
-  if ($('#bp-dom-direct')) {
-    const domByteCompact = fmtBytes(liveFlow.domBytes).replace(/\s+/g, '');
-    const domPktCompact = liveFlow.domPkts >= 1e6 ? `${(liveFlow.domPkts / 1e6).toFixed(1)}M` : `${Math.round(liveFlow.domPkts / 1000)}k`;
-    $('#bp-dom-direct').textContent = `${domByteCompact}·${domPktCompact}`;
-  }
-  if ($('#bp-dom-probe')) $('#bp-dom-probe').textContent = `${w.interval ?? 2}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`;
-  if ($('#bp-dom-buckets')) $('#bp-dom-buckets').textContent = `${w.charged_count ?? 0}滿/${w.depleted_count ?? 0}耗/${w.cooling_count ?? 0}冷`;
-  if ($('#bp-dom-vip')) $('#bp-dom-vip').textContent = w.vip_dev ? `${w.vip_dev} (#${w.vip_id ?? '—'})` : 'auto';
+  setTxt('#bp-dom-slots', `${w.slots ?? 126} (${w.affinity || 'flow'})`);
+  const domByteCompact = fmtBytes(liveFlow.domBytes).replace(/\s+/g, '');
+  const domPktCompact = liveFlow.domPkts >= 1e6 ? `${(liveFlow.domPkts / 1e6).toFixed(1)}M` : `${Math.round(liveFlow.domPkts / 1000)}k`;
+  setTxt('#bp-dom-direct', `${domByteCompact}·${domPktCompact}`);
+  setTxt('#bp-dom-probe', `${w.interval ?? 2}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`);
+  setTxt('#bp-dom-buckets', `${w.charged_count ?? 0}滿/${w.depleted_count ?? 0}耗/${w.cooling_count ?? 0}冷`);
+  setTxt('#bp-dom-vip', w.vip_dev ? `${w.vip_dev} (#${w.vip_id ?? '—'})` : 'auto');
   const healthyStrands = strands.filter(s => s.healthy && (s.ttfb_ms || 0) > 0);
   const meanRtt = healthyStrands.length
     ? Math.round(healthyStrands.reduce((a, s) => a + s.ttfb_ms, 0) / healthyStrands.length)
     : null;
   const peakStrandBps = strands.length ? Math.max(...strands.map(s => s.peak || (s.now ?? s.rate ?? 0))) : 0;
-  if ($('#bp-dom-rtt')) $('#bp-dom-rtt').textContent = `${meanRtt != null ? `${meanRtt}ms` : '—ms'}·${fmtRateCompact(peakStrandBps)}`;
-  if ($('#bp-dom-best')) {
-    const bestS = healthyStrands.length
-      ? healthyStrands.reduce((best, s) => (s.ttfb_ms < best.ttfb_ms ? s : best), healthyStrands[0])
-      : null;
-    $('#bp-dom-best').textContent = bestS
-      ? `${bestS.dev} ${bestS.ttfb_ms}ms · ${faultCnt}故障`
-      : `${faultCnt}/${nTotal}故障`;
-  }
-  if ($('#bp-dom-toks')) {
-    const avgTok = strands.length
-      ? Math.round(strands.reduce((a, s) => a + (s.tokens_pct ?? 100), 0) / strands.length)
-      : 100;
-    $('#bp-dom-toks').textContent = `均令牌 ${avgTok}%`;
-  }
+  setTxt('#bp-dom-rtt', `${meanRtt != null ? `${meanRtt}ms` : '—ms'}·${fmtRateCompact(peakStrandBps)}`);
+  const bestS = healthyStrands.length
+    ? healthyStrands.reduce((best, s) => (s.ttfb_ms < best.ttfb_ms ? s : best), healthyStrands[0])
+    : null;
+  setTxt('#bp-dom-best', bestS
+    ? `${bestS.dev} ${bestS.ttfb_ms}ms · ${faultCnt}故障`
+    : `${faultCnt}/${nTotal}故障`);
+  const avgTok = strands.length
+    ? Math.round(strands.reduce((a, s) => a + (s.tokens_pct ?? 100), 0) / strands.length)
+    : 100;
+  setTxt('#bp-dom-toks', `均令牌 ${avgTok}%`);
   const coolCnt = (w.cooling_count || 0) + (w.depleted_count || 0);
-  $('#bp-dom-st').textContent = coolCnt > 0 ? `${w.charged_count ?? 0}/${nH} 滿·${coolCnt}冷` : `${w.charged_count ?? 0}/${nH} 滿桶`;
-  $('#bp-dom-desc').textContent = `直連 ${fmtBytes(liveFlow.domBytes).replace(/\s+/g, '')} · 均${meanRtt != null ? `${meanRtt}ms` : '—'}`;
+  setTxt('#bp-dom-st', coolCnt > 0 ? `${w.charged_count ?? 0}/${nH} 滿·${coolCnt}冷` : `${w.charged_count ?? 0}/${nH} 滿桶`);
+  setTxt('#bp-dom-desc', `直連 ${domByteCompact} · 均${meanRtt != null ? `${meanRtt}ms` : '—'}`);
 
   // Tier 3: Stage 3 Full-Height HTB QoS + 21-Uplink Egress Unified Segmented Meters
   const setSegMeter = (sel, ratio, count, colorName, compact = false, active = false) => {
     const node = $(sel);
     if (!node) return;
     renderSegMeter(node, ratio, count, colorName, compact);
-    node.classList.toggle('active', !!active);
+    const want = !!active;
+    if (node.classList.contains('active') !== want) node.classList.toggle('active', want);
   };
 
-  if ($('#bp-qos-meta')) $('#bp-qos-meta').textContent = `MSS ${st.settings?.['main.mss'] ?? 1440}`;
+  setTxt('#bp-qos-meta', `MSS ${st.settings?.['main.mss'] ?? 1440}`);
   const qosDomBps = Math.max(liveFlow.domBps, Math.max(0, totalRate - liveFlow.vipBps - liveFlow.tunBps));
   const qosSumBps = liveFlow.vipBps + liveFlow.tunBps + qosDomBps;
   const qosTotBps = Math.max(1, qosSumBps);
   const shareRatio = (bps) => (bps > 0 ? Math.max(1 / 14, bps / qosTotBps) : 0);
 
-  if ($('#bp-qos-rate')) $('#bp-qos-rate').textContent = fmtRate(qosSumBps).full;
-  if ($('#bp-qos-10-rate')) $('#bp-qos-10-rate').textContent = fmtRate(liveFlow.vipBps).full;
-  if ($('#bp-qos-20-rate')) $('#bp-qos-20-rate').textContent = fmtRate(liveFlow.tunBps).full;
-  if ($('#bp-qos-30-rate')) $('#bp-qos-30-rate').textContent = fmtRate(qosDomBps).full;
+  setTxt('#bp-qos-rate', fmtRate(qosSumBps).full);
+  setTxt('#bp-qos-10-rate', fmtRate(liveFlow.vipBps).full);
+  setTxt('#bp-qos-20-rate', fmtRate(liveFlow.tunBps).full);
+  setTxt('#bp-qos-30-rate', fmtRate(qosDomBps).full);
   setSegMeter('#bp-qos-10-bar', shareRatio(liveFlow.vipBps), 14, 'red',  false, liveFlow.vipBps > 400);
   setSegMeter('#bp-qos-20-bar', shareRatio(liveFlow.tunBps), 14, 'mint', false, liveFlow.tunBps > 400);
   setSegMeter('#bp-qos-30-bar', shareRatio(qosDomBps),       14, 'blue', false, qosDomBps > 400);
@@ -1652,53 +1615,50 @@ export function renderBlueprint() {
   const ewmaDown = st.rate_ewma ?? st.rate ?? 0;
   const ewmaUp = st.rate_up_ewma ?? st.rate_up ?? 0;
   const ewmaMbps = ((ewmaDown + ewmaUp) * 8) / 1e6;
-  if ($('#bp-qos-tx-txt')) $('#bp-qos-tx-txt').textContent = `↑ ${fmtRateCompact(ewmaUp)} · ↓ ${fmtRateCompact(ewmaDown)}`;
+  setTxt('#bp-qos-tx-txt', `↑ ${fmtRateCompact(ewmaUp)} · ↓ ${fmtRateCompact(ewmaDown)}`);
   const ewmaRatio = ewmaMbps > 0 ? Math.min(1, Math.max(1 / 18, Math.log10(1 + ewmaMbps * 3.5) * 0.44)) : 0;
   setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', false, ewmaMbps > 0.02);
-  if ($('#bp-qos-mss-kv')) $('#bp-qos-mss-kv').textContent = `SYN MSS ${st.settings?.['main.mss'] ?? 1440}`;
-  if ($('#bp-qos-st')) $('#bp-qos-st').textContent = `${liveFlow.vipBps > 400 ? '1:10+20+30' : '1:20+30'} shaping`;
-  if ($('#bp-qos-foot')) $('#bp-qos-foot').textContent = `MSS ${st.settings?.['main.mss'] ?? 1440} · 8MB 相變界`;
+  setTxt('#bp-qos-mss-kv', `SYN MSS ${st.settings?.['main.mss'] ?? 1440}`);
+  setTxt('#bp-qos-st', `${liveFlow.vipBps > 400 ? '1:10+20+30' : '1:20+30'} shaping`);
+  setTxt('#bp-qos-foot', `MSS ${st.settings?.['main.mss'] ?? 1440} · 8MB 相變界`);
 
-  if ($('#bp-up-rate')) $('#bp-up-rate').textContent = fmtRate(totalRate).full;
+  setTxt('#bp-up-rate', fmtRate(totalRate).full);
   const upSec = st.sys?.uptime || 0;
   const upDays = Math.floor(upSec / 86400);
   const upHours = Math.floor((upSec % 86400) / 3600);
-  if ($('#bp-up-uptime')) $('#bp-up-uptime').textContent = upSec > 0 ? `up ${upDays}d ${upHours}h` : 'up —';
+  setTxt('#bp-up-uptime', upSec > 0 ? `up ${upDays}d ${upHours}h` : 'up —');
 
-  if ($('#bp-up-pool-txt')) $('#bp-up-pool-txt').textContent = `${w.charged_count ?? 0}/${nTotal} charged · ${st.healthy_count ?? 0} up`;
+  setTxt('#bp-up-pool-txt', `${w.charged_count ?? 0}/${nTotal} charged · ${st.healthy_count ?? 0} up`);
   setSegMeter('#bp-up-pool-bar', (w.charged_count ?? 0) / nTotal, 16, 'spectrum', false, (w.charged_count ?? 0) > 0 && totalRate > 2000);
 
-  if ($('#bp-up-ct-txt')) $('#bp-up-ct-txt').textContent = `${ctCount.toLocaleString()} / ${ctMax.toLocaleString()}`;
+  setTxt('#bp-up-ct-txt', `${ctCount.toLocaleString()} / ${ctMax.toLocaleString()}`);
   const ctRatio = ctCount > 0 ? Math.max(1 / 16, ctCount / ctMax) : 0;
   setSegMeter('#bp-up-ct-bar', ctRatio, 16, ctRatio > 0.8 ? 'amber' : 'spectrum', false, ctCount > 0);
 
   const memMb = Math.round((st.sys?.mem_available_kb || 0) / 1024);
   const load1 = st.sys?.load1 ?? 0;
-  if ($('#bp-up-mem-txt')) $('#bp-up-mem-txt').textContent = `${memMb} MB free · load ${load1}`;
+  setTxt('#bp-up-mem-txt', `${memMb} MB free · load ${load1}`);
   setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / 256)), 16, (load1 > 2.0 || memMb < 48) ? 'amber' : 'spectrum', false, load1 > 0.5);
 
-  if ($('#bp-up-down')) $('#bp-up-down').textContent = fmtBytes(st.down_bytes || 0);
-  if ($('#bp-up-up')) $('#bp-up-up').textContent = fmtBytes(st.up_bytes || 0);
-  if ($('#bp-up-health')) {
-    $('#bp-up-health').textContent = `${st.healthy_count ?? 0}/${nTotal} · ${faultCnt}故障`;
-    $('#bp-up-health').className = faultCnt > 0 ? 'v c-crimson' : 'v';
+  setTxt('#bp-up-down', fmtBytes(st.down_bytes || 0));
+  setTxt('#bp-up-up', fmtBytes(st.up_bytes || 0));
+  const upHealthEl = $('#bp-up-health');
+  if (upHealthEl) {
+    setTxt(upHealthEl, `${st.healthy_count ?? 0}/${nTotal} · ${faultCnt}故障`);
+    setCls(upHealthEl, faultCnt > 0 ? 'v c-crimson' : 'v');
   }
-  if ($('#bp-up-mptcp')) {
-    $('#bp-up-mptcp').textContent = st.mptcp?.enabled
-      ? `${st.mptcp.subflows}sub · ${eps.length}ep`
-      : 'single-path';
-  }
-  if ($('#bp-verify-summary')) {
+  setTxt('#bp-up-mptcp', st.mptcp?.enabled
+    ? `${st.mptcp.subflows}sub · ${eps.length}ep`
+    : 'single-path');
+  const vEl = $('#bp-verify-summary');
+  if (vEl) {
     const vText = st.ok ? `${nTotal}/${nTotal} ok` : `異常:${(st.fail || []).join(',')}`;
-    $('#bp-verify-summary').textContent = vText;
-    $('#bp-verify-summary').title = st.ok ? `${nTotal}/${nTotal} kernel ok` : vText;
-    $('#bp-verify-summary').className = st.ok ? 'v c-bright' : 'v c-crimson';
+    setTxt(vEl, vText);
+    setTitle(vEl, st.ok ? `${nTotal}/${nTotal} kernel ok` : vText);
+    setCls(vEl, st.ok ? 'v c-bright' : 'v c-crimson');
   }
-  if ($('#bp-up-ver')) $('#bp-up-ver').textContent = `PRISM ${st.version || UI_VERSION}`;
-  if ($('#bp-up-sync')) {
-    const recTs = st.reconciled || st.ts;
-    $('#bp-up-sync').textContent = recTs ? fmtClock(recTs) : 'live';
-  }
+  setTxt('#bp-up-ver', `PRISM ${st.version || UI_VERSION}`);
+  setTxt('#bp-up-sync', recTs ? fmtClock(recTs) : 'live');
 
   ensureBlueprintResizeObserver();
   renderWaveguidesCanvas();

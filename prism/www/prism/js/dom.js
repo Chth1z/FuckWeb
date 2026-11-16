@@ -85,22 +85,29 @@ export function renderSegMeter(container, ratio, count = 12, colorClass = 'mint'
   const sig = `${active}/${count}/${colorClass}/${compact ? 1 : 0}`;
   if (container.dataset.sig === sig) return;
   container.dataset.sig = sig;
-  container.style.setProperty('--seg-count', String(count));
-  container.classList.toggle('compact', !!compact);
-  container.innerHTML = '';
+  setVar(container, '--seg-count', String(count));
+  const isCompact = !!compact;
+  if (container.classList.contains('compact') !== isCompact) container.classList.toggle('compact', isCompact);
+
+  const rebuild = container.children.length !== count;
+  if (rebuild) {
+    container.innerHTML = '';
+    for (let i = 0; i < count; i++) container.appendChild(el('span', { class: 'seg-cell' }));
+  }
+
+  const isSpec = colorClass === 'spectrum';
   for (let i = 0; i < count; i++) {
+    const cell = container.children[i];
     const isOn = i < active;
-    if (isOn && colorClass === 'spectrum') {
+    if (isOn && isSpec) {
       const col = spectralColor(i, count);
-      container.appendChild(el('span', {
-        class: 'seg-cell on',
-        style: {
-          background: col.css,
-          boxShadow: `0 0 8px rgba(${col.rgb}, 0.65), 0 0 14px rgba(${col.rgb}, 0.25)`,
-        },
-      }));
+      setCls(cell, 'seg-cell on');
+      setStyleProp(cell, 'background', col.css);
+      setStyleProp(cell, 'boxShadow', `0 0 8px rgba(${col.rgb}, 0.65), 0 0 14px rgba(${col.rgb}, 0.25)`);
     } else {
-      container.appendChild(el('span', { class: `seg-cell ${isOn ? 'on ' + colorClass : ''}` }));
+      setCls(cell, `seg-cell ${isOn ? 'on ' + colorClass : ''}`);
+      if (cell.style.background) setStyleProp(cell, 'background', '');
+      if (cell.style.boxShadow) setStyleProp(cell, 'boxShadow', '');
     }
   }
 }
