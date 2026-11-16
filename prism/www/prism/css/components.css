@@ -889,10 +889,7 @@
     font-size: 13px;
   }
   .spec-ribbon-scope {
-    height: 48px;
-  }
-  .ribbon-scope-svg {
-    height: calc(100% - 10px);
+    height: 58px;
   }
 }
 
@@ -1158,60 +1155,56 @@
   flex-shrink: 0;
 }
 
-/* Unified Fused 126-Slot Rainbow Curtain + Live Aggregate Oscilloscope Bar */
+/* Thick Solid 126-Slot Rainbow Spectrum Bar + Overlaid White Oscilloscope */
 .spec-ribbon-scope {
   position: relative;
   width: 100%;
-  height: clamp(56px, 7.6vh, 72px);
+  height: clamp(68px, 9.2vh, 92px);
   background: rgba(4, 6, 11, 0.96);
-  border: 1px solid var(--line-window);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.45);
   flex-shrink: 0;
+}
+
+.spec-ribbon-scope::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(180deg, rgba(4, 6, 12, 0.34) 0%, transparent 30%, transparent 72%, rgba(4, 6, 12, 0.44) 100%);
+  pointer-events: none;
+  z-index: 2;
 }
 
 .slot-ribbon {
   position: absolute;
-  inset: 2px 3px;
+  inset: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: repeat(126, minmax(0, 1fr));
-  gap: 1px;
+  gap: 0;
   z-index: 1;
 }
 
 .slot-tick {
   height: 100%;
   --tick-rgb: 100, 174, 245;
-  background: linear-gradient(
-    180deg,
-    rgba(var(--tick-rgb), 0.02) 0%,
-    rgba(var(--tick-rgb), 0.09) 78%,
-    rgba(var(--tick-rgb), 0.92) 85%,
-    rgb(var(--tick-rgb)) 100%
-  );
-  opacity: 0.80;
-  transition: opacity 0.12s ease, filter 0.12s ease;
+  background: rgba(var(--tick-rgb), 0.78);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.14);
+  transition: opacity 0.12s ease, filter 0.12s ease, background-color 0.12s ease;
   cursor: pointer;
 }
-.slot-tick.dim { opacity: 0.16 !important; }
+.slot-tick.dim { opacity: 0.24 !important; }
 .slot-tick.hi {
   opacity: 1 !important;
-  background: linear-gradient(
-    180deg,
-    rgba(var(--tick-rgb), 0.16) 0%,
-    rgba(var(--tick-rgb), 0.36) 78%,
-    rgb(var(--tick-rgb)) 85%,
-    rgb(var(--tick-rgb)) 100%
-  );
-  filter: brightness(1.18);
-  box-shadow: 0 0 10px currentColor;
+  background: rgba(var(--tick-rgb), 0.96);
+  filter: brightness(1.14);
   z-index: 2;
 }
 
 .ribbon-scope-svg {
   position: absolute;
-  left: 3px;
-  top: 2px;
-  width: calc(100% - 6px);
-  height: calc(100% - 12px);
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: block;
   z-index: 3;
 }
