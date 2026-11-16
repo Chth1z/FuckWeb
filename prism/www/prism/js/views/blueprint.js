@@ -1188,7 +1188,7 @@ export function renderBlueprint() {
 
   const ctCount = st.sys?.conntrack?.count ?? 0;
   const ctMax = Math.max(1, st.sys?.conntrack?.max ?? 131072);
-  $('#adv-ct').textContent = `${ctCount.toLocaleString()} / ${(ctMax / 1024).toFixed(0)}k`;
+  $('#adv-ct').textContent = `${ctCount.toLocaleString()}/${(ctMax / 1024).toFixed(0)}k`;
   $('#adv-strands').textContent = `${st.healthy_count ?? 0}/${st.strand_count ?? 21} (${st.role === 'primary' ? '主' : (st.role || '主')})`;
 
   // Subsystem Invariants Grid inside PRISM_GUARD (exact disjoint partition of doctor checks)
@@ -1270,12 +1270,16 @@ export function renderBlueprint() {
   if ($('#bp-dns-port')) {
     $('#bp-dns-port').textContent = st.dns?.smartdns ? `53→:${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}` : 'offline';
   }
-  $('#bp-dns-st').textContent = `${sz.domestic4 ?? 0} + ${sz.domestic4_dns ?? 0}`;
-  if ($('#bp-dns-tun')) $('#bp-dns-tun').textContent = `${sz.tunnel4 ?? 0} IP · ${sz.tunnel_domains ?? 0} dom`;
-  if ($('#bp-dns-dyn')) $('#bp-dns-dyn').textContent = `${sz.relay4 ?? 0}r · ${sz.tunnel4_dns ?? 0} dns`;
+  $('#bp-dns-st').textContent = `${sz.domestic4 ?? 0}+${sz.domestic4_dns ?? 0}`;
+  if ($('#bp-dns-tun')) $('#bp-dns-tun').textContent = `${sz.tunnel4 ?? 0}IP · ${sz.tunnel_domains ?? 0}域`;
+  if ($('#bp-dns-dyn')) $('#bp-dns-dyn').textContent = `${sz.relay4 ?? 0}r · ${sz.tunnel4_dns ?? 0}條`;
   if ($('#bp-quic-bytes')) $('#bp-quic-bytes').textContent = fmtBytes(liveFlow.quicBytes);
   const curMode = st.settings?.['strands.aggregate'] || st.site?.mode || 'auto';
-  if ($('#bp-site-name')) $('#bp-site-name').textContent = `${st.site?.name || 'direct'} (${curMode})`;
+  if ($('#bp-site-name')) {
+    const siteName = st.site?.name || 'direct';
+    $('#bp-site-name').textContent = siteName;
+    $('#bp-site-name').title = `${siteName} (${curMode})`;
+  }
   if ($('#bp-pregate-rules')) {
     const preEl = $('#bp-pregate-rules');
     preEl.innerHTML = '';
@@ -1306,7 +1310,7 @@ export function renderBlueprint() {
   // Tier 1B: Nftables Classify Engine
   if ($('#bp-classify-sub')) {
     const remMode = st.settings?.['classify.remainder'] === 'direct' ? '直連' : '隧道';
-    $('#bp-classify-sub').textContent = `prerouting → @dev_policy · 餘量${remMode}`;
+    $('#bp-classify-sub').textContent = `mangle · @dev_policy · 餘量${remMode}`;
   }
   $('#bp-ingress-rate').textContent = fmtRate(totalRate).full;
   $('#bp-ingress-pkts').textContent = liveFlow.totPkts >= 1e6
@@ -1321,7 +1325,7 @@ export function renderBlueprint() {
     $('#bp-classify-mix').textContent = `直連 ${domShare}% · 隧道 ${tunShare}% · 攔截 ${dropShare}%`;
   }
   if ($('#bp-classify-foot')) {
-    $('#bp-classify-foot').textContent = `prerouting · ${(S.rules?.rules || []).length} rules active`;
+    $('#bp-classify-foot').textContent = `prerouting · ${(S.rules?.rules || []).length} rules`;
   }
   if ($('#bp-classify-bytes')) {
     $('#bp-classify-bytes').textContent = `累計 ${fmtBytes(liveFlow.totBytes)}`;
@@ -1343,10 +1347,12 @@ export function renderBlueprint() {
   if ($('#bp-vip-up')) $('#bp-vip-up').textContent = vipS ? fmtBytes(vipS.up_bytes || 0) : '0 B';
   if ($('#bp-vip-ports')) {
     const ports = S.rules?.ports || [];
-    $('#bp-vip-ports').textContent = ports.length ? ports.join(',') : '123,3478,5349';
+    const portsFull = ports.length ? ports.join(',') : '123,3478,5349';
+    $('#bp-vip-ports').textContent = ports.length > 3 ? `${ports.slice(0, 2).join(',')}+${ports.length - 2}埠` : portsFull;
+    $('#bp-vip-ports').title = portsFull;
   }
   if ($('#bp-vip-quota')) {
-    $('#bp-vip-quota').textContent = vipS ? `${fmtRateCompact(vipS.peak || 0)} 峰 · ${vipS.slots ?? 0} 槽` : '<50MB 優先';
+    $('#bp-vip-quota').textContent = vipS ? `${fmtRateCompact(vipS.peak || 0)}峰·${vipS.slots ?? 0}槽` : '<50MB 優先';
   }
   if ($('#bp-vip-dot')) {
     $('#bp-vip-dot').className = `run-dot ${vipS && vipS.healthy ? (liveFlow.vipBps > 400 ? 'red' : 'off') : 'off'}`;
@@ -1376,15 +1382,19 @@ export function renderBlueprint() {
     mptcpEl.textContent = st.mptcp?.enabled ? `${st.mptcp.subflows} sub · ${eps.length} ep` : 'single-path';
   }
   if ($('#bp-tun-eps')) {
-    $('#bp-tun-eps').textContent = eps.length
-      ? eps.map(e => e.dev).slice(0, 3).join(',') + (eps.length > 3 ? `+${eps.length - 3}` : '')
-      : '0 ep';
+    const epFull = eps.length ? eps.map(e => e.dev).join(',') : '0 ep';
+    $('#bp-tun-eps').textContent = eps.length > 4
+      ? `${eps.slice(0, 4).map(e => e.dev).join(',')}+${eps.length - 4}`
+      : epFull;
+    $('#bp-tun-eps').title = epFull;
   }
   if ($('#bp-tun-relays')) {
     $('#bp-tun-relays').textContent = `${st.tunnel?.relays ?? 0} nodes`;
   }
   if ($('#bp-tun-auto')) {
-    $('#bp-tun-auto').textContent = tun?.auto || tun?.selected || '—';
+    const autoName = tun?.auto || tun?.selected || '—';
+    $('#bp-tun-auto').textContent = autoName;
+    $('#bp-tun-auto').title = autoName;
   }
   if ($('#bp-tun-canary')) {
     $('#bp-tun-canary').textContent = canaryMs > 0 ? `${canaryMs} ms · ${canaryFails}f` : '— ms';
@@ -1457,24 +1467,24 @@ export function renderBlueprint() {
   if ($('#bp-dom-direct')) {
     const domByteCompact = fmtBytes(liveFlow.domBytes).replace(/\s+/g, '');
     const domPktCompact = liveFlow.domPkts >= 1e6 ? `${(liveFlow.domPkts / 1e6).toFixed(1)}M` : `${Math.round(liveFlow.domPkts / 1000)}k`;
-    $('#bp-dom-direct').textContent = `${domByteCompact} · ${domPktCompact}`;
+    $('#bp-dom-direct').textContent = `${domByteCompact}·${domPktCompact}`;
   }
   if ($('#bp-dom-probe')) $('#bp-dom-probe').textContent = `${w.interval ?? 2}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`;
-  if ($('#bp-dom-buckets')) $('#bp-dom-buckets').textContent = `${w.charged_count ?? 0}滿 / ${w.depleted_count ?? 0}耗 / ${w.cooling_count ?? 0}冷`;
+  if ($('#bp-dom-buckets')) $('#bp-dom-buckets').textContent = `${w.charged_count ?? 0}滿/${w.depleted_count ?? 0}耗/${w.cooling_count ?? 0}冷`;
   if ($('#bp-dom-vip')) $('#bp-dom-vip').textContent = w.vip_dev ? `${w.vip_dev} (#${w.vip_id ?? '—'})` : 'auto';
   const healthyStrands = strands.filter(s => s.healthy && (s.ttfb_ms || 0) > 0);
   const meanRtt = healthyStrands.length
     ? Math.round(healthyStrands.reduce((a, s) => a + s.ttfb_ms, 0) / healthyStrands.length)
     : null;
   const peakStrandBps = strands.length ? Math.max(...strands.map(s => s.peak || (s.now ?? s.rate ?? 0))) : 0;
-  if ($('#bp-dom-rtt')) $('#bp-dom-rtt').textContent = `${meanRtt != null ? `${meanRtt} ms` : '— ms'} · ${fmtRateCompact(peakStrandBps)}`;
+  if ($('#bp-dom-rtt')) $('#bp-dom-rtt').textContent = `${meanRtt != null ? `${meanRtt}ms` : '—ms'}·${fmtRateCompact(peakStrandBps)}`;
   if ($('#bp-dom-best')) {
     const bestS = healthyStrands.length
       ? healthyStrands.reduce((best, s) => (s.ttfb_ms < best.ttfb_ms ? s : best), healthyStrands[0])
       : null;
     $('#bp-dom-best').textContent = bestS
-      ? `fastest ${bestS.dev} (${bestS.ttfb_ms}ms) · fault ${faultCnt}`
-      : `fault ${faultCnt}/${nTotal}`;
+      ? `${bestS.dev} ${bestS.ttfb_ms}ms · ${faultCnt}故障`
+      : `${faultCnt}/${nTotal}故障`;
   }
   if ($('#bp-dom-toks')) {
     const avgTok = strands.length
@@ -1482,8 +1492,9 @@ export function renderBlueprint() {
       : 100;
     $('#bp-dom-toks').textContent = `均令牌 ${avgTok}%`;
   }
-  $('#bp-dom-st').textContent = `${w.charged_count ?? 0}/${nH} charged · ${(w.cooling_count || 0) + (w.depleted_count || 0)} cool`;
-  $('#bp-dom-desc').textContent = `累計直連 ${fmtBytes(liveFlow.domBytes)} · 均值 ${meanRtt != null ? `${meanRtt} ms` : '—'}`;
+  const coolCnt = (w.cooling_count || 0) + (w.depleted_count || 0);
+  $('#bp-dom-st').textContent = coolCnt > 0 ? `${w.charged_count ?? 0}/${nH} 滿·${coolCnt}冷` : `${w.charged_count ?? 0}/${nH} 滿桶`;
+  $('#bp-dom-desc').textContent = `直連 ${fmtBytes(liveFlow.domBytes).replace(/\s+/g, '')} · 均${meanRtt != null ? `${meanRtt}ms` : '—'}`;
 
   // Tier 3: Stage 3 Full-Height HTB QoS + 21-Uplink Egress Unified Segmented Meters
   const setSegMeter = (sel, ratio, count, colorName, compact = false, active = false) => {
@@ -1531,7 +1542,7 @@ export function renderBlueprint() {
   setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', false, ewmaMbps > 0.02);
   if ($('#bp-qos-mss-kv')) $('#bp-qos-mss-kv').textContent = `SYN MSS ${st.settings?.['main.mss'] ?? 1440}`;
   if ($('#bp-qos-st')) $('#bp-qos-st').textContent = `${liveFlow.vipBps > 400 ? '1:10+20+30' : '1:20+30'} shaping`;
-  if ($('#bp-qos-foot')) $('#bp-qos-foot').textContent = `SYN MSS ${st.settings?.['main.mss'] ?? 1440} · 8MB 分界`;
+  if ($('#bp-qos-foot')) $('#bp-qos-foot').textContent = `MSS ${st.settings?.['main.mss'] ?? 1440} · 8MB 分界`;
 
   if ($('#bp-up-rate')) $('#bp-up-rate').textContent = fmtRate(totalRate).full;
   const upSec = st.sys?.uptime || 0;
@@ -1554,18 +1565,18 @@ export function renderBlueprint() {
   if ($('#bp-up-down')) $('#bp-up-down').textContent = fmtBytes(st.down_bytes || 0);
   if ($('#bp-up-up')) $('#bp-up-up').textContent = fmtBytes(st.up_bytes || 0);
   if ($('#bp-up-health')) {
-    $('#bp-up-health').textContent = `${st.healthy_count ?? 0}/${nTotal} up · ${faultCnt} fault`;
+    $('#bp-up-health').textContent = `${st.healthy_count ?? 0}/${nTotal} · ${faultCnt}故障`;
     $('#bp-up-health').className = faultCnt > 0 ? 'v c-crimson' : 'v';
   }
   if ($('#bp-up-mptcp')) {
     $('#bp-up-mptcp').textContent = st.mptcp?.enabled
-      ? `${st.mptcp.subflows} sub · ${eps.length} ep`
+      ? `${st.mptcp.subflows}sub · ${eps.length}ep`
       : 'single-path';
   }
   if ($('#bp-verify-summary')) {
-    $('#bp-verify-summary').textContent = st.ok
-      ? `${nTotal}/${nTotal} kernel ok`
-      : `異常: ${(st.fail || []).join(', ')}`;
+    const vText = st.ok ? `${nTotal}/${nTotal} ok` : `異常:${(st.fail || []).join(',')}`;
+    $('#bp-verify-summary').textContent = vText;
+    $('#bp-verify-summary').title = st.ok ? `${nTotal}/${nTotal} kernel ok` : vText;
     $('#bp-verify-summary').className = st.ok ? 'v c-bright' : 'v c-crimson';
   }
   if ($('#bp-up-ver')) $('#bp-up-ver').textContent = `PRISM ${st.version || UI_VERSION}`;

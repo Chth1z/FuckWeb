@@ -160,9 +160,9 @@
               <div class="bp-kv-strip cols-2">
                 <div class="bp-kv-cell"><span class="k">DNS劫持</span><span id="adv-dns" class="v c-violet">53→6053</span></div>
                 <div class="bp-kv-cell"><span class="k">卸載</span><span id="adv-offload" class="v c-violet">per-pkt</span></div>
-                <div class="bp-kv-cell"><span class="k">站點籠</span><span id="adv-site" class="v">—</span></div>
+                <div class="bp-kv-cell"><span class="k">站點</span><span id="adv-site" class="v">—</span></div>
                 <div class="bp-kv-cell"><span class="k">鏈路</span><span id="adv-strands" class="v">21/21</span></div>
-                <div class="bp-kv-cell"><span class="k">conntrack</span><span id="adv-ct" class="v">0</span></div>
+                <div class="bp-kv-cell"><span class="k">連接表</span><span id="adv-ct" class="v">0</span></div>
                 <div class="bp-kv-cell"><span class="k">TProxy</span><span id="adv-relays" class="v">:61235</span></div>
                 <div class="bp-kv-cell"><span class="k">餘量</span><span id="adv-classify-mode" class="v">tunnel</span></div>
                 <div class="bp-kv-cell"><span class="k">閉鎖</span><span id="adv-failclosed" class="v c-violet">locked</span></div>
@@ -204,7 +204,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title"><span class="c-spectrum">PRE-GATE · GUARD &amp; DNS</span></div>
-                    <div class="bp-card-sub">dns :53→:6053 · IPv6 / DoT:853 閉鎖</div>
+                    <div class="bp-card-sub">DNS劫持 · 防繞過預檢門</div>
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-quic-pkts" class="bp-live-rate c-bright">0 pkts</span>
@@ -225,7 +225,7 @@
                     <div class="bp-kv-cell"><span class="k">站點籠</span><span id="bp-site-name" class="v">auto</span></div>
                   </div>
                   <div id="bp-pregate-rules" class="bp-inline-summary">
-                    <span class="c-sec">IPv6 drop · DoT:853 drop · DNS:53→:6053</span>
+                    <span class="c-sec">IPv6 drop · DoT:853 drop</span>
                     <span class="c-spectrum" style="flex-shrink:0;font-weight:600">fail-closed</span>
                   </div>
                 </div>
@@ -245,7 +245,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title"><span class="c-spectrum">NFTABLES CLASSIFY</span></div>
-                    <div id="bp-classify-sub" class="bp-card-sub">prerouting → @dev_policy · 餘量隧道</div>
+                    <div id="bp-classify-sub" class="bp-card-sub">mangle · @dev_policy · 餘量隧道</div>
                   </div>
                   <div class="bp-head-kpi">
                     <div id="bp-ingress-rate" class="bp-live-rate c-bright">0 Mbps</div>
@@ -260,7 +260,7 @@
                 <div class="bp-node-foot bp-node-foot-rule">
                   <span style="display:inline-flex;align-items:center;gap:5px;min-width:0">
                     <span class="run-dot spectrum"></span>
-                    <span id="bp-classify-foot" class="c-sec" style="overflow:hidden;text-overflow:ellipsis">prerouting → weave / divert</span>
+                    <span id="bp-classify-foot" class="c-sec" style="overflow:hidden;text-overflow:ellipsis">prerouting · 11 rules</span>
                   </span>
                   <span id="bp-classify-bytes" class="c-bright" style="font-variant-numeric:tabular-nums;flex-shrink:0">累計 —</span>
                 </div>
@@ -273,7 +273,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title c-red">@vip_lane · 電競專線</div>
-                    <div class="bp-card-sub">ct mark 0x100 · 小包UDP/DSCP · ≥50MB自動降級</div>
+                    <div class="bp-card-sub">0x100 · 小包UDP/DSCP · ≥50MB降級</div>
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-vip-rate" class="bp-live-rate c-red">0 bps</span>
@@ -306,7 +306,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title c-mint">TW-HOME · 台灣家寬零跳變籠</div>
-                    <div class="bp-card-sub">TProxy :61235 · @tunnel4 · output → weave_out</div>
+                    <div class="bp-card-sub">TProxy :61235 · @tunnel4 → weave_out</div>
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-tun-rate" class="bp-live-rate c-mint">0 bps</span>
@@ -325,11 +325,11 @@
                   </div>
                   <div id="bp-tun-chain" class="bp-kv-strip cols-2">
                     <div class="bp-kv-cell"><span class="k">MPTCP</span><span id="bp-tun-mptcp" class="v c-bright">—</span></div>
-                    <div class="bp-kv-cell"><span class="k">出口端點</span><span id="bp-tun-eps" class="v">—</span></div>
-                    <div class="bp-kv-cell"><span class="k">自動備選</span><span id="bp-tun-auto" class="v">—</span></div>
                     <div class="bp-kv-cell"><span class="k">中繼池</span><span id="bp-tun-relays" class="v">—</span></div>
                     <div class="bp-kv-cell"><span class="k">金絲雀</span><span id="bp-tun-canary" class="v c-mint">— ms</span></div>
                     <div class="bp-kv-cell"><span class="k">失陷籠</span><span id="bp-tun-meta" class="v c-mint">fail-closed</span></div>
+                    <div class="bp-kv-cell span-2"><span class="k">出口端點</span><span id="bp-tun-eps" class="v">—</span></div>
+                    <div class="bp-kv-cell span-2"><span class="k">自動備選</span><span id="bp-tun-auto" class="v">—</span></div>
                   </div>
                   <div id="bp-tun-relay-list" class="relay-mini-list"></div>
                 </div>
@@ -376,7 +376,7 @@
                 </div>
                 <div class="bp-node-foot bp-node-foot-rule">
                   <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0"><span class="run-dot blue"></span><span id="bp-dom-st" class="c-blue">ready</span></span>
-                  <span id="bp-dom-desc" class="c-sec" style="min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:right">0/21 滿桶 · 126 slots</span>
+                  <span id="bp-dom-desc" class="c-sec" style="min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:right">直連 0B · 均—</span>
                 </div>
               </div>
             </div>
@@ -387,7 +387,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title"><span class="c-spectrum">3-BAND HTB + FQ_CODEL</span></div>
-                    <div class="bp-card-sub">postrouting · SYN/ACK/UDP ≤256B 零延遲</div>
+                    <div class="bp-card-sub">postrouting · ≤256B 小包零延遲</div>
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-qos-rate" class="bp-live-rate c-bright">0 bps</span>
@@ -404,7 +404,7 @@
                     <span id="bp-qos-10-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
                       <span class="c-sec">遊戲 UDP / SYN·ACK / DNS</span>
-                      <span id="bp-qos-10-sub" class="c-muted">fq_codel target 2ms</span>
+                      <span id="bp-qos-10-sub" class="c-muted">fq_codel 2ms</span>
                     </div>
                   </div>
 
@@ -416,7 +416,7 @@
                     <span id="bp-qos-20-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
                       <span class="c-sec">TW-HOME 隧道 / 互動網頁突發</span>
-                      <span id="bp-qos-20-sub" class="c-muted">default interactive</span>
+                      <span id="bp-qos-20-sub" class="c-muted">interactive</span>
                     </div>
                   </div>
 
@@ -428,7 +428,7 @@
                     <span id="bp-qos-30-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
                       <span class="c-sec">直連收割 / ct≥8MB 大流降級</span>
-                      <span id="bp-qos-30-sub" class="c-muted">21-strand fair bulk</span>
+                      <span id="bp-qos-30-sub" class="c-muted">21-strand bulk</span>
                     </div>
                   </div>
                 </div>
