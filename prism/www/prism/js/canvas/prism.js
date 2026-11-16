@@ -346,12 +346,12 @@ function drawPrismFrame(dt = 0.016) {
   drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamHalf * 2.5, '255, 255, 255', innerGlowAlpha);
   ctx.restore();
 
-  // Blazing crisp pure white incident photon core
+  // Blazing crisp pure white incident photon core (exact uniform width matching internal entry hit segment)
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.moveTo(startX + nx * beamHalf, startY + ny * beamHalf);
-  ctx.lineTo(beamEndX + nx * (beamHalf * 0.85), beamEndY + ny * (beamHalf * 0.85));
-  ctx.lineTo(beamEndX - nx * (beamHalf * 0.85), beamEndY - ny * (beamHalf * 0.85));
+  ctx.lineTo(beamEndX + nx * beamHalf, beamEndY + ny * beamHalf);
+  ctx.lineTo(beamEndX - nx * beamHalf, beamEndY - ny * beamHalf);
   ctx.lineTo(startX - nx * beamHalf, startY - ny * beamHalf);
   ctx.closePath();
   ctx.fill();
@@ -528,15 +528,15 @@ function drawPrismFrame(dt = 0.016) {
     });
   }
 
-  // Seamless slope-aligned outer atmospheric glow drawn beneath opaque boundary bands (zero edge luminance cliff or right notch)
+  // Tight crisp outer edge sheen hugging top Red & bottom Violet without smearing past bevel exit corners
   if (!anyHover && bandGeoms.length > 0) {
     const firstB = bandGeoms[0];
     const lastB = bandGeoms[bandGeoms.length - 1];
-    const outerReach = Math.min(34, 22 + Math.sqrt(Math.max(0, totalMbps)) * 2.0);
+    const outerReach = Math.min(10, 6 + Math.sqrt(Math.max(0, totalMbps)) * 0.9);
     const nxTop = topDy / topLen, nyTop = -topDx / topLen;
     const nxBot = -botDy / botLen, nyBot = botDx / botLen;
-    const topStartA = Math.min(0.76, ((firstB.exitLum + firstB.farLum) * 0.5) * (0.64 + Math.min(0.14, Math.sqrt(Math.max(0, totalMbps)) * 0.02)));
-    const botStartA = Math.min(0.76, ((lastB.exitLum + lastB.farLum) * 0.5) * (0.64 + Math.min(0.14, Math.sqrt(Math.max(0, totalMbps)) * 0.02)));
+    const topStartA = Math.min(0.28, ((firstB.exitLum + firstB.farLum) * 0.5) * (0.24 + Math.min(0.06, Math.sqrt(Math.max(0, totalMbps)) * 0.01)));
+    const botStartA = Math.min(0.28, ((lastB.exitLum + lastB.farLum) * 0.5) * (0.24 + Math.min(0.06, Math.sqrt(Math.max(0, totalMbps)) * 0.01)));
 
     drawFeatheredEdge(
       ctx,
@@ -640,59 +640,14 @@ function drawPrismFrame(dt = 0.016) {
     ctx.fill();
     ctx.restore();
   };
-  castInwardBevel(Math.max(10, side * 0.068), 'rgba(130, 192, 214, 0.38)');
-  castInwardBevel(Math.max(3, side * 0.016), 'rgba(196, 232, 240, 0.26)');
+  // Deep smooth frosted DSOTM cyan-white glass bevel fading seamlessly inward (no nested wireframe line)
+  castInwardBevel(Math.max(16, side * 0.095), 'rgba(136, 200, 224, 0.72)');
+  castInwardBevel(Math.max(6, side * 0.036), 'rgba(196, 232, 246, 0.68)');
 
-  const exitMidX = (exitTopX + exitBotX) * 0.5;
-  const exitMidY = (exitTopY + exitBotY) * 0.5;
-  const wEntTopY = entryY - beamHalf * 0.72;
-  const wEntBotY = entryY + beamHalf * 0.72;
-
-  // One seamless creamy-white internal dispersion wedge fading cleanly into obsidian void before right bevel
+  // Dense inner crystal rim band clipped strictly inside the triangle silhouette for cover-faithful frame thickness
   ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  const wedgeGrad = ctx.createLinearGradient(entryX, entryY, exitMidX, exitMidY);
-  wedgeGrad.addColorStop(0.00, 'rgba(255, 255, 255, 0.86)');
-  wedgeGrad.addColorStop(0.12, 'rgba(228, 240, 252, 0.56)');
-  wedgeGrad.addColorStop(0.28, 'rgba(186, 214, 240, 0.28)');
-  wedgeGrad.addColorStop(0.48, 'rgba(146, 182, 218, 0.11)');
-  wedgeGrad.addColorStop(0.70, 'rgba(116, 156, 198, 0.03)');
-  wedgeGrad.addColorStop(0.88, 'rgba(100, 142, 188, 0.008)');
-  wedgeGrad.addColorStop(1.00, 'rgba(100, 142, 188, 0.0)');
-
-  ctx.shadowColor = 'rgba(205, 232, 255, 0.24)';
-  ctx.shadowBlur = Math.max(7, side * 0.025);
-  ctx.beginPath();
-  ctx.moveTo(entryX - 1.5, wEntTopY);
-  ctx.lineTo(exitTopX, exitTopY);
-  ctx.lineTo(exitBotX, exitBotY);
-  ctx.lineTo(entryX - 1.5, wEntBotY);
-  ctx.closePath();
-  ctx.fillStyle = wedgeGrad;
-  ctx.fill();
-
-  // Soft pinpoint glow right where incident photon beam strikes left crystal slope
-  const entryRadius = Math.max(16, side * 0.14);
-  const entryPeak = Math.min(0.32, 0.16 + Math.sqrt(Math.max(0, totalMbps)) * 0.025);
-  const entryGlow = ctx.createRadialGradient(entryX + 1.5, entryY, 0.5, entryX + 2.5, entryY, entryRadius);
-  entryGlow.addColorStop(0.00, `rgba(255, 255, 255, ${entryPeak.toFixed(3)})`);
-  entryGlow.addColorStop(0.26, `rgba(220, 238, 255, ${(entryPeak * 0.52).toFixed(3)})`);
-  entryGlow.addColorStop(0.58, `rgba(185, 216, 252, ${(entryPeak * 0.16).toFixed(3)})`);
-  entryGlow.addColorStop(1.00, 'rgba(170, 206, 248, 0)');
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = entryGlow;
-  ctx.fillRect(entryX - entryRadius, entryY - entryRadius, entryRadius * 2, entryRadius * 2);
-  ctx.restore();
-  ctx.restore(); // End interior prism clip
-
-  // Quiet understated hairline glass perimeter (never outshines the light beams)
-  ctx.save();
-  const rimGrad = ctx.createLinearGradient(topX, topY, cx, leftY);
-  rimGrad.addColorStop(0.00, 'rgba(200, 226, 238, 0.42)');
-  rimGrad.addColorStop(0.65, 'rgba(176, 206, 224, 0.34)');
-  rimGrad.addColorStop(1.00, 'rgba(150, 186, 210, 0.24)');
-  ctx.strokeStyle = rimGrad;
-  ctx.lineWidth = 1.05;
+  ctx.strokeStyle = 'rgba(218, 240, 250, 0.84)';
+  ctx.lineWidth = Math.max(4.4, side * 0.015);
   ctx.lineJoin = 'miter';
   ctx.beginPath();
   ctx.moveTo(topX, topY);
@@ -700,6 +655,93 @@ function drawPrismFrame(dt = 0.016) {
   ctx.lineTo(leftX, leftY);
   ctx.closePath();
   ctx.stroke();
+  ctx.restore();
+
+  // Exact ray-slope intersection so internal wedge origin locks 1:1 to incident white beam at every beamHalf
+  const intersectLeftSlope = (px, py) => {
+    const lx = leftX - topX;
+    const ly = leftY - topY;
+    const denom = (ly * ux - lx * uy) || 1;
+    const t = ((py - topY) * ux - (px - topX) * uy) / denom;
+    return [topX + lx * t, topY + ly * t];
+  };
+  const [hitAX, hitAY] = intersectLeftSlope(entryX + nx * beamHalf, entryY + ny * beamHalf);
+  const [hitBX, hitBY] = intersectLeftSlope(entryX - nx * beamHalf, entryY - ny * beamHalf);
+  const hitTopX = hitAY <= hitBY ? hitAX : hitBX;
+  const hitTopY = hitAY <= hitBY ? hitAY : hitBY;
+  const hitBotX = hitAY <= hitBY ? hitBX : hitAX;
+  const hitBotY = hitAY <= hitBY ? hitBY : hitAY;
+
+  // Orient internal dispersion gradient perpendicular to right slope so BOTH exitTop & exitBot meet the crystal wall evenly
+  const rSlopeDx = rightX - topX;
+  const rSlopeDy = rightY - topY;
+  const rSlopeLen = Math.hypot(rSlopeDx, rSlopeDy) || 1;
+  const rOutNx = rSlopeDy / rSlopeLen;
+  const rOutNy = -rSlopeDx / rSlopeLen;
+  const spanPerp = Math.max(10, (exitTopX - entryX) * rOutNx + (exitTopY - entryY) * rOutNy);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const wedgeGrad = ctx.createLinearGradient(
+    entryX,
+    entryY,
+    entryX + rOutNx * spanPerp,
+    entryY + rOutNy * spanPerp
+  );
+  wedgeGrad.addColorStop(0.00, 'rgba(255, 255, 255, 0.88)');
+  wedgeGrad.addColorStop(0.14, 'rgba(228, 240, 252, 0.52)');
+  wedgeGrad.addColorStop(0.34, 'rgba(186, 214, 240, 0.24)');
+  wedgeGrad.addColorStop(0.62, 'rgba(146, 182, 218, 0.10)');
+  wedgeGrad.addColorStop(0.86, 'rgba(122, 164, 206, 0.055)');
+  wedgeGrad.addColorStop(1.00, 'rgba(116, 160, 204, 0.04)');
+
+  ctx.beginPath();
+  ctx.moveTo(hitTopX, hitTopY);
+  ctx.lineTo(exitTopX, exitTopY);
+  ctx.lineTo(exitBotX, exitBotY);
+  ctx.lineTo(hitBotX, hitBotY);
+  ctx.closePath();
+  ctx.fillStyle = wedgeGrad;
+  ctx.fill();
+
+  // Soft pinpoint glow right where incident photon beam strikes left crystal slope
+  const entryRadius = Math.max(16, side * 0.14);
+  const entryPeak = Math.min(0.34, 0.18 + Math.sqrt(Math.max(0, totalMbps)) * 0.025);
+  const entryGlow = ctx.createRadialGradient(entryX + 1.5, entryY, 0.5, entryX + 2.5, entryY, entryRadius);
+  entryGlow.addColorStop(0.00, `rgba(255, 255, 255, ${entryPeak.toFixed(3)})`);
+  entryGlow.addColorStop(0.26, `rgba(220, 238, 255, ${(entryPeak * 0.52).toFixed(3)})`);
+  entryGlow.addColorStop(0.58, `rgba(185, 216, 252, ${(entryPeak * 0.16).toFixed(3)})`);
+  entryGlow.addColorStop(1.00, 'rgba(170, 206, 248, 0)');
+  ctx.fillStyle = entryGlow;
+  ctx.fillRect(entryX - entryRadius, entryY - entryRadius, entryRadius * 2, entryRadius * 2);
+  ctx.restore();
+  ctx.restore(); // End interior prism clip
+
+  // Razor crisp outer crystal edge (zero outward blur smear onto white beam or exiting rays)
+  ctx.save();
+  const rimGrad = ctx.createLinearGradient(topX, topY, cx, leftY);
+  rimGrad.addColorStop(0.00, 'rgba(232, 246, 255, 0.88)');
+  rimGrad.addColorStop(0.65, 'rgba(202, 230, 246, 0.78)');
+  rimGrad.addColorStop(1.00, 'rgba(176, 212, 236, 0.72)');
+  ctx.strokeStyle = rimGrad;
+  ctx.lineWidth = 1.25;
+  ctx.lineJoin = 'miter';
+  ctx.beginPath();
+  ctx.moveTo(topX, topY);
+  ctx.lineTo(rightX, rightY);
+  ctx.lineTo(leftX, leftY);
+  ctx.closePath();
+  ctx.stroke();
+
+  // Crisp bright photon junction seamlessly joining left incident beam across the crystal rim
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(hitTopX - ux * 1.4, hitTopY - uy * 1.4);
+  ctx.lineTo(hitTopX + ux * 2.2, hitTopY + uy * 2.2);
+  ctx.lineTo(hitBotX + ux * 2.2, hitBotY + uy * 2.2);
+  ctx.lineTo(hitBotX - ux * 1.4, hitBotY - uy * 1.4);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 
   S.hitBoxes.push({
