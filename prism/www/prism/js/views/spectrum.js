@@ -230,15 +230,15 @@ function buildHeatmapTiles(grid, strands) {
     },
       spark,
       el('div', { class: 'heat-top' },
-        el('div', { class: 'heat-tl' }, nameEl, lamEl),
-        el('div', { class: 'heat-tr' }, rttEl, flagEl)
+        el('div', { class: 'heat-top-row' },
+          el('div', { class: 'heat-tl' }, nameEl, lamEl),
+          el('div', { class: 'heat-tr' }, rttEl, flagEl)
+        ),
+        el('div', { class: 'heat-speed-tl' }, downEl, subEl)
       ),
       el('div', { class: 'heat-bottom' },
-        el('div', { class: 'heat-corners-bot' },
-          el('div', { class: 'heat-bl' }, downEl, subEl),
-          brEl
-        ),
-        slotsBarEl
+        slotsBarEl,
+        brEl
       )
     );
 
