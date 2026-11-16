@@ -5,7 +5,7 @@
 import { S, UI_VERSION, fmtRate } from './state.js?v=5.6.6';
 import { $, $$, toast } from './dom.js?v=5.6.6';
 import { callBatch, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.6.6';
-import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=5.6.6';
+import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.js?v=5.6.6';
 import { renderOverview } from './views/overview.js?v=5.6.6';
 import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.6.6';
 import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.6.6';
@@ -16,6 +16,7 @@ let slowTimer = null;
 let fastSeq = 0;
 let fastInFlight = false;
 let slowInFlight = false;
+let lastFastTab = '';
 
 function renderChrome() {
   const st = S.status;
@@ -86,7 +87,10 @@ export function switchTab(tab, updateHash = true, refresh = true) {
     pollFast();
     pollSlow();
   }
-  if (tab === 'overview') markPrismDirty();
+  if (tab === 'overview') {
+    renderPrismNow();
+    markPrismDirty();
+  }
   if (tab === 'blueprint') startBlueprintAnim();
   else stopBlueprintAnim();
   if (tab === 'spectrum') startSpectrumAnim();
@@ -136,7 +140,9 @@ async function pollFast() {
   if (document.visibilityState === 'hidden' || fastInFlight) return;
   fastInFlight = true;
   const seq = ++fastSeq;
-  const runHeavy = (seq === 1 || seq % 2 === 0);
+  const tabChanged = (lastFastTab !== S.tab);
+  lastFastTab = S.tab;
+  const runHeavy = tabChanged || (seq === 1 || seq % 2 === 0);
   try {
     const needFullSeries = S.tab === 'spectrum' && (!S.series?.ts || S.series.ts.length < 2);
     const jobs = [
@@ -154,6 +160,7 @@ async function pollFast() {
     if (cn) S.connections = cn;
     if (rl) S.rules = rl;
     renderActiveTab();
+    saveBootSnapshot();
   } catch (e) {
     // Keep last snapshot cleanly without UI glitch
   } finally {
@@ -180,6 +187,7 @@ async function pollSlow() {
     if (ser) mergeSeriesDelta(ser);
     if (cfg) S.config = cfg;
     renderActiveTab();
+    saveBootSnapshot();
   } catch (_) {
   } finally {
     slowInFlight = false;
@@ -248,6 +256,80 @@ function bindGlobalEvents() {
   });
 }
 
+const SNAPSHOT_KEY = 'prism_snap_v1';
+let lastSnapSavedAt = 0;
+
+function trimSeriesForSnap(ser) {
+  if (!ser || !Array.isArray(ser.ts) || ser.ts.length < 2) return null;
+  const maxKeep = 240;
+  const start = Math.max(0, ser.ts.length - maxKeep);
+  const sliceMap = (m) => {
+    if (!m) return undefined;
+    const out = {};
+    for (const [k, v] of Object.entries(m)) {
+      if (Array.isArray(v)) out[k] = v.slice(start);
+    }
+    return out;
+  };
+  return {
+    ts: ser.ts.slice(start),
+    total: (ser.total || []).slice(start),
+    up: (ser.up || []).slice(start),
+    strands: sliceMap(ser.strands),
+    strands_up: sliceMap(ser.strands_up)
+  };
+}
+
+function saveBootSnapshot(force = false) {
+  if (typeof sessionStorage === 'undefined' || !S.status) return;
+  const now = Date.now();
+  if (!force && (now - lastSnapSavedAt) < 900) return;
+  lastSnapSavedAt = now;
+  try {
+    sessionStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
+      savedAt: now,
+      status: S.status,
+      devices: S.devices,
+      tunnel: S.tunnel,
+      rules: S.rules,
+      events: S.events,
+      doctor: S.doctor,
+      series: trimSeriesForSnap(S.series)
+    }));
+  } catch (_) {}
+}
+
+function loadBootSnapshot() {
+  if (typeof sessionStorage === 'undefined') return false;
+  try {
+    const raw = sessionStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return false;
+    const snap = JSON.parse(raw);
+    if (!snap || !snap.status || (Date.now() - (snap.savedAt || 0)) > 180000) return false;
+    S.status = snap.status;
+    if (snap.devices) S.devices = snap.devices;
+    if (snap.tunnel) S.tunnel = snap.tunnel;
+    if (snap.rules) S.rules = snap.rules;
+    if (snap.events) S.events = snap.events;
+    if (snap.doctor) S.doctor = snap.doctor;
+    if (snap.series) mergeSeriesDelta(snap.series);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function releaseBootClasses() {
+  const root = document.documentElement;
+  if (!root) return;
+  root.classList.remove('prism-cold');
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('prism-booting')));
+  } else {
+    root.classList.remove('prism-booting');
+  }
+}
+
 async function init() {
   updateAuthButton();
   bindGlobalEvents();
@@ -256,8 +338,16 @@ async function init() {
   bindClientsEvents();
   initPrismCanvas();
 
+  const hasWarmSnap = loadBootSnapshot();
   const initialTab = (location.hash || '#overview').replace('#', '');
   switchTab(initialTab, false, false);
+  if (hasWarmSnap) {
+    releaseBootClasses();
+  }
+
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('pagehide', () => saveBootSnapshot(true));
+  }
 
   try {
     const [st, dv, tun, ser, cn, rul, ev, doc, cfg] = await callBatch([
@@ -266,9 +356,9 @@ async function init() {
       { method: 'tunnel' },
       S.tab === 'spectrum' ? { method: 'series', args: { limit: 720 } } : null,
       S.tab === 'clients' && S.session ? { method: 'connections' } : null,
-      S.tab === 'blueprint' ? { method: 'rules' } : null,
-      S.tab === 'blueprint' ? { method: 'events', args: { limit: 40 } } : null,
-      S.tab === 'blueprint' ? { method: 'doctor' } : null,
+      { method: 'rules' },
+      { method: 'events', args: { limit: 40 } },
+      { method: 'doctor' },
       S.tab === 'blueprint' && S.session ? { method: 'config' } : null
     ]);
     if (st) S.status = st;
@@ -281,7 +371,26 @@ async function init() {
     if (doc) S.doctor = doc;
     if (cfg) S.config = cfg;
     renderActiveTab();
-  } catch (_) {}
+    if (S.tab === 'overview') renderPrismNow();
+    saveBootSnapshot(true);
+  } catch (_) {
+  } finally {
+    releaseBootClasses();
+  }
+
+  // Silently preload series once after initial reveal so switching to Spectrum is instant
+  if (!S.series?.ts || S.series.ts.length < 2) {
+    setTimeout(async () => {
+      try {
+        const [ser] = await callBatch([{ method: 'series', args: { limit: 720 } }]);
+        if (ser) {
+          mergeSeriesDelta(ser);
+          saveBootSnapshot(true);
+          if (S.tab === 'spectrum') renderSpectrum();
+        }
+      } catch (_) {}
+    }, 240);
+  }
 
   fastTimer = setInterval(pollFast, 1000);
   slowTimer = setInterval(pollSlow, 6000);

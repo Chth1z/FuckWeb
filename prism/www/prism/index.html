@@ -7,9 +7,40 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>PRISM v5.6.6 · Optical Spectrum &amp; Privacy Router</title>
+  <script>
+  (function(){
+    var r = document.documentElement;
+    r.classList.add('prism-booting');
+    var h = (location.hash || '').replace('#', '');
+    var t = (h === 'spectrum' || h === 'blueprint' || h === 'clients') ? h : 'overview';
+    r.dataset.bootTab = t;
+    var hasSnap = false;
+    try {
+      var raw = sessionStorage.getItem('prism_snap_v1');
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (s && s.status && (Date.now() - (s.savedAt || 0)) < 180000) hasSnap = true;
+      }
+    } catch (_) {}
+    if (!hasSnap) {
+      r.classList.add('prism-cold');
+      setTimeout(function(){ r.classList.remove('prism-cold', 'prism-booting'); }, 260);
+    }
+  })();
+  </script>
   <link rel="stylesheet" href="css/tokens.css?v=5.6.6">
   <link rel="stylesheet" href="css/layout.css?v=5.6.6">
   <link rel="stylesheet" href="css/components.css?v=5.6.6">
+  <link rel="modulepreload" href="js/main.js?v=5.6.6">
+  <link rel="modulepreload" href="js/state.js?v=5.6.6">
+  <link rel="modulepreload" href="js/dom.js?v=5.6.6">
+  <link rel="modulepreload" href="js/api.js?v=5.6.6">
+  <link rel="modulepreload" href="js/canvas/prism.js?v=5.6.6">
+  <link rel="modulepreload" href="js/canvas/oscilloscope.js?v=5.6.6">
+  <link rel="modulepreload" href="js/views/overview.js?v=5.6.6">
+  <link rel="modulepreload" href="js/views/spectrum.js?v=5.6.6">
+  <link rel="modulepreload" href="js/views/blueprint.js?v=5.6.6">
+  <link rel="modulepreload" href="js/views/clients.js?v=5.6.6">
 </head>
 <body>
   <div class="app-shell">
@@ -637,7 +668,16 @@
 
               <div id="conn-empty" class="c-muted" style="padding:28px;text-align:center">請點擊右上角「管理登入」查看實時連接流表</div>
               <div id="conn-table-wrap" class="table-wrap conn-scroll-wrap" style="display:none">
-                <table class="bp-table compact sticky">
+                <table class="bp-table compact sticky bp-conn-table">
+                  <colgroup>
+                    <col style="width:14%">
+                    <col style="width:28%">
+                    <col style="width:11%">
+                    <col style="width:17%">
+                    <col style="width:10%">
+                    <col style="width:10%">
+                    <col style="width:10%">
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>源終端</th>
@@ -659,6 +699,15 @@
       </section>
 
     </main>
+    <script>
+    (function(){
+      var t = document.documentElement.dataset.bootTab || 'overview';
+      var tabs = document.querySelectorAll('.nav-tab');
+      for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === t);
+      var pages = document.querySelectorAll('.page');
+      for (var j = 0; j < pages.length; j++) pages[j].classList.toggle('active', pages[j].id === ('page-' + t));
+    })();
+    </script>
 
     <!-- Edge-to-Edge Telemetry Footer -->
     <footer class="telemetry-footer">

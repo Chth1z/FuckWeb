@@ -17,6 +17,10 @@ export function markPrismDirty() {
   ensureLoop();
 }
 
+export function renderPrismNow() {
+  if (S.tab === 'overview') drawPrismFrame(0);
+}
+
 function ensureLoop() {
   if (!rafId && S.tab === 'overview') {
     rafId = requestAnimationFrame(stepPrism);
@@ -43,7 +47,26 @@ export function initPrismCanvas() {
     $('#topo-tip')?.classList.remove('show');
   });
 
-  window.addEventListener('resize', () => markPrismDirty());
+  if (typeof ResizeObserver !== 'undefined' && !canvas._prismRo) {
+    let lastW = 0, lastH = 0;
+    const ro = new ResizeObserver(() => {
+      if (S.tab !== 'overview') return;
+      const r = canvas.getBoundingClientRect();
+      const rw = Math.round(r.width), rh = Math.round(r.height);
+      if (rw > 0 && rh > 0 && (rw !== lastW || rh !== lastH)) {
+        lastW = rw;
+        lastH = rh;
+        drawPrismFrame(0);
+      }
+    });
+    ro.observe(canvas);
+    canvas._prismRo = ro;
+  }
+
+  window.addEventListener('resize', () => {
+    if (S.tab === 'overview') drawPrismFrame(0);
+    else markPrismDirty();
+  });
   markPrismDirty();
 }
 

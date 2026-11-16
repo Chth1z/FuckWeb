@@ -491,8 +491,18 @@ function renderConnections(devs, selectedDev, rows) {
   if (empty) empty.style.display = 'none';
   if (wrap) wrap.style.display = 'block';
 
-  const frag = document.createDocumentFragment();
-  for (const f of filtered.slice(0, 140)) {
+  if (!ctb) return;
+  const rowsByKey = ctb._rowsByKey || (ctb._rowsByKey = new Map());
+  const top = filtered.slice(0, 140);
+  const seenKeys = new Set();
+  const orderedRows = [];
+
+  for (let i = 0; i < top.length; i++) {
+    const f = top[i];
+    let key = f.key || `${f.src}|${f.dst}|${f.port}|${f.proto}`;
+    if (seenKeys.has(key)) key = `${key}#${i}`;
+    seenKeys.add(key);
+
     let badgeClass = f.route === 'tunnel' ? 'cooling' : 'charged';
     let routeText = f.route === 'tunnel' ? `TW-HOME · ${f.via || 'proxy'}` : `直連 · ${f.via || 'wan'}`;
     if (f.vip) {
@@ -500,19 +510,65 @@ function renderConnections(devs, selectedDev, rows) {
       routeText = `光道 · ${f.via || 'vip'}`;
     }
 
-    frag.appendChild(el('tr', {},
-      el('td', {}, el('div', { class: 'c-bright' }, devNameByIp[f.src] || f.src), el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, f.src)),
-      el('td', { style: { maxWidth: '300px', wordBreak: 'break-all' } }, f.dst),
-      el('td', { class: 'c-sec' }, `${f.port} / ${String(f.proto || '').toUpperCase()}`),
-      el('td', {}, el('span', { class: `st-badge ${badgeClass}` }, routeText)),
-      el('td', { class: 'num c-mint' }, f.rDown > 50 ? fmtRate(f.rDown).full : '—'),
-      el('td', { class: 'num c-blue' }, f.rUp > 50 ? fmtRate(f.rUp).full : '—'),
-      el('td', { class: 'num c-sec' }, fmtBytes((f.down || 0) + (f.up || 0)))
-    ));
+    const hostTxt = devNameByIp[f.src] || f.src;
+    const srcTxt = f.src;
+    const dstTxt = f.dst;
+    const portTxt = `${f.port} / ${String(f.proto || '').toUpperCase()}`;
+    const downTxt = f.rDown > 50 ? fmtRate(f.rDown).full : '—';
+    const upTxt = f.rUp > 50 ? fmtRate(f.rUp).full : '—';
+    const bytesTxt = fmtBytes((f.down || 0) + (f.up || 0));
+
+    let tr = rowsByKey.get(key);
+    if (!tr) {
+      const hostEl = el('div', { class: 'c-bright', style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, hostTxt);
+      const srcEl = el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, srcTxt);
+      const dstCell = el('td', { title: dstTxt }, dstTxt);
+      const portCell = el('td', { class: 'c-sec' }, portTxt);
+      const badgeEl = el('span', { class: `st-badge ${badgeClass}` }, routeText);
+      const downCell = el('td', { class: 'num c-mint' }, downTxt);
+      const upCell = el('td', { class: 'num c-blue' }, upTxt);
+      const bytesCell = el('td', { class: 'num c-sec' }, bytesTxt);
+      tr = el('tr', {},
+        el('td', {}, hostEl, srcEl),
+        dstCell,
+        portCell,
+        el('td', {}, badgeEl),
+        downCell,
+        upCell,
+        bytesCell
+      );
+      tr._ui = { hostEl, srcEl, dstCell, portCell, badgeEl, downCell, upCell, bytesCell };
+      rowsByKey.set(key, tr);
+    } else {
+      const u = tr._ui;
+      if (u.hostEl.textContent !== hostTxt) u.hostEl.textContent = hostTxt;
+      if (u.srcEl.textContent !== srcTxt) u.srcEl.textContent = srcTxt;
+      if (u.dstCell.textContent !== dstTxt) {
+        u.dstCell.textContent = dstTxt;
+        u.dstCell.title = dstTxt;
+      }
+      if (u.portCell.textContent !== portTxt) u.portCell.textContent = portTxt;
+      const bCls = `st-badge ${badgeClass}`;
+      if (u.badgeEl.className !== bCls) u.badgeEl.className = bCls;
+      if (u.badgeEl.textContent !== routeText) u.badgeEl.textContent = routeText;
+      if (u.downCell.textContent !== downTxt) u.downCell.textContent = downTxt;
+      if (u.upCell.textContent !== upTxt) u.upCell.textContent = upTxt;
+      if (u.bytesCell.textContent !== bytesTxt) u.bytesCell.textContent = bytesTxt;
+    }
+    orderedRows.push(tr);
   }
-  if (ctb) {
-    ctb.innerHTML = '';
-    ctb.appendChild(frag);
+
+  for (const [k, row] of rowsByKey.entries()) {
+    if (!seenKeys.has(k)) {
+      row.remove();
+      rowsByKey.delete(k);
+    }
+  }
+  for (let i = 0; i < orderedRows.length; i++) {
+    const tr = orderedRows[i];
+    if (ctb.children[i] !== tr) {
+      ctb.insertBefore(tr, ctb.children[i] || null);
+    }
   }
 }
 

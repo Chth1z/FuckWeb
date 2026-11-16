@@ -60,6 +60,22 @@ export function renderOscilloscope(activeStrand = lastFocus) {
   lastFocus = activeStrand || null;
   const svg = $('#chart');
   const tip = $('#tip');
+  if (svg && typeof ResizeObserver !== 'undefined' && !svg._oscRo) {
+    let lastRw = 0, lastRh = 0;
+    const ro = new ResizeObserver(() => {
+      if (S.tab !== 'spectrum') return;
+      const r = svg.getBoundingClientRect();
+      const rw = Math.round(r.width), rh = Math.round(r.height);
+      if (rw > 120 && rh > 40 && (rw !== lastRw || rh !== lastRh)) {
+        lastRw = rw;
+        lastRh = rh;
+        lastSig = '';
+        renderOscilloscope(lastFocus);
+      }
+    });
+    ro.observe(svg);
+    svg._oscRo = ro;
+  }
   const ser = S.series;
   if (!svg || !ser || !ser.ts || ser.ts.length < 2) return;
 

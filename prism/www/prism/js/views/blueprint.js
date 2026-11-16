@@ -953,10 +953,29 @@ function renderClassifyStrip() {
   const grid = $('#bp-classify-grid');
   if (!grid) return;
   const rules = S.rules?.rules || [];
+  const coreTags = ['device-direct', 'domestic', 'rest-tunnel', 'tunnel-range', 'quic'];
   if (!rules.length) {
-    if (grid._lastSig === 'empty') return;
-    grid._lastSig = 'empty';
-    grid.innerHTML = '<span class="c-muted" style="font-size:11px">等待 nftables classify 計數...</span>';
+    if (grid._orderSig === '__empty__') return;
+    grid._orderSig = '__empty__';
+    grid._rowsByTag = new Map();
+    const frag = document.createDocumentFragment();
+    for (const tag of coreTags) {
+      const label = RULE_LABELS[tag] || tag;
+      const segEl = el('span', { class: 'seg-meter' });
+      renderSegMeter(segEl, 0, 16, 'blue', false);
+      frag.appendChild(el('div', {
+        class: 'classify-bar-card',
+        style: { '--cb-rgb': '52, 58, 72', '--cb-fill': '0.05', '--cb-bdr-a': '0.16', '--cb-glow-blur': '0px', '--cb-glow-a': '0' }
+      },
+        el('div', { class: 'classify-bar-head' },
+          el('span', { class: 'c-muted', style: { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label),
+          el('span', { class: 'c-muted', style: { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', fontSize: '9.5px' } }, '—')
+        ),
+        segEl
+      ));
+    }
+    grid.innerHTML = '';
+    grid.appendChild(frag);
     return;
   }
 
@@ -965,12 +984,16 @@ function renderClassifyStrip() {
   grid._lastSig = sig;
 
   const tot = Math.max(1, rules.reduce((acc, r) => acc + (r.packets || 0), 0));
-  const coreSet = new Set(['quic', 'device-direct', 'tunnel-range', 'domestic', 'rest-tunnel']);
+  const coreSet = new Set(coreTags);
   const visible = rules
     .filter(r => (r.packets || 0) > 0 || coreSet.has(r.tag))
     .sort((a, b) => (b.packets || 0) - (a.packets || 0));
 
-  const frag = document.createDocumentFragment();
+  const orderSig = visible.map(r => r.tag).join(',');
+  const needsRebuild = (grid._orderSig !== orderSig) || !grid._rowsByTag;
+  const rowsByTag = needsRebuild ? new Map() : grid._rowsByTag;
+  const frag = needsRebuild ? document.createDocumentFragment() : null;
+
   for (const r of visible) {
     const label = RULE_LABELS[r.tag] || r.tag;
     const pkts = r.packets || 0;
@@ -1009,30 +1032,50 @@ function renderClassifyStrip() {
     const byteTxt = fmtBytes(bytes).replace(/\s+/g, '');
     const pktTxt = pkts >= 1e6 ? `${(pkts / 1e6).toFixed(1)}M` : (pkts >= 1000 ? `${Math.round(pkts / 1000)}k` : `${pkts}`);
     const pctTxt = pkts > 0 ? (share >= 1 ? `${Math.round(share)}%` : `${share.toFixed(1)}%`) : '0%';
+    const statTxt = `${byteTxt}·${pktTxt}·${pctTxt}`;
 
-    const segEl = el('span', { class: `seg-meter${pkts > 0 ? ' active' : ''}` });
-    renderSegMeter(segEl, fillPct / 100, 16, colorName, false);
-
-    frag.appendChild(el('div', {
-      class: `classify-bar-card ${pkts > 0 ? 'active' : ''}`,
-      title: `${label} · ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt})`,
-      style: {
-        '--cb-rgb': heatRgb,
-        '--cb-fill': fillA,
-        '--cb-bdr-a': bdrA,
-        '--cb-glow-blur': glowBlur,
-        '--cb-glow-a': glowA
-      }
-    },
-      el('div', { class: 'classify-bar-head' },
-        el('span', { class: pkts > 0 ? 'c-bright' : 'c-muted', style: { fontWeight: pkts > 0 ? '600' : '400', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label),
-        el('span', { class: pkts > 0 ? textCls : 'c-muted', style: { fontVariantNumeric: 'tabular-nums', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '9.5px' } }, `${byteTxt}·${pktTxt}·${pctTxt}`)
-      ),
-      segEl
-    ));
+    let rec = rowsByTag.get(r.tag);
+    if (!rec) {
+      const labelEl = el('span', { class: pkts > 0 ? 'c-bright' : 'c-muted', style: { fontWeight: pkts > 0 ? '600' : '400', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label);
+      const statEl = el('span', { class: pkts > 0 ? textCls : 'c-muted', style: { fontVariantNumeric: 'tabular-nums', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '9.5px' } }, statTxt);
+      const segEl = el('span', { class: `seg-meter${pkts > 0 ? ' active' : ''}` });
+      const card = el('div', {
+        class: `classify-bar-card ${pkts > 0 ? 'active' : ''}`,
+        title: `${label} · ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt})`,
+        style: {
+          '--cb-rgb': heatRgb,
+          '--cb-fill': fillA,
+          '--cb-bdr-a': bdrA,
+          '--cb-glow-blur': glowBlur,
+          '--cb-glow-a': glowA
+        }
+      }, el('div', { class: 'classify-bar-head' }, labelEl, statEl), segEl);
+      rec = { card, labelEl, statEl, segEl };
+      rowsByTag.set(r.tag, rec);
+    } else {
+      rec.card.className = `classify-bar-card ${pkts > 0 ? 'active' : ''}`;
+      rec.card.title = `${label} · ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt})`;
+      rec.card.style.setProperty('--cb-rgb', heatRgb);
+      rec.card.style.setProperty('--cb-fill', fillA);
+      rec.card.style.setProperty('--cb-bdr-a', bdrA);
+      rec.card.style.setProperty('--cb-glow-blur', glowBlur);
+      rec.card.style.setProperty('--cb-glow-a', glowA);
+      rec.labelEl.className = pkts > 0 ? 'c-bright' : 'c-muted';
+      rec.labelEl.style.fontWeight = pkts > 0 ? '600' : '400';
+      rec.statEl.className = pkts > 0 ? textCls : 'c-muted';
+      rec.statEl.textContent = statTxt;
+      rec.segEl.className = `seg-meter${pkts > 0 ? ' active' : ''}`;
+    }
+    renderSegMeter(rec.segEl, fillPct / 100, 16, colorName, false);
+    if (frag) frag.appendChild(rec.card);
   }
-  grid.innerHTML = '';
-  grid.appendChild(frag);
+
+  if (needsRebuild) {
+    grid._orderSig = orderSig;
+    grid._rowsByTag = rowsByTag;
+    grid.innerHTML = '';
+    grid.appendChild(frag);
+  }
 }
 
 function renderMiniSpectrum(strands) {
@@ -1069,7 +1112,23 @@ function renderMiniSpectrum(strands) {
   }
 }
 
+let bpResizeObserver = null;
+function ensureBlueprintResizeObserver() {
+  if (bpResizeObserver || typeof ResizeObserver === 'undefined') return;
+  const pipe = $('#bp-pipeline');
+  if (!pipe) return;
+  bpResizeObserver = new ResizeObserver(() => {
+    if (S.tab === 'blueprint') renderWaveguidesCanvas();
+  });
+  bpResizeObserver.observe(pipe);
+  for (const id of ['#bp-card-pregate', '#bp-card-ingress', '#bp-card-vip', '#bp-card-tun', '#bp-card-dom', '#bp-card-qos', '#bp-card-uplink']) {
+    const node = $(id);
+    if (node) bpResizeObserver.observe(node);
+  }
+}
+
 export function bindBlueprintEvents() {
+  ensureBlueprintResizeObserver();
   $$('#site-mode-seg .seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       write('configure', { set: { 'strands.aggregate': btn.dataset.mode } }, `聚匯模式已設為 ${btn.dataset.mode}`);
@@ -1192,29 +1251,30 @@ export function renderBlueprint() {
   renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, okChecks === totChecks ? 'violet' : 'crimson', false);
 
   const invGrid = $('#adv-invariants-grid');
-  if (invGrid && checks.length) {
-    const invSig = checks.map(c => `${c.id}:${c.ok ? 1 : 0}`).join(';');
+  if (invGrid) {
+    const groups = [
+      { label: 'fw4/guard',  test: c => c.id.startsWith('privacy_') || c.id === 'nft_table' || c.id === 'ip_forward' || c.id === 'ssh_public' || c.id === 'http_public' || c.id === 'secret_perms' || c.id === 'overlay_space' },
+      { label: 'dns/6053',   test: c => c.id.includes('dns') || c.id.includes('dhcp') },
+      { label: 'tproxy/cage',test: c => c.id.startsWith('tunnel_') },
+      { label: 'weave/21ch', test: c => c.id === 'weave' || c.id === 'pattern' || c.id.startsWith('strands_') || c.id === 'domestic4_loaded' },
+      { label: 'mptcp/htb',  test: c => c.id.startsWith('mptcp_') || c.id === 'uplink_carrier' || c.id === 'shaper' },
+      { label: 'wifi/ap',    test: c => c.id === 'hostapd' || c.id.startsWith('wifi_') || c.id.startsWith('ap:') || c.id.startsWith('ap_ssid:') || c.id === 'sta_with_copper' },
+    ];
+    const invSig = checks.length ? checks.map(c => `${c.id}:${c.ok ? 1 : 0}`).join(';') : '__empty__';
     if (invGrid._lastSig !== invSig) {
       invGrid._lastSig = invSig;
-      const groups = [
-        { label: 'fw4/guard',  test: c => c.id.startsWith('privacy_') || c.id === 'nft_table' || c.id === 'ip_forward' || c.id === 'ssh_public' || c.id === 'http_public' || c.id === 'secret_perms' || c.id === 'overlay_space' },
-        { label: 'dns/6053',   test: c => c.id.includes('dns') || c.id.includes('dhcp') },
-        { label: 'tproxy/cage',test: c => c.id.startsWith('tunnel_') },
-        { label: 'weave/21ch', test: c => c.id === 'weave' || c.id === 'pattern' || c.id.startsWith('strands_') || c.id === 'domestic4_loaded' },
-        { label: 'mptcp/htb',  test: c => c.id.startsWith('mptcp_') || c.id === 'uplink_carrier' || c.id === 'shaper' },
-        { label: 'wifi/ap',    test: c => c.id === 'hostapd' || c.id.startsWith('wifi_') || c.id.startsWith('ap:') || c.id.startsWith('ap_ssid:') || c.id === 'sta_with_copper' },
-      ];
       const gFrag = document.createDocumentFragment();
       for (const grp of groups) {
-        const matched = checks.filter(grp.test);
+        const matched = checks.length ? checks.filter(grp.test) : [];
         const passed = matched.filter(c => c.ok).length;
-        const allOk = matched.length === 0 || passed === matched.length;
-        gFrag.appendChild(el('div', { class: `guard-inv-cell ${allOk ? 'ok' : 'bad'}` },
+        const allOk = !checks.length || matched.length === 0 || passed === matched.length;
+        const valTxt = checks.length ? (matched.length ? `${passed}/${matched.length}` : 'n/a') : '—';
+        gFrag.appendChild(el('div', { class: `guard-inv-cell ${checks.length ? (allOk ? 'ok' : 'bad') : ''}` },
           el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '5px', minWidth: '0' } },
-            el('span', { class: `run-dot ${allOk ? 'violet' : 'crimson'}` }),
+            el('span', { class: `run-dot ${checks.length ? (allOk ? 'violet' : 'crimson') : 'off'}` }),
             el('span', { class: 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, grp.label)
           ),
-          el('span', { class: allOk ? 'c-bright' : 'c-crimson', style: { fontWeight: '600', fontVariantNumeric: 'tabular-nums', flexShrink: '0' } }, matched.length ? `${passed}/${matched.length}` : 'n/a')
+          el('span', { class: checks.length ? (allOk ? 'c-bright' : 'c-crimson') : 'c-muted', style: { fontWeight: '600', fontVariantNumeric: 'tabular-nums', flexShrink: '0' } }, valTxt)
         ));
       }
       invGrid.innerHTML = '';
@@ -1412,29 +1472,41 @@ export function renderBlueprint() {
     if (!picked.length) {
       for (const r of relays.slice(0, 3)) if (r && r.name) picked.push(r);
     }
-    const rFrag = document.createDocumentFragment();
-    if (picked.length) {
-      for (const r of picked) {
-        const isAct = activeName && r.name === activeName;
-        const d = r.delay || 0;
-        const latCls = d > 0 ? (d <= 220 ? 'c-mint' : (d <= 500 ? 'c-amber' : 'c-crimson')) : 'c-muted';
+    const relaySig = picked.length
+      ? `${activeName}|` + picked.map(r => `${r.name}:${r.delay || 0}:${r.type || ''}`).join(';')
+      : `empty:${mihomoOk ? 1 : 0}`;
+    if (relayListEl.dataset.sig !== relaySig) {
+      relayListEl.dataset.sig = relaySig;
+      const rFrag = document.createDocumentFragment();
+      if (picked.length) {
+        for (const r of picked) {
+          const isAct = activeName && r.name === activeName;
+          const d = r.delay || 0;
+          const latCls = d > 0 ? (d <= 220 ? 'c-mint' : (d <= 500 ? 'c-amber' : 'c-crimson')) : 'c-muted';
+          rFrag.appendChild(el('div', { class: 'relay-mini-row' },
+            el('span', { class: isAct ? 'c-mint' : 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: '0' } },
+              isAct ? `▸ ${r.name}` : r.name
+            ),
+            el('span', { class: latCls, style: { flexShrink: '0', fontWeight: '600', fontVariantNumeric: 'tabular-nums' } },
+              d > 0 ? `${d}ms` : (r.type || '—')
+            )
+          ));
+        }
+      } else {
         rFrag.appendChild(el('div', { class: 'relay-mini-row' },
-          el('span', { class: isAct ? 'c-mint' : 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: '0' } },
-            isAct ? `▸ ${r.name}` : r.name
-          ),
-          el('span', { class: latCls, style: { flexShrink: '0', fontWeight: '600', fontVariantNumeric: 'tabular-nums' } },
-            d > 0 ? `${d}ms` : (r.type || '—')
-          )
+          el('span', { class: 'c-muted' }, mihomoOk ? '等待節點延遲探測...' : 'Mihomo 隧道未啟動'),
+          el('span', { class: 'c-dim' }, '—')
         ));
+        for (let pad = 0; pad < 2; pad++) {
+          rFrag.appendChild(el('div', { class: 'relay-mini-row' },
+            el('span', { class: 'c-dim' }, '—'),
+            el('span', { class: 'c-dim' }, '—')
+          ));
+        }
       }
-    } else {
-      rFrag.appendChild(el('div', { class: 'relay-mini-row' },
-        el('span', { class: 'c-muted' }, mihomoOk ? '等待節點延遲探測...' : 'Mihomo 隧道未啟動'),
-        el('span', { class: 'c-dim' }, '—')
-      ));
+      relayListEl.innerHTML = '';
+      relayListEl.appendChild(rFrag);
     }
-    relayListEl.innerHTML = '';
-    relayListEl.appendChild(rFrag);
   }
   if ($('#bp-tun-dot')) {
     $('#bp-tun-dot').className = `run-dot ${mihomoOk ? 'mint' : 'amber'}`;
@@ -1582,6 +1654,8 @@ export function renderBlueprint() {
     $('#bp-up-sync').textContent = recTs ? fmtClock(recTs) : 'live';
   }
 
+  ensureBlueprintResizeObserver();
+  renderWaveguidesCanvas();
   if (drawerOpen) renderBlueprintDrawer();
 }
 
