@@ -888,6 +888,12 @@
   .heat-rate-down {
     font-size: 13px;
   }
+  .spec-ribbon-scope {
+    height: 48px;
+  }
+  .ribbon-scope-svg {
+    height: calc(100% - 10px);
+  }
 }
 
 /* --- 03. Full-Page Gapless Square 21-Wavelength Pure Color Matrix --- */
@@ -1152,28 +1158,69 @@
   flex-shrink: 0;
 }
 
-/* Slim 126-Slot Kernel Dispatch Ribbon */
-.slot-ribbon {
-  display: grid;
-  grid-template-columns: repeat(126, minmax(0, 1fr));
-  gap: 1px;
-  padding: 4px;
-  background: rgba(4, 6, 11, 0.95);
+/* Unified Fused 126-Slot Rainbow Curtain + Live Aggregate Oscilloscope Bar */
+.spec-ribbon-scope {
+  position: relative;
+  width: 100%;
+  height: clamp(56px, 7.6vh, 72px);
+  background: rgba(4, 6, 11, 0.96);
   border: 1px solid var(--line-window);
   flex-shrink: 0;
 }
 
-.slot-tick {
-  height: 11px;
-  opacity: 0.80;
-  transition: opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+.slot-ribbon {
+  position: absolute;
+  inset: 2px 3px;
+  display: grid;
+  grid-template-columns: repeat(126, minmax(0, 1fr));
+  gap: 1px;
+  z-index: 1;
 }
-.slot-tick.dim { opacity: 0.14 !important; }
+
+.slot-tick {
+  height: 100%;
+  --tick-rgb: 100, 174, 245;
+  background: linear-gradient(
+    180deg,
+    rgba(var(--tick-rgb), 0.02) 0%,
+    rgba(var(--tick-rgb), 0.09) 78%,
+    rgba(var(--tick-rgb), 0.92) 85%,
+    rgb(var(--tick-rgb)) 100%
+  );
+  opacity: 0.80;
+  transition: opacity 0.12s ease, filter 0.12s ease;
+  cursor: pointer;
+}
+.slot-tick.dim { opacity: 0.16 !important; }
 .slot-tick.hi {
   opacity: 1 !important;
-  transform: scaleY(1.38);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--tick-rgb), 0.16) 0%,
+    rgba(var(--tick-rgb), 0.36) 78%,
+    rgb(var(--tick-rgb)) 85%,
+    rgb(var(--tick-rgb)) 100%
+  );
+  filter: brightness(1.18);
   box-shadow: 0 0 10px currentColor;
   z-index: 2;
+}
+
+.ribbon-scope-svg {
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  width: calc(100% - 6px);
+  height: calc(100% - 12px);
+  display: block;
+  z-index: 3;
+}
+
+.spec-ribbon-scope .topo-tooltip {
+  top: auto;
+  bottom: calc(100% + 6px);
+  min-width: 210px;
+  padding: 8px 11px;
 }
 
 /* --- 04. Wide Merged Device & Policy Matrix Left + Full-Height Right Flows --- */

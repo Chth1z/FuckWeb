@@ -548,9 +548,13 @@
             </div>
 
             <div class="spec-ribbon-row">
-              <div id="pattern" class="slot-ribbon" aria-label="126 槽位實時調度色帶"></div>
+              <div class="spec-ribbon-scope">
+                <div id="pattern" class="slot-ribbon" aria-label="126 槽位與總網速融合光譜帶"></div>
+                <svg id="chart" class="ribbon-scope-svg" viewBox="0 0 1200 54" preserveAspectRatio="none" aria-label="實時總網速示波器"></svg>
+                <div id="tip" class="topo-tooltip"></div>
+              </div>
               <div class="heatmap-legend">
-                <span>700nm ──▶ 380nm · 純色發光強度=負載 · 邊角=速率/槽位條</span>
+                <span>700nm ──▶ 380nm · 純色發光強度=負載 · 底部融合126槽位帶＋實時總吞吐波形（綠下行 / 藍上行）</span>
                 <span id="spec-pin-hint" class="c-muted">懸停／點擊鎖定單路 · Esc 解除</span>
               </div>
             </div>

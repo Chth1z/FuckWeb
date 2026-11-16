@@ -4,15 +4,20 @@
 
 import { S, spectralColor, fmtRateCompact } from '../state.js?v=5.6.6';
 import { $, $$, el, svgEl } from '../dom.js?v=5.6.6';
+import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.6.6';
 
 let hoverStrandId = null;
-let chartLimit = 360;
 const strandMetaById = new Map();
 
 const fmtShortRate = (bps) => fmtRateCompact(bps, '0');
 
 function getActiveStrandId() {
   return hoverStrandId != null ? hoverStrandId : S.pinnedStrandId;
+}
+
+function getActiveStrandMeta() {
+  const id = getActiveStrandId();
+  return id != null ? (strandMetaById.get(id) || null) : null;
 }
 
 function downsamplePeak(arr, maxPts = 44) {
@@ -49,8 +54,9 @@ function renderTileSpark(tile, dev) {
   const svg = tile._ui?.spark;
   if (!svg) return;
   const ser = S.series;
+  const limit = getChartLimit();
   const lastTs = ser?.ts?.length ? ser.ts[ser.ts.length - 1] : 0;
-  const key = `${dev}:${chartLimit}:${lastTs}`;
+  const key = `${dev}:${limit}:${lastTs}`;
   if (tile._sparkKey === key) return;
   tile._sparkKey = key;
 
@@ -59,9 +65,9 @@ function renderTileSpark(tile, dev) {
   if (!Array.isArray(rawDown) || rawDown.length < 2) return;
 
   const rawUp = Array.isArray(ser?.strands_up?.[dev]) ? ser.strands_up[dev] : [];
-  const slDown = downsamplePeak(rawDown.slice(Math.max(0, rawDown.length - chartLimit)), 44);
+  const slDown = downsamplePeak(rawDown.slice(Math.max(0, rawDown.length - limit)), 44);
   const slUp = rawUp.length >= 2
-    ? downsamplePeak(rawUp.slice(Math.max(0, rawUp.length - chartLimit)), slDown.length)
+    ? downsamplePeak(rawUp.slice(Math.max(0, rawUp.length - limit)), slDown.length)
     : [];
 
   let peakBps = 125000;
@@ -158,6 +164,8 @@ function syncStrandHighlight() {
       ? `已鎖定 ${strandMetaById.get(S.pinnedStrandId)?.dev || ''} · 再按一次或 Esc 解除`
       : '懸停／點擊鎖定單路 · Esc 解除';
   }
+
+  renderOscilloscope(activeMeta);
 }
 
 function setHoverStrand(strandId) {
@@ -173,8 +181,9 @@ function togglePinStrand(strandId) {
 export function bindSpectrumEvents() {
   $$('#chart-range .seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      chartLimit = Number(btn.dataset.limit || 360);
-      $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === chartLimit));
+      const lim = Number(btn.dataset.limit || 360);
+      $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === lim));
+      setChartLimit(lim);
       renderSpectrum();
     });
   });
@@ -388,12 +397,12 @@ export function renderSpectrum() {
       const frag = document.createDocumentFragment();
       for (let i = 0; i < pat.length; i++) {
         const sid = pat[i];
-        const col = colorById[sid] || { css: '#64aef5', lambda: 520 };
+        const col = colorById[sid] || { css: '#64aef5', rgb: '100, 174, 245', lambda: 520 };
         const tick = el('div', {
           class: 'slot-tick',
           'data-sid': sid,
           title: `slot #${i} → strand ${sid} (λ=${col.lambda}nm)`,
-          style: { backgroundColor: col.css, color: col.css }
+          style: { '--tick-rgb': col.rgb, color: col.css }
         });
         tick.addEventListener('mouseenter', () => setHoverStrand(sid));
         tick.addEventListener('mouseleave', () => setHoverStrand(null));
@@ -405,6 +414,6 @@ export function renderSpectrum() {
     }
   }
 
-  $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === chartLimit));
+  $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === getChartLimit()));
   syncStrandHighlight();
 }
