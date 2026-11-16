@@ -78,8 +78,20 @@ function compareDevices(a, b, mode, byIp) {
   return compareStableTie(a, b);
 }
 
+let lastFlowSrc = null;
+let lastFlowResult = { byIp: {}, rows: [] };
+let lastConnRender = null;
+
 function computeFlowDeltas() {
-  const conns = S.connections?.connections || [];
+  if (!S.session || !S.connections) {
+    lastFlowSrc = S.connections;
+    lastFlowResult = { byIp: {}, rows: [] };
+    return lastFlowResult;
+  }
+  if (S.connections === lastFlowSrc)
+    return lastFlowResult;
+
+  const conns = S.connections.connections || [];
   const now = performance.now();
   const dt = S.flowSnapshotTs ? (now - S.flowSnapshotTs) / 1000 : 0;
   const nextSnap = {};
@@ -104,7 +116,9 @@ function computeFlowDeltas() {
   }
   S.flowSnapshot = nextSnap;
   S.flowSnapshotTs = now;
-  return { byIp, rows };
+  lastFlowSrc = S.connections;
+  lastFlowResult = { byIp, rows };
+  return lastFlowResult;
 }
 
 function selectDevice(mac) {
@@ -418,6 +432,7 @@ function renderConnections(devs, selectedDev, rows) {
   const wrap = $('#conn-table-wrap');
   const ctb = $('#connections-tbody');
   if (!S.session) {
+    lastConnRender = null;
     if (empty) {
       empty.textContent = '請點擊右上角「管理登入」查看實時連接流表';
       empty.style.display = 'block';
@@ -428,9 +443,26 @@ function renderConnections(devs, selectedDev, rows) {
   }
 
   const devNameByIp = {};
+  let devsSig = '';
   for (const d of devs) {
-    if (d.ip) devNameByIp[d.ip] = d.name || d.host || d.ip;
+    if (d.ip) {
+      const label = d.name || d.host || d.ip;
+      devNameByIp[d.ip] = label;
+      devsSig += `${d.ip}=${label};`;
+    }
   }
+
+  const selIp = selectedDev?.ip || '';
+  const curKey = { rows, selIp, route: S.connFilter.route, q: S.connFilter.q, devsSig };
+  if (lastConnRender &&
+      lastConnRender.rows === curKey.rows &&
+      lastConnRender.selIp === curKey.selIp &&
+      lastConnRender.route === curKey.route &&
+      lastConnRender.q === curKey.q &&
+      lastConnRender.devsSig === curKey.devsSig) {
+    return;
+  }
+  lastConnRender = curKey;
 
   const q = S.connFilter.q;
   const filtered = rows.filter(f => {

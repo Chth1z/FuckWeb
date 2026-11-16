@@ -64,7 +64,10 @@ function relay() {
 	let strands = healthy(), n = snapshot?.weave?.slots ?? 0;
 	if (!length(strands) || n <= 0)
 		return;
-	let next_vip = weave.select_vip(strands, load);
+	let mptcp_ids = {};
+	for (let e in snapshot?.mptcp?.endpoints ?? [])
+		mptcp_ids[e.id] = true;
+	let next_vip = weave.select_vip(strands, load, mptcp_ids);
 	let next = weave.compose(cfg.weave, strands, load, n, next_vip);
 	let vip_changed = (next_vip[0] ?? 0) != (vip_lane[0] ?? 0);
 	if (!vip_changed && drift(pattern, next) <= SETTLE)

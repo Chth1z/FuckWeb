@@ -954,9 +954,15 @@ function renderClassifyStrip() {
   if (!grid) return;
   const rules = S.rules?.rules || [];
   if (!rules.length) {
+    if (grid._lastSig === 'empty') return;
+    grid._lastSig = 'empty';
     grid.innerHTML = '<span class="c-muted" style="font-size:11px">等待 nftables classify 計數...</span>';
     return;
   }
+
+  const sig = `${S.rules?.tunnel_on ? 1 : 0}|` + rules.map(r => `${r.tag}:${r.packets || 0}:${r.bytes || 0}`).join(';');
+  if (grid._lastSig === sig) return;
+  grid._lastSig = sig;
 
   const tot = Math.max(1, rules.reduce((acc, r) => acc + (r.packets || 0), 0));
   const coreSet = new Set(['quic', 'device-direct', 'tunnel-range', 'domestic', 'rest-tunnel']);

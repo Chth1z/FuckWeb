@@ -4,7 +4,7 @@
 
 import { S, UI_VERSION, fmtRate } from './state.js?v=5.6.6';
 import { $, $$, toast } from './dom.js?v=5.6.6';
-import { call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.6.6';
+import { callBatch, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.6.6';
 import { initPrismCanvas, markPrismDirty } from './canvas/prism.js?v=5.6.6';
 import { renderOverview } from './views/overview.js?v=5.6.6';
 import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.6.6';
@@ -69,7 +69,7 @@ function renderActiveTab() {
   else if (S.tab === 'clients') renderClients();
 }
 
-export function switchTab(tab, updateHash = true) {
+export function switchTab(tab, updateHash = true, refresh = true) {
   const valid = ['overview', 'blueprint', 'spectrum', 'clients'];
   if (!valid.includes(tab)) tab = 'overview';
   S.tab = tab;
@@ -82,8 +82,10 @@ export function switchTab(tab, updateHash = true) {
   }
 
   renderActiveTab();
-  pollFast();
-  pollSlow();
+  if (refresh) {
+    pollFast();
+    pollSlow();
+  }
   if (tab === 'overview') markPrismDirty();
   if (tab === 'blueprint') startBlueprintAnim();
   else stopBlueprintAnim();
@@ -138,14 +140,14 @@ async function pollFast() {
   try {
     const needFullSeries = S.tab === 'spectrum' && (!S.series?.ts || S.series.ts.length < 2);
     const jobs = [
-      call('status'),
-      S.tab === 'overview' || S.tab === 'clients' ? call('devices') : null,
-      S.tab === 'spectrum' ? call('series', { limit: needFullSeries ? 720 : 8 }) : null,
-      runHeavy && S.tab === 'clients' && S.session ? call('connections') : null,
-      runHeavy && S.tab === 'blueprint' ? call('rules') : null
+      { method: 'status' },
+      S.tab === 'overview' || S.tab === 'clients' ? { method: 'devices' } : null,
+      S.tab === 'spectrum' ? { method: 'series', args: { limit: needFullSeries ? 720 : 8 } } : null,
+      runHeavy && S.tab === 'clients' && S.session ? { method: 'connections' } : null,
+      runHeavy && S.tab === 'blueprint' ? { method: 'rules' } : null
     ];
 
-    const [st, dv, ser, cn, rl] = await Promise.all(jobs);
+    const [st, dv, ser, cn, rl] = await callBatch(jobs);
     if (st) S.status = st;
     if (dv) S.devices = dv;
     if (ser) mergeSeriesDelta(ser);
@@ -163,17 +165,16 @@ async function pollSlow() {
   if (document.visibilityState === 'hidden' || slowInFlight) return;
   slowInFlight = true;
   try {
-    const reqs = [];
-    reqs.push(S.tab === 'overview' || S.tab === 'blueprint' ? call('tunnel') : null);
-    reqs.push(S.tab === 'blueprint' ? call('rules') : null);
-    reqs.push(S.tab === 'blueprint' ? call('events', { limit: 40 }) : null);
-    reqs.push(S.tab === 'blueprint' ? call('doctor') : null);
-    reqs.push(S.tab === 'spectrum' && (!S.series?.ts || S.series.ts.length < 2) ? call('series', { limit: 720 }) : null);
-    reqs.push(S.tab === 'blueprint' && S.session ? call('config') : null);
+    const reqs = [
+      S.tab === 'overview' || S.tab === 'blueprint' ? { method: 'tunnel' } : null,
+      S.tab === 'blueprint' ? { method: 'events', args: { limit: 40 } } : null,
+      S.tab === 'blueprint' ? { method: 'doctor' } : null,
+      S.tab === 'spectrum' && (!S.series?.ts || S.series.ts.length < 2) ? { method: 'series', args: { limit: 720 } } : null,
+      S.tab === 'blueprint' && S.session ? { method: 'config' } : null
+    ];
 
-    const [tun, rul, ev, doc, ser, cfg] = await Promise.all(reqs);
+    const [tun, ev, doc, ser, cfg] = await callBatch(reqs);
     if (tun) S.tunnel = tun;
-    if (rul) S.rules = rul;
     if (ev) S.events = ev;
     if (doc) S.doctor = doc;
     if (ser) mergeSeriesDelta(ser);
@@ -256,17 +257,32 @@ async function init() {
   initPrismCanvas();
 
   const initialTab = (location.hash || '#overview').replace('#', '');
-  switchTab(initialTab, false);
+  switchTab(initialTab, false, false);
 
   try {
-    const [st, dv, tun] = await Promise.all([call('status'), call('devices'), call('tunnel')]);
-    S.status = st;
-    S.devices = dv;
-    S.tunnel = tun;
+    const [st, dv, tun, ser, cn, rul, ev, doc, cfg] = await callBatch([
+      { method: 'status' },
+      { method: 'devices' },
+      { method: 'tunnel' },
+      S.tab === 'spectrum' ? { method: 'series', args: { limit: 720 } } : null,
+      S.tab === 'clients' && S.session ? { method: 'connections' } : null,
+      S.tab === 'blueprint' ? { method: 'rules' } : null,
+      S.tab === 'blueprint' ? { method: 'events', args: { limit: 40 } } : null,
+      S.tab === 'blueprint' ? { method: 'doctor' } : null,
+      S.tab === 'blueprint' && S.session ? { method: 'config' } : null
+    ]);
+    if (st) S.status = st;
+    if (dv) S.devices = dv;
+    if (tun) S.tunnel = tun;
+    if (ser) mergeSeriesDelta(ser);
+    if (cn) S.connections = cn;
+    if (rul) S.rules = rul;
+    if (ev) S.events = ev;
+    if (doc) S.doctor = doc;
+    if (cfg) S.config = cfg;
     renderActiveTab();
   } catch (_) {}
 
-  pollSlow();
   fastTimer = setInterval(pollFast, 1000);
   slowTimer = setInterval(pollSlow, 6000);
 }

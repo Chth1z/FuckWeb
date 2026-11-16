@@ -14,18 +14,8 @@ export function setAuthCallback(fn) {
   onAuthSuccessCallback = fn;
 }
 
-export async function ubusCall(object, method, args = {}, token = S.session || ANON_TOKEN) {
-  const res = await fetch('/ubus', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: rpcSeq++,
-      method: 'call',
-      params: [token, object, method, args]
-    })
-  });
-  const data = await res.json();
+function parseUbusResult(data) {
+  if (!data) throw new Error('Empty RPC response');
   if (data.error) {
     const err = new Error(data.error.message || 'RPC Error');
     err.code = data.error.code;
@@ -40,6 +30,20 @@ export async function ubusCall(object, method, args = {}, token = S.session || A
   return payload;
 }
 
+export async function ubusCall(object, method, args = {}, token = S.session || ANON_TOKEN) {
+  const res = await fetch('/ubus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: rpcSeq++,
+      method: 'call',
+      params: [token, object, method, args]
+    })
+  });
+  return parseUbusResult(await res.json());
+}
+
 export async function call(method, args = {}) {
   try {
     return await ubusCall('prism', method, args);
@@ -50,6 +54,63 @@ export async function call(method, args = {}) {
     }
     throw e;
   }
+}
+
+async function rawBatch(items, token) {
+  const res = await fetch('/ubus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(items.map(it => ({
+      jsonrpc: '2.0',
+      id: it.id,
+      method: 'call',
+      params: [token, 'prism', it.method, it.args || {}]
+    })))
+  });
+  const data = await res.json();
+  const arr = Array.isArray(data) ? data : [data];
+  const byId = new Map();
+  for (const r of arr) {
+    if (r && r.id != null) byId.set(r.id, r);
+  }
+  return byId;
+}
+
+export async function callBatch(requests) {
+  const out = new Array(requests.length).fill(null);
+  const active = [];
+  for (let i = 0; i < requests.length; i++) {
+    const req = requests[i];
+    if (!req) continue;
+    const item = typeof req === 'string' ? { method: req, args: {} } : req;
+    active.push({ idx: i, id: rpcSeq++, method: item.method, args: item.args || {} });
+  }
+  if (!active.length) return out;
+
+  const usedSession = !!S.session;
+  const byId = await rawBatch(active, S.session || ANON_TOKEN);
+  const authRetry = [];
+  for (const it of active) {
+    try {
+      out[it.idx] = parseUbusResult(byId.get(it.id));
+    } catch (e) {
+      if ((e.ubus === 6 || e.code === -32002) && usedSession) {
+        authRetry.push(it);
+      }
+    }
+  }
+  if (authRetry.length && usedSession) {
+    clearSession();
+    const retryById = await rawBatch(authRetry, ANON_TOKEN);
+    for (const it of authRetry) {
+      try {
+        out[it.idx] = parseUbusResult(retryById.get(it.id));
+      } catch (_) {
+        out[it.idx] = null;
+      }
+    }
+  }
+  return out;
 }
 
 export async function write(method, args = {}, successMsg = '已套用') {

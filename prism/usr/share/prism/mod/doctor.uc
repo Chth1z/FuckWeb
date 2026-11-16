@@ -15,6 +15,19 @@ function nft_has(what, pattern) {
 	return r.code == 0 && (pattern == null || index(r.out, pattern) >= 0);
 }
 
+function section_has(tbl_res, section, pattern) {
+	if (!tbl_res || tbl_res.code != 0)
+		return false;
+	let tag = "\t" + section + " {\n";
+	let a = index(tbl_res.out, tag);
+	if (a < 0)
+		return false;
+	let rest = substr(tbl_res.out, a + length(tag));
+	let b = index(rest, "\n\t}");
+	let block = b >= 0 ? substr(rest, 0, b) : rest;
+	return pattern == null || index(block, pattern) >= 0;
+}
+
 function listening(pattern) {
 	return core.ok("netstat -lntup | grep -q " + core.shq(pattern));
 }
@@ -31,23 +44,25 @@ export function run(ctx) {
 	let fail = (id, ok, detail) => check("fail", id, ok, detail);
 	let caution = (id, ok, detail) => check("warn", id, ok, detail);
 	let n = length(health.healthy);
+	let tbl_prism = core.sh("nft -t list table inet prism");
+	let tbl_guard = !cfg.tunnel.fail_open ? core.sh("nft list table inet prism_guard") : null;
 
 	// --- forwarding and the prism
 	fail("ip_forward", core.read("/proc/sys/net/ipv4/ip_forward") == "1");
-	fail("nft_table", nft_has("chain inet prism prerouting", "jump classify"));
-	fail("dns_hijack", nft_has("chain inet prism dns_hijack", "redirect"));
+	fail("nft_table", section_has(tbl_prism, "chain prerouting", "jump classify"));
+	fail("dns_hijack", section_has(tbl_prism, "chain dns_hijack", "redirect"));
 	if (!cfg.tunnel.fail_open) {
-		fail("privacy_guard", nft_has("chain inet prism_guard forward", "blocked-fallback"));
+		fail("privacy_guard", section_has(tbl_guard, "chain forward", "blocked-fallback"));
 		fail("privacy_guard_persistent", fs.stat(path("guard.nft")) &&
 			fs.stat("/usr/share/nftables.d/ruleset-post/30-prism-guard.nft") &&
 			uci.get("firewall", "@defaults[0]", "auto_includes") != "0");
-		fail("privacy_direct_mark", nft_has("chain inet prism direct_ok", "0x20000000"));
+		fail("privacy_direct_mark", section_has(tbl_prism, "chain direct_ok", "0x20000000"));
 		fail("privacy_no_offload", uci.get("firewall", "@defaults[0]", "flow_offloading") != "1" &&
 			uci.get("firewall", "@defaults[0]", "flow_offloading_hw") != "1", "offload would bypass per-packet privacy checks");
 	}
 	fail("strands_healthy", n > 0, sprintf("%d of %d", n, length(ctx.strands)));
 	if (n > 1) {
-		fail("weave", nft_has("chain inet prism weave", "ct state new"));
+		fail("weave", section_has(tbl_prism, "chain weave", "ct state new"));
 		fail("pattern", nft_has("map inet prism pattern", " : "));
 		if (ctx.site.aggregate && fs.stat("/proc/sys/net/mptcp/enabled")) {
 			caution("mptcp_enabled", core.read("/proc/sys/net/mptcp/enabled") == "1", "net.mptcp.enabled != 1");
@@ -76,7 +91,7 @@ export function run(ctx) {
 	if (cfg.tunnel.enabled) {
 		fail("tunnel_relays", tun.relays > 0);
 		fail("tunnel_running", tun.running);
-		fail("tunnel_divert", !tun.on || nft_has("chain inet prism classify", "goto divert"));
+		fail("tunnel_divert", !tun.on || section_has(tbl_prism, "chain classify", "goto divert"));
 		fail("tunnel_mixed_local", !tun.running || listening(sprintf("127.0.0.1:%d ", cfg.tunnel.mixed_port)));
 		caution("tunnel_fail_open", !cfg.tunnel.fail_open || !ctx.st.tunnel?.open, "canary down, fail-open enabled");
 		caution("tunnel_canary", !tun.running || (ctx.st.tunnel?.fails ?? 0) == 0, sprintf("%d failed", ctx.st.tunnel?.fails ?? 0));
@@ -85,7 +100,7 @@ export function run(ctx) {
 	// --- DNS and DHCP
 	fail("smartdns", core.pidof("smartdns"));
 	fail("smartdns_loopback", index(fs.readfile(core.RUN + "/smartdns.conf") ?? "", "bind 127.0.0.1:") == 0);
-	fail("smartdns_responsive", dns_responsive(cfg.dns.port), "SmartDNS query timeout");
+	fail("smartdns_responsive", ctx.dns_responsive ?? dns_responsive(cfg.dns.port), "SmartDNS query timeout");
 	fail("dnsmasq", core.pidof("dnsmasq"));
 	fail("dhcp_listen", listening("0.0.0.0:67 "));
 	fail("dhcp_lan", uci.get("dhcp", "lan", "dhcpv4") == "server" && uci.get("dhcp", "lan", "ignore") != "1");

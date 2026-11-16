@@ -283,7 +283,7 @@ export function prepare(cfg, lan_ip) {
 // --- runtime ---------------------------------------------------------------
 
 function api(cfg, lan_ip, method, url, body) {
-	let cmd = sprintf("curl -4 -m 8 -sS -o - -w '\\n%%{http_code}' -X %s -H %s", method,
+	let cmd = sprintf("curl -4 --noproxy '*' -m 8 -sS -o - -w '\\n%%{http_code}' -X %s -H %s", method,
 		core.shq("Authorization: Bearer " + (core.read(SECRET) ?? "")));
 	if (body)
 		cmd += " -H 'Content-Type: application/json' --data " + core.shq(body);
@@ -334,44 +334,64 @@ function canary(cfg, lan_ip) {
 // Addresses of every relay, so a LAN client running its own proxy client
 // reaches them directly instead of being proxied twice. Hostnames are
 // resolved here, through the same resolver the LAN uses, and retained in a
-// 24h sliding window so CDN/GTM round-robin rotation does not churn @relay4.
+// 24h sliding window so CDN/GTM round-robin rotation does not churn @relay4,
+// while also keeping per-host mappings so @relay_ports avoids cross-products.
 function relay_addresses(prep, st, now) {
 	let key = join(" ", prep.hosts);
 	let cache = st.resolved ?? {};
-	if (cache.key != key || now - (cache.ts ?? 0) >= RELAY_RESOLVE_SEC) {
-		let cmds = map(prep.hosts, (h) => sprintf(
-			"nslookup -type=a %s 127.0.0.1 2>/dev/null | awk '/^Name:/ { named = 1 } named && /^Address/ { print $2 }' &", core.shq(h)));
-		push(cmds, "wait");
-		let found = filter(split(core.sh(join("\n", cmds)).out, "\n"), (a) => match(a, /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/));
-		let seen = cache.key == key ? { ...(cache.seen ?? {}) } : {};
-		for (let ip in cache.key == key ? (cache.ips ?? []) : [])
-			seen[ip] ??= now;
-		for (let ip in found)
-			seen[ip] = now;
-		let ips = [];
-		for (let ip, seen_ts in seen) {
-			if (now - seen_ts < 86400)
-				push(ips, ip);
-			else
-				delete seen[ip];
+	if (cache.key != key || !cache.by_host || now - (cache.ts ?? 0) >= RELAY_RESOLVE_SEC) {
+		let host_seen = cache.key == key ? { ...(cache.by_host_seen ?? {}) } : {};
+		let any_found = !length(prep.hosts);
+		if (length(prep.hosts)) {
+			let cmds = map(prep.hosts, (h) => sprintf(
+				"nslookup -type=a %s 127.0.0.1 2>/dev/null | awk -v h=%s '/^Name:/ { named = 1 } named && /^Address/ { print h, $2 }' &",
+				core.shq(h), core.shq(h)));
+			push(cmds, "wait");
+			for (let line in split(core.sh(join("\n", cmds)).out, "\n")) {
+				let p = split(trim(line), / +/);
+				let h = p[0], ip = p[1];
+				if (h && match(ip ?? "", /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/)) {
+					any_found = true;
+					(host_seen[h] ??= {})[ip] = now;
+				}
+			}
 		}
+		let by_host = {}, ips = [], clean_host_seen = {};
+		for (let h, tbl in host_seen) {
+			let h_ips = [], kept = {};
+			for (let ip, seen_ts in tbl) {
+				if (now - seen_ts < 86400) {
+					kept[ip] = seen_ts;
+					push(h_ips, ip);
+					push(ips, ip);
+				}
+			}
+			if (length(h_ips)) {
+				clean_host_seen[h] = kept;
+				by_host[h] = sort(uniq(h_ips));
+			}
+		}
+		ips = sort(uniq(ips));
 		if (length(ips) || cache.key != key)
-			cache = { key, seen, ips: sort(uniq(ips)) };
+			cache = { key, by_host_seen: clean_host_seen, by_host, ips };
+		else
+			cache = { ...cache, by_host_seen: clean_host_seen, by_host };
 		// Nothing resolved (resolver still starting): try again in a minute.
-		cache.ts = length(found) ? now : now - RELAY_RESOLVE_SEC + 60;
+		cache.ts = any_found ? now : now - RELAY_RESOLVE_SEC + 60;
 		st.resolved = cache;
 	}
-	return sort(uniq([ ...prep.ips, ...(cache.ips ?? []) ]));
+	return { ips: sort(uniq([ ...prep.ips, ...(cache.ips ?? []) ])), by_host: cache.by_host ?? {} };
 }
 
 // Returns the tunnel plan for this pass:
-//   enabled   the operator wants a tunnel and there are relays
-//   on        traffic should be handed to mihomo right now
-//   relay_ips relay addresses LAN clients may reach directly
+//   enabled         the operator wants a tunnel and there are relays
+//   on              traffic should be handed to mihomo right now
+//   relay_ips       relay addresses LAN clients may reach directly
+//   relay_host_ips  per-hostname resolved relay addresses for @relay_ports
 export function observe(ctx) {
 	let cfg = ctx.cfg, c = cfg.tunnel, now = ctx.now;
 	let st = (ctx.st.tunnel ??= { since: 0, fails: 0, open: false, checked: 0, delay: 0 });
-	let plan = { enabled: false, on: false, running: false, relays: 0, relay_ips: [] };
+	let plan = { enabled: false, on: false, running: false, relays: 0, relay_ips: [], relay_host_ips: {} };
 	if (!c.enabled)
 		return plan;
 
@@ -380,7 +400,9 @@ export function observe(ctx) {
 		return plan;
 	plan.enabled = true;
 	plan.relays = prep.relays;
-	plan.relay_ips = relay_addresses(prep, st, now);
+	let addr = relay_addresses(prep, st, now);
+	plan.relay_ips = addr.ips;
+	plan.relay_host_ips = addr.by_host;
 
 	// A mihomo that was just started needs a moment to bind. Waiting here
 	// keeps the first pass after boot from installing a direct-only table.

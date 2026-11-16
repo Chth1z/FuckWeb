@@ -214,8 +214,8 @@ chain postrouting {
   }
   ```
 
-#### 3. VIP 遊戲專道選舉函數 `select_vip(healthy, load)`（`weave.uc`）
-- 當健康鏈路數 `length(healthy) >= 4` 時，從所有健康鏈路中按以下綜合指標升序排序選出最優鏈路作為 `vip_primary`：
+#### 3. VIP 遊戲專道選舉函數 `select_vip(healthy, load, mptcp_ids)`（`weave.uc`）
+- 當健康鏈路數 `length(healthy) >= 4` 時，優先非 `wan`、非當前 MPTCP 端點（`+15ms` `wan` 懲罰 / `+6ms` active MPTCP tie-break）並按 TTFB、相對丟包與即時負載選出最優鏈路作為 `vip_primary`：
   $$\text{Score}_{\text{vip}}(s) = \text{TTFB}_s \times 1000 + \frac{\text{Rate}_{\text{down}}(s)}{1024}$$
 - **防抖動黏性保護（Sticky Hysteresis）**：一旦選定了 `vip_primary`，只要該鏈路保持健康（`healthy == true`）、`TTFB <= 450ms` 且速率 `< 3 Mbps`，就**始終固定不變**（只有在 `vip_primary` 掉線或延遲劣化超過 `450ms` 時才切換到下一條最優鏈路）。這保證了遊戲過程中絕不無故切換 MAC！
 - 選出的 `vip_primary` 將佔據 `@vip_lane` 的全部 2 個槽位（`0 : vip_primary.id, 1 : vip_primary.id`），並**從普通下載池 `@pattern` 的候選列表中排除**（當健康鏈路數 `< 4` 時則共享不排除，保證極端情況下的連通性）。
@@ -296,8 +296,8 @@ tc qdisc add dev $DEV parent 1:30 handle 30: fq_codel limit 2000 target 5ms inte
        "https://208.67.222.222/dns-query#PROXY",
    ]
    ```
-6. **同步動態解析的 `@relay4` 至 `prism_guard`**（[guard.uc](file:///d:/Github/FuckWeb/prism/usr/share/prism/mod/guard.uc)）：
-   - 在 `guard.uc` 的 `render_rules(cfg, ctx)` 中，除了字面量 IP 的 relay 外，將 `ctx.tunnel.relay_ips`（包含 `control-shared.78778m.cn` 與 `tw01.poke-mon.xyz` 解析出的動態 IP）一併寫入 `inet prism_guard` 的白名單集合中。
+6. **同步按域名綁定的 `@relay_ports` 至 `prism_guard`**（[guard.uc](file:///d:/Github/FuckWeb/prism/usr/share/prism/mod/guard.uc) & [tunnel.uc](file:///d:/Github/FuckWeb/prism/usr/share/prism/mod/tunnel.uc)）：
+   - 在 `tunnel.uc` 的 `relay_addresses()` 中按 `hostname -> [ip...]` 維度保留 24 小時滑動解析結果 `ctx.tunnel.relay_host_ips`（並彙總至 `@relay4`），`guard.uc` 的 `render_rules(cfg, ctx)` 僅將各節點自身 `server` 解析出的 IP 與其 `server_port`/`proto` 組合寫入 `inet prism_guard` 的 `@relay_ports`，避免多節點 IP×Port 笛卡爾交叉放大白名單。
 
 ---
 

@@ -19,7 +19,9 @@ export function render_rules(cfg, ctx) {
 	set("direct_devices", "ether_addr", map(filter(cfg.devices, (d) => d.policy == "direct"), (d) => d.mac));
 	set("blocked_devices", "ether_addr", map(filter(cfg.devices, (d) => d.policy == "block"), (d) => d.mac));
 	let raw = core.load_json(path(cfg.tunnel.relays), []), relays = [];
-	let resolved_ips = filter(ctx?.tunnel?.relay_ips ?? [], (ip) => match(ip, /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/));
+	let is_ip4 = (s) => match(s ?? "", /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/);
+	let resolved_ips = filter(ctx?.tunnel?.relay_ips ?? [], is_ip4);
+	let by_host = ctx?.tunnel?.relay_host_ips ?? {};
 	if (type(raw) == "object") raw = raw.outbounds ?? (raw.type ? [ raw ] : []);
 	for (let n in raw) {
 		let port = int(n.server_port ?? 443);
@@ -27,7 +29,9 @@ export function render_rules(cfg, ctx) {
 		// Fixed proxy transports only; arbitrary destination ports stay closed.
 		let protos = n.type in [ "hysteria", "hysteria2", "tuic" ] ? [ "udp" ] :
 			(n.type in [ "shadowsocks", "ss" ] ? [ "tcp", "udp" ] : [ "tcp" ]);
-		let servers = match(n.server ?? "", /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) ? [ n.server ] : resolved_ips;
+		let host_ips = filter(by_host[n.server] ?? [], is_ip4);
+		let servers = is_ip4(n.server) ? [ n.server ] :
+			(ctx?.tunnel?.relay_host_ips != null ? host_ips : resolved_ips);
 		for (let srv in servers)
 			for (let proto in protos)
 				push(relays, sprintf("%s . %s . %d", srv, proto, port));

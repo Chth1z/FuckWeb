@@ -217,6 +217,7 @@ export function responsive(port) {
 };
 
 export function apply(ctx) {
+	delete ctx.dns_responsive;
 	let text = smartdns_conf(ctx.cfg, ctx.tunnel.on);
 	let file = core.outpath("smartdns.conf");
 	if (core.write_if_changed(file, text)) {
@@ -230,6 +231,8 @@ export function apply(ctx) {
 	else if (!core.is_dry()) {
 		if (responsive(ctx.cfg.dns.port)) {
 			ctx.st.dns_fails = 0;
+			if (!ctx.want_service_sync)
+				ctx.dns_responsive = true;
 		}
 		else if ((ctx.st.dns_fails = (ctx.st.dns_fails ?? 0) + 1) >= 2) {
 			ctx.st.dns_fails = 0;

@@ -30,7 +30,7 @@ function list_count(file) {
 }
 
 function controller(cfg, lan_ip, method, url, body) {
-	let cmd = sprintf("curl -4 -m 3 -sS -X %s -H %s", method,
+	let cmd = sprintf("curl -4 --noproxy '*' -m 3 -sS -X %s -H %s", method,
 		core.shq("Authorization: Bearer " + (core.read(core.ETC + "/controller.secret") ?? "")));
 	if (body)
 		cmd += " -H 'Content-Type: application/json' --data " + core.shq(body);
@@ -61,24 +61,69 @@ function direct_flows(snap) {
 	let lan = replace(snap.lan_ip ?? "", /[0-9]+$/, ""), strand = {}, out = [];
 	for (let s in snap.strands ?? [])
 		strand[s.id] = s.dev;
-	let f = fs.open("/proc/net/nf_conntrack", "r");
-	if (!f || !length(lan))
+	let raw = fs.readfile("/proc/net/nf_conntrack");
+	if (!raw || !length(lan))
 		return out;
-	for (let line = f.read("line"); length(line); line = f.read("line")) {
-		let m = match(line, /^ipv4 +2 +([a-z]+) .*src=([0-9.]+) dst=([0-9.]+) sport=([0-9]+) dport=([0-9]+) packets=[0-9]+ bytes=([0-9]+) .*bytes=([0-9]+) .*mark=([0-9]+)/);
-		if (!m || index(m[2], lan) != 0 || index(m[3], lan) == 0)
+	let lan_tag = "src=" + lan;
+	for (let line in split(raw, "\n")) {
+		if (substr(line, 0, 5) != "ipv4 " || index(line, lan_tag) < 0)
 			continue;
-		let mark = int(m[8]);
+		let p_mk = index(line, " mark=");
+		if (p_mk < 0)
+			continue;
+		let mark = int(substr(line, p_mk + 6, 12));
 		if (mark & 0x4000)
 			continue;
+		let p_src = index(line, " src=");
+		if (p_src < 12)
+			continue;
+		let head = split(trim(substr(line, 5, p_src - 5)), / +/);
+		let proto = head[1];
+		if (!proto)
+			continue;
+		let rest = substr(line, p_src + 5);
+		let p = index(rest, " dst=");
+		if (p < 0)
+			continue;
+		let src = substr(rest, 0, p);
+		if (index(src, lan) != 0)
+			continue;
+		rest = substr(rest, p + 5);
+		p = index(rest, " sport=");
+		if (p < 0)
+			continue;
+		let dst = substr(rest, 0, p);
+		if (index(dst, lan) == 0)
+			continue;
+		rest = substr(rest, p + 7);
+		p = index(rest, " dport=");
+		if (p < 0)
+			continue;
+		let sport = substr(rest, 0, p);
+		rest = substr(rest, p + 7);
+		p = index(rest, " ");
+		if (p < 0)
+			continue;
+		let dport = int(substr(rest, 0, p));
+		p = index(rest, " bytes=");
+		if (p < 0)
+			continue;
+		rest = substr(rest, p + 7);
+		let sp = index(rest, " ");
+		if (sp < 0)
+			continue;
+		let up = int(substr(rest, 0, sp));
+		p = index(rest, " bytes=");
+		if (p < 0)
+			continue;
+		let down = int(substr(rest, p + 7, 20));
 		push(out, {
-			key: m[1] + m[2] + ":" + m[4] + ">" + m[3] + ":" + m[5],
-			src: m[2], dst: m[3], port: int(m[5]), proto: m[1], route: "direct",
+			key: proto + src + ":" + sport + ">" + dst + ":" + dport,
+			src, dst, port: dport, proto, route: "direct",
 			via: strand[mark & 0xff] ?? "", vip: (mark & 0x100) != 0,
-			up: int(m[6]), down: int(m[7]),
+			up, down,
 		});
 	}
-	f.close();
 	out = sort(out, (a, b) => (b.down + b.up) - (a.down + a.up));
 	return slice(out, 0, MAX_FLOWS);
 }

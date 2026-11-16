@@ -144,8 +144,9 @@ function loss_baseline(strands) {
 // tight hysteresis: stays sticky during an active session while loss remains
 // clean, latency stays within max(best + 40ms, 1.45 * best_ttfb), and sustained
 // stray load stays well below the policer knee (2 Mbps). Prefers non-wan vwan*
-// strands when >= 4 strands are healthy so wan stays dedicated to router host routes.
-export function select_vip(healthy, load) {
+// strands when >= 4 strands are healthy, and gently avoids active MPTCP endpoints
+// when electing a fresh VIP so @vip_lane and MPTCP stay disjoint.
+export function select_vip(healthy, load, mptcp_ids) {
 	if (!length(healthy))
 		return [];
 	let candidates = filter(healthy, (s) => !s.http || s.http == 204);
@@ -162,7 +163,8 @@ export function select_vip(healthy, load) {
 			min_ttfb = ttfb;
 		let loss_pen = eff_loss(s) * 2500.0; // +25 ms score per 1% relative loss
 		let wan_pen = (prefer_vwan && s.id == 1) ? 15.0 : 0.0;
-		let score = ttfb * 1000.0 + loss_pen + (rate / 256.0) + wan_pen;
+		let mp_pen = (mptcp_ids?.[s.id] || mptcp_ids?.["" + s.id]) ? 6.0 : 0.0;
+		let score = ttfb * 1000.0 + loss_pen + (rate / 256.0) + wan_pen + mp_pen;
 		if (score < best_score) {
 			best_score = score;
 			best = s;
@@ -328,10 +330,10 @@ export function nslots(cfg, healthy) {
 	return max(length(healthy), min(n, MAX_SLOTS));
 };
 
-export function compose(cfg, healthy, load, n, vip) {
+export function compose(cfg, healthy, load, n, vip, mptcp_ids) {
 	if (!length(healthy))
 		return [];
-	let pool = harvest_pool(healthy, vip ?? select_vip(healthy, load));
+	let pool = harvest_pool(healthy, vip ?? select_vip(healthy, load, mptcp_ids));
 	let policy = POLICIES[cfg.policy] ?? POLICIES.harvest;
 	return interleave(pool, policy(pool, load ?? {}, n, cfg), n);
 };
@@ -396,7 +398,7 @@ export function plan(ctx) {
 		return { slots: 0, pattern: [], vip, repair: length(current()) > 0, anchor: [] };
 	}
 	let have = current(), have_vip = current_vip();
-	let vip = select_vip(healthy, ctx.load ?? {});
+	let vip = select_vip(healthy, ctx.load ?? {}, ctx.mptcp_ids);
 	let pool = harvest_pool(healthy, vip);
 	let n = nslots(ctx.cfg.weave, healthy);
 	let pool_ids = {};
