@@ -384,7 +384,6 @@ function drawPrismFrame(dt = 0.016) {
     const ewmaBps = (s.rate ?? s.now ?? 0) + (s.up ?? s.up_now ?? 0);
     const rateBps = rawNowBps * 0.45 + ewmaBps * 0.55;
     const mbps = (rateBps * 8) / 1e6;
-    const tokRatio = (s.tokens_pct ?? 100) / 100;
 
     let targetW = 1.0;
     let targetAlpha = 0.90;
@@ -393,14 +392,10 @@ function drawPrismFrame(dt = 0.016) {
       targetW = 0.78;
       targetAlpha = 0.72;
       targetGlow = 0.14;
-    } else if (s.bucket === 'depleted') {
-      targetW = 0.86;
-      targetAlpha = 0.78;
-      targetGlow = 0.24;
     } else {
-      targetW = 1.0 + 0.08 * tokRatio + Math.min(0.85, Math.sqrt(Math.max(0, mbps)) * 0.22);
-      targetAlpha = Math.min(1.0, 0.86 + 0.08 * tokRatio + Math.min(0.12, Math.sqrt(Math.max(0, mbps)) * 0.04));
-      targetGlow = Math.min(1.0, 0.40 + 0.10 * tokRatio + Math.log10(1 + Math.max(0, mbps) * 4.5) * 0.42);
+      targetW = 1.0 + Math.min(0.85, Math.sqrt(Math.max(0, mbps)) * 0.22);
+      targetAlpha = Math.min(1.0, 0.90 + Math.min(0.10, Math.sqrt(Math.max(0, mbps)) * 0.035));
+      targetGlow = Math.min(1.0, 0.46 + Math.log10(1 + Math.max(0, mbps) * 4.5) * 0.44);
     }
 
     const sm = S.bandSmooth[i];
@@ -505,20 +500,13 @@ function drawPrismFrame(dt = 0.016) {
         farLum = 0.48;
       }
     } else if (!s.healthy) {
-      // Unhealthy link: graceful drop in brightness + saturation (preserves hue continuity, never punches black gaps)
+      // Only genuinely unhealthy links dim in brightness + saturation; token-bucket exhaustion keeps full healthy radiance
       const downObs = desatObsidianRgb(col.rgb, 0.44);
       exitRgb = downObs;
       midRgb = downObs;
       farRgb = downObs;
       exitLum = 0.52;
       farLum = 0.44;
-    } else if (s.bucket === 'depleted') {
-      const depObs = desatObsidianRgb(col.rgb, 0.58);
-      exitRgb = depObs;
-      midRgb = depObs;
-      farRgb = depObs;
-      exitLum = 0.66;
-      farLum = 0.56;
     } else {
       const k = Math.max(0.20, Math.min(1, smoothGlow));
       const sat = 0.88 + 0.12 * k;
