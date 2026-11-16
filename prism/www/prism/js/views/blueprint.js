@@ -104,7 +104,12 @@ function paintModuleHeat(m, h) {
     const vLit = desatObsidianRgb(SPECTRUM_STOPS[6], sat);
     const sA = (0.025 + 0.21 * Math.pow(k, 1.12)).toFixed(3);
     const vA = (0.018 + 0.16 * Math.pow(k, 1.18)).toFixed(3);
+    const rA = (0.04 + 0.075 * Math.pow(k, 0.85)).toFixed(3);
     node.style.setProperty('--bp-spec-grad', `linear-gradient(135deg, ${stops.join(', ')})`);
+    node.style.setProperty(
+      '--bp-spec-wash',
+      `linear-gradient(115deg, rgba(${rLit}, ${rA}) 0%, rgba(${gLit}, ${rA}) 40%, rgba(${bLit}, ${rA}) 72%, rgba(${vLit}, ${rA}) 100%)`
+    );
     node.style.setProperty(
       '--bp-card-shadow',
       `-6px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
@@ -117,6 +122,9 @@ function paintModuleHeat(m, h) {
   } else {
     const lit = desatObsidianRgb(m.rgb, sat);
     const core = k > 0.72 ? mixWhiteRgb(lit, (k - 0.72) * 0.42) : lit;
+    const fillA = (0.06 + 0.14 * Math.pow(k, 0.85)).toFixed(3);
+    node.style.setProperty('--bp-lit-rgb', lit);
+    node.style.setProperty('--bp-fill', fillA);
     node.style.setProperty('--bp-card-border', `rgba(${core}, ${bdrA})`);
     node.style.setProperty(
       '--bp-card-shadow',
@@ -983,10 +991,11 @@ function renderClassifyStrip() {
     }
 
     const rHeat = pkts > 0 ? Math.min(1, Math.max(0.08, Math.pow(share / 100, 0.52))) : 0;
-    const heatRgb = pkts > 0 ? desatObsidianRgb(colorRgb, 0.24 + 0.76 * rHeat) : colorRgb;
+    const heatRgb = pkts > 0 ? desatObsidianRgb(colorRgb, 0.24 + 0.76 * rHeat) : '52, 58, 72';
+    const fillA = pkts > 0 ? (0.09 + 0.17 * rHeat).toFixed(3) : '0.05';
     const bdrA = pkts > 0 ? (0.28 + 0.58 * rHeat).toFixed(2) : '0.16';
     const glowBlur = pkts > 0 ? `${Math.round(4 + 14 * rHeat)}px` : '0px';
-    const glowA = pkts > 0 ? (0.03 + 0.22 * rHeat).toFixed(2) : '0';
+    const glowA = pkts > 0 ? (0.04 + 0.22 * rHeat).toFixed(2) : '0';
 
     const byteTxt = fmtBytes(bytes).replace(/\s+/g, '');
     const pktTxt = pkts >= 1e6 ? `${(pkts / 1e6).toFixed(1)}M` : (pkts >= 1000 ? `${Math.round(pkts / 1000)}k` : `${pkts}`);
@@ -1000,6 +1009,7 @@ function renderClassifyStrip() {
       title: `${label} · ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt})`,
       style: {
         '--cb-rgb': heatRgb,
+        '--cb-fill': fillA,
         '--cb-bdr-a': bdrA,
         '--cb-glow-blur': glowBlur,
         '--cb-glow-a': glowA
@@ -1496,11 +1506,13 @@ export function renderBlueprint() {
     const ratio = bps > 32
       ? Math.min(1, Math.max(0.18, 0.16 + (bps / qosTotBps) * 0.55 + Math.min(0.45, Math.log10(1 + ((bps * 8) / 1e6) * 7) * 0.45)))
       : 0.04;
-    const sat = 0.18 + 0.82 * Math.pow(ratio, 0.8);
+    const sat = 0.22 + 0.78 * Math.pow(ratio, 0.8);
     chip.style.setProperty('--qb-rgb', desatObsidianRgb(baseRgb, sat));
+    chip.style.setProperty('--qb-fill', (0.06 + 0.18 * ratio).toFixed(3));
+    chip.style.setProperty('--qb-inset-a', (0.06 + 0.18 * ratio).toFixed(3));
     chip.style.setProperty('--qb-bdr-a', (0.20 + 0.58 * ratio).toFixed(2));
     chip.style.setProperty('--qb-glow-blur', `${Math.round(4 + 14 * ratio)}px`);
-    chip.style.setProperty('--qb-glow-a', (0.02 + 0.24 * ratio).toFixed(2));
+    chip.style.setProperty('--qb-glow-a', (0.03 + 0.24 * ratio).toFixed(2));
   };
   paintQosBandHeat('#bp-qos-10', '242, 90, 90',   liveFlow.vipBps);
   paintQosBandHeat('#bp-qos-20', '87, 209, 146',  liveFlow.tunBps);

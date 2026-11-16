@@ -2,18 +2,41 @@
  * PRISM — View 04: Merged Wide Device Policy Matrix & Live Flows Explorer
  * ============================================================================ */
 
-import { S, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.6.6';
+import { S, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.6.6';
 import { $, $$, el } from '../dom.js?v=5.6.6';
 import { write, openLoginModal } from '../api.js?v=5.6.6';
 
 const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
 const POLICY_META = {
-  auto:   { short: '自動', label: '自動分類' },
-  game:   { short: 'VIP',  label: '@vip_lane 專線' },
-  direct: { short: '直連', label: '強制直連' },
-  tunnel: { short: '隧道', label: '強制 TW-HOME' },
-  block:  { short: '禁網', label: '禁止聯網' }
+  auto:   { short: '自動', label: '自動分類',     rgb: '100, 174, 245' },
+  game:   { short: 'VIP',  label: '@vip_lane 專線', rgb: '100, 174, 245' },
+  direct: { short: '直連', label: '強制直連',     rgb: '87, 209, 146' },
+  tunnel: { short: '隧道', label: '強制 TW-HOME', rgb: '170, 142, 240' },
+  block:  { short: '禁網', label: '禁止聯網',     rgb: '230, 108, 120' }
 };
+
+function deviceTileVisual(policy, online, bps) {
+  if (!online) {
+    return {
+      scRgb: '68, 76, 94',
+      litRgb: '52, 58, 72',
+      fill: '0.06',
+      glow: '0.02'
+    };
+  }
+  const baseRgb = policy === 'auto'
+    ? (bps > 400 ? '100, 174, 245' : '87, 209, 146')
+    : (POLICY_META[policy]?.rgb || '100, 174, 245');
+  const mbps = (bps * 8) / 1e6;
+  const k = bps > 64 ? Math.min(1, Math.max(0.14, Math.log10(1 + mbps * 6) / 1.45)) : 0.10;
+  const sat = 0.24 + 0.76 * Math.pow(k, 0.78);
+  return {
+    scRgb: baseRgb,
+    litRgb: desatObsidianRgb(baseRgb, sat),
+    fill: (0.09 + 0.18 * Math.pow(k, 0.85)).toFixed(3),
+    glow: (0.05 + 0.14 * k).toFixed(3)
+  };
+}
 
 let editingMac = null;
 let pointerInsideDevList = false;
@@ -250,8 +273,14 @@ function syncDeviceCard(card, d, dr, isSelected) {
   const r = card._refs;
   const label = d.name || d.host || d.mac.slice(-8);
   const policy = d.policy || 'auto';
+  const totalBps = (dr?.down || 0) + (dr?.up || 0);
+  const vis = deviceTileVisual(policy, !!d.online, totalBps);
 
   card.className = `dev-nav-item ${d.online ? 'online' : 'offline'} ${isSelected ? 'active' : ''}`;
+  card.style.setProperty('--dev-sc-rgb', vis.scRgb);
+  card.style.setProperty('--dev-rgb', vis.litRgb);
+  card.style.setProperty('--dev-fill', vis.fill);
+  card.style.setProperty('--dev-glow', vis.glow);
   r.dotEl.className = d.online ? 'run-dot mint' : 'run-dot off';
 
   if (editingMac !== d.mac) {
@@ -261,14 +290,15 @@ function syncDeviceCard(card, d, dr, isSelected) {
 
   const radio = d.signal ? ` ${d.signal}dBm` : '';
   r.linkEl.textContent = `${d.link || 'wired'}${radio}`;
+  r.linkEl.className = d.online ? 'dev-meta-txt' : 'c-muted';
   r.flowsEl.textContent = S.session && dr.count > 0 ? `${dr.count} 流` : (d.online ? '在線' : '離線');
-  r.flowsEl.className = S.session && dr.count > 0 ? 'c-blue' : (d.online ? 'c-mint' : 'c-muted');
+  r.flowsEl.className = S.session && dr.count > 0 ? 'c-blue dev-meta-strong' : (d.online ? 'c-mint dev-meta-strong' : 'c-muted');
 
-  const rateStr = S.session && (dr.down + dr.up > 50)
+  const rateStr = S.session && (totalBps > 50)
     ? ` · ↓${fmtRateCompact(dr.down)} ↑${fmtRateCompact(dr.up)}`
     : '';
   r.ipRateEl.textContent = `${d.ip || d.mac.slice(-8)}${rateStr}`;
-  r.ipRateEl.className = rateStr ? 'c-mint' : 'c-muted';
+  r.ipRateEl.className = rateStr ? 'c-mint dev-meta-strong' : (d.online ? 'dev-meta-txt' : 'c-muted');
 
   for (const p of POLICIES) {
     r.pillBtns[p].classList.toggle('on', p === policy);
@@ -281,12 +311,23 @@ function renderDeviceMenu(devs, byIp, totalFlows) {
   if ($('#clients-online-cnt')) $('#clients-online-cnt').textContent = `${onlineCnt} 在線 / ${devs.length} 台`;
 
   let totDown = 0;
-  for (const ip of Object.keys(byIp)) totDown += byIp[ip].down;
+  let totUp = 0;
+  for (const ip of Object.keys(byIp)) {
+    totDown += byIp[ip].down;
+    totUp += byIp[ip].up;
+  }
   if ($('#dev-all-rate')) $('#dev-all-rate').textContent = S.session ? fmtRate(totDown).full : `${onlineCnt} 台`;
   if ($('#dev-all-flows')) $('#dev-all-flows').textContent = S.session ? `${totalFlows} 條活躍流` : '全局檢視';
 
   const navAll = $('#dev-nav-all');
-  if (navAll) navAll.classList.toggle('active', S.selectedDeviceMac === 'all');
+  if (navAll) {
+    navAll.classList.toggle('active', S.selectedDeviceMac === 'all');
+    const allVis = deviceTileVisual('game', onlineCnt > 0 || devs.length > 0, totDown + totUp);
+    navAll.style.setProperty('--dev-sc-rgb', allVis.scRgb);
+    navAll.style.setProperty('--dev-rgb', allVis.litRgb);
+    navAll.style.setProperty('--dev-fill', allVis.fill);
+    navAll.style.setProperty('--dev-glow', allVis.glow);
+  }
 
   const list = $('#dev-menu-list');
   if (!list) return;
