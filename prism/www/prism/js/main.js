@@ -66,7 +66,7 @@ function renderChrome() {
   setTxt('#ft-vip', vipS ? `[${vipS.dev} · ${vipS.ttfb_ms}ms]` : '[—]');
   setTxt('#ft-tunnel', `[${st.tunnel?.on ? 'tw-home' : 'direct'}]`);
   setTxt('#ft-guard', st.tunnel?.fail_open ? '[fail_open]' : '[fail_closed]');
-  setTxt('#ft-down', fmtRate(st.rate).full);
+  setTxt('#ft-down', `↓ ${fmtRate(st.rate).full}`);
 }
 
 function renderActiveTab() {

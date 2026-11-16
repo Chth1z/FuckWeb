@@ -350,7 +350,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 20px;
+  padding: 5px 16px;
   height: 30px;
   min-height: 30px;
   flex-shrink: 0;
@@ -390,8 +390,7 @@
 #ft-strands,
 #ft-vip,
 #ft-tunnel,
-#ft-guard,
-#ft-down {
+#ft-guard {
   display: inline-block;
   text-align: left;
   white-space: nowrap;
@@ -402,11 +401,18 @@
 #cli-policy  { min-width: 56px; }
 #cli-cage    { min-width: 82px; max-width: 165px; overflow: hidden; text-overflow: ellipsis; }
 #cli-vip     { min-width: 52px; }
-#ft-strands  { min-width: 56px; }
-#ft-vip      { min-width: 114px; }
-#ft-tunnel   { min-width: 68px; }
-#ft-guard    { min-width: 92px; }
-#ft-down     { width: 86px; }
+#ft-strands  { min-width: 54px; }
+#ft-vip      { min-width: 108px; }
+#ft-tunnel   { min-width: 64px; }
+#ft-guard    { min-width: 88px; }
+#ft-down {
+  display: inline-block;
+  width: 88px;
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-variant-numeric: tabular-nums;
+}
 
 @media (max-width: 1120px) {
   .topbar {

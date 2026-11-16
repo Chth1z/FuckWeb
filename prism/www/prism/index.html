@@ -23,9 +23,11 @@
       }
     } catch (_) {}
     if (!hasSnap) {
-      r.classList.add('prism-cold');
       setTimeout(function(){ r.classList.remove('prism-cold', 'prism-booting'); }, 260);
+    } else {
+      setTimeout(function(){ r.classList.remove('prism-cold', 'prism-booting'); }, 400);
     }
+    r.classList.add('prism-cold');
   })();
   </script>
   <link rel="stylesheet" href="css/tokens.css?v=5.6.6">
@@ -404,13 +406,13 @@
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-vip-rate" class="bp-live-rate c-red">0 bps</span>
-                    <span id="bp-vip-share" class="bp-head-sub c-sec">0% 流佔比</span>
+                    <span id="bp-vip-share" class="bp-head-sub c-sec">蓄能 100%</span>
                   </div>
                 </div>
                 <div class="bp-card-body">
                   <div class="bp-meter-row">
                     <span id="bp-vip-meter" class="seg-meter"></span>
-                    <strong id="bp-vip-pct" class="bp-meter-val c-bright">—</strong>
+                    <strong id="bp-vip-pct" class="bp-meter-val c-bright">0% 流佔比</strong>
                   </div>
                   <div class="bp-kv-strip cols-2">
                     <div class="bp-kv-cell"><span class="k">錨定光脈</span><span id="bp-vip-iface" class="v c-red">—</span></div>
@@ -443,7 +445,7 @@
                 <div class="bp-card-body">
                   <div class="bp-meter-row">
                     <span id="bp-tun-meter" class="seg-meter"></span>
-                    <strong id="bp-tun-pct" class="bp-meter-val c-bright">0%</strong>
+                    <strong id="bp-tun-pct" class="bp-meter-val c-bright">0% 流佔比</strong>
                   </div>
                   <div class="bp-tun-node-row">
                     <span class="c-muted" style="flex-shrink:0">主力</span>
@@ -479,13 +481,13 @@
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-dom-rate" class="bp-live-rate c-blue">0 bps</span>
-                    <span id="bp-dom-pct" class="bp-head-sub c-sec">21/21</span>
+                    <span id="bp-dom-pct" class="bp-head-sub c-sec">21/21 滿桶</span>
                   </div>
                 </div>
                 <div class="bp-card-body">
                   <div class="bp-meter-row">
                     <span id="bp-dom-meter" class="seg-meter"></span>
-                    <strong id="bp-dom-share" class="bp-meter-val c-bright">0%</strong>
+                    <strong id="bp-dom-share" class="bp-meter-val c-bright">0% 流佔比</strong>
                   </div>
                   <div id="bp-mini-spectrum" class="mini-spectrum-bar" title="21-Wavelength Real-Time Charge"></div>
                   <div class="bp-kv-strip cols-2">
@@ -761,7 +763,7 @@
         <span>vip <span id="ft-vip" class="c-blue">[—]</span></span>
         <span>tunnel <span id="ft-tunnel" class="c-violet">[tw-home]</span></span>
         <span>guard <span id="ft-guard" class="c-mint">[fail_closed]</span></span>
-        <span>down <strong id="ft-down" class="c-bright">0 Mbps</strong></span>
+        <strong id="ft-down" class="c-bright">↓ 0 Mbps</strong>
       </div>
     </footer>
     <script>
@@ -788,7 +790,7 @@
           : (bps < 1e6 ? (((bps / 1000) < 10 ? (bps / 1000).toFixed(1) : (bps / 1000).toFixed(0)) + ' Kbps')
             : (bps < 1e9 ? (((bps / 1e6) < 10 ? (bps / 1e6).toFixed(2) : (bps / 1e6).toFixed(1)) + ' Mbps')
               : ((bps / 1e9).toFixed(2) + ' Gbps')));
-        setT('ft-down', f);
+        setT('ft-down', '↓ ' + f);
       } catch (_) {}
     })();
     </script>

@@ -978,7 +978,7 @@ function renderClassifyStrip() {
   const grid = $('#bp-classify-grid');
   if (!grid) return;
   const rules = S.rules?.rules || [];
-  const coreTags = ['device-direct', 'domestic', 'rest-tunnel', 'tunnel-range', 'quic'];
+  const coreTags = ['device-direct', 'domestic', 'rest-tunnel', 'relay', 'quic', 'tunnel-range', 'domestic-domain', 'tunnel-domain'];
   if (!rules.length) {
     if (grid._orderSig === '__empty__') return;
     grid._orderSig = '__empty__';
@@ -1426,42 +1426,46 @@ export function renderBlueprint() {
 
   // Tier 2 · Branch 0: @vip_lane
   const vipS = strands.find(s => s.vip);
-  $('#bp-vip-rate').textContent = vipS ? fmtRate(liveFlow.vipBps).full : '0 bps';
-  if ($('#bp-vip-share')) {
-    const vShare = totalRate > 0 ? Math.round((liveFlow.vipBps / totalRate) * 100) : 0;
-    $('#bp-vip-share').textContent = `${vShare}% 流佔比`;
-  }
-  const vipTok = vipS ? (vipS.tokens_pct ?? 100) / 100 : 0;
-  renderSegMeter($('#bp-vip-meter'), vipTok, 10, 'red');
-  $('#bp-vip-pct').textContent = vipS ? `${Math.round(vipTok * 100)}%` : 'none';
-  if ($('#bp-vip-iface')) $('#bp-vip-iface').textContent = vipS ? `${vipS.dev} (#${vipS.id})` : 'auto';
-  if ($('#bp-vip-rtt')) $('#bp-vip-rtt').textContent = vipS ? `${vipS.ttfb_ms ?? '—'} ms · ${vipS.loss_pct ?? 0}%` : '— ms · 0%';
-  if ($('#bp-vip-down')) $('#bp-vip-down').textContent = vipS ? fmtBytes(vipS.down_bytes || 0) : '0 B';
-  if ($('#bp-vip-up')) $('#bp-vip-up').textContent = vipS ? fmtBytes(vipS.up_bytes || 0) : '0 B';
+  const vipRateTxt = vipS ? fmtRate(liveFlow.vipBps).full : '0 bps';
+  const vShareReal = (vipS && totalRate > 0) ? Math.min(1, liveFlow.vipBps / totalRate) : 0;
+  const vShareRatio = (vipS && liveFlow.vipBps > 400) ? Math.max(0.08, vShareReal) : vShareReal;
+  const vSharePct = Math.round(vShareReal * 100);
+  const vipTokPct = vipS ? Math.round(vipS.tokens_pct ?? 100) : 0;
+  setTxt('#bp-vip-rate', vipRateTxt);
+  setTxt('#bp-vip-share', vipS ? `蓄能 ${vipTokPct}%` : '蓄能 —');
+  renderSegMeter($('#bp-vip-meter'), vShareRatio, 10, 'red');
+  setTxt('#bp-vip-pct', `${vSharePct}% 流佔比`);
+  if ($('#bp-vip-iface')) setTxt('#bp-vip-iface', vipS ? `${vipS.dev} (#${vipS.id})` : 'auto');
+  if ($('#bp-vip-rtt')) setTxt('#bp-vip-rtt', vipS ? `${vipS.ttfb_ms ?? '—'} ms · ${vipS.loss_pct ?? 0}%` : '— ms · 0%');
+  if ($('#bp-vip-down')) setTxt('#bp-vip-down', vipS ? fmtBytes(vipS.down_bytes || 0) : '0 B');
+  if ($('#bp-vip-up')) setTxt('#bp-vip-up', vipS ? fmtBytes(vipS.up_bytes || 0) : '0 B');
   if ($('#bp-vip-ports')) {
     const ports = S.rules?.ports || [];
     const portsFull = ports.length ? ports.join(',') : '123,3478,5349';
-    $('#bp-vip-ports').textContent = ports.length > 3 ? `${ports.slice(0, 2).join(',')}+${ports.length - 2}埠` : portsFull;
-    $('#bp-vip-ports').title = portsFull;
+    setTxt('#bp-vip-ports', ports.length > 3 ? `${ports.slice(0, 2).join(',')}+${ports.length - 2}埠` : portsFull);
+    setTitle('#bp-vip-ports', portsFull);
   }
   if ($('#bp-vip-quota')) {
-    $('#bp-vip-quota').textContent = vipS ? `${fmtRateCompact(vipS.peak || 0)}峰·${vipS.slots ?? 0}槽` : '<50MB 優先';
+    setTxt('#bp-vip-quota', vipS ? `${fmtRateCompact(vipS.peak || 0)}峰·${vipS.slots ?? 0}槽` : '<50MB 優先');
   }
   if ($('#bp-vip-dot')) {
-    $('#bp-vip-dot').className = `run-dot ${vipS && vipS.healthy ? (liveFlow.vipBps > 400 ? 'red' : 'off') : 'off'}`;
+    setCls('#bp-vip-dot', `run-dot ${vipS && vipS.healthy ? (liveFlow.vipBps > 400 ? 'red' : 'off') : 'off'}`);
   }
-  $('#bp-vip-st').textContent = vipS && vipS.healthy
+  setTxt('#bp-vip-st', vipS && vipS.healthy
     ? (liveFlow.vipBps > 32 ? 'vip active' : 'vip pinned (idle)')
-    : 'standby';
-  $('#bp-vip-desc').textContent = vipS
-    ? `token ${vipS.tokens_pct ?? 100}% · ${vipS.slots ?? 0} slots`
-    : 'auto selecting lowest RTT strand...';
+    : 'standby');
+  setTxt('#bp-vip-desc', vipS
+    ? `token ${vipTokPct}% · ${vipS.slots ?? 0} slots`
+    : 'auto selecting lowest RTT strand...');
 
   // Tier 2 · Branch 1: TW-HOME Mihomo + MPTCP + Zashboard
   const mihomoOk = !!st.tunnel?.running;
-  $('#bp-tun-rate').textContent = mihomoOk ? fmtRate(liveFlow.tunBps).full : '0 bps';
-  renderSegMeter($('#bp-tun-meter'), mihomoOk ? Math.max(0.08, liveFlow.tunShare) : 0, 10, mihomoOk ? 'mint' : 'amber');
-  $('#bp-tun-pct').textContent = mihomoOk ? `${Math.round(liveFlow.tunShare * 100)}%` : '0%';
+  const tunShareReal = mihomoOk ? liveFlow.tunShare : 0;
+  const tunShareBar = (mihomoOk && liveFlow.tunPkts > 0) ? Math.max(0.08, tunShareReal) : 0;
+  const tunSharePct = Math.round(tunShareReal * 100);
+  setTxt('#bp-tun-rate', mihomoOk ? fmtRate(liveFlow.tunBps).full : '0 bps');
+  renderSegMeter($('#bp-tun-meter'), tunShareBar, 10, mihomoOk ? 'mint' : 'amber');
+  setTxt('#bp-tun-pct', `${tunSharePct}% 流佔比`);
   $('#bp-tun-desc').textContent = tun?.tw_home || tun?.selected || 'TW-HOME';
   if ($('#bp-tun-bytes')) $('#bp-tun-bytes').textContent = fmtBytes(liveFlow.tunBytes);
   if ($('#bp-tun-pkts')) {
@@ -1561,12 +1565,13 @@ export function renderBlueprint() {
   // Tier 2 · Branch 2: Domestic Direct + Burst-Harvest
   const nTotal = Math.max(1, st.strand_count || 21);
   const faultCnt = strands.length ? strands.filter(s => !s.healthy).length : Math.max(0, nTotal - (st.healthy_count ?? 0));
-  const directShare = Math.max(0, 1 - liveFlow.tunShare);
+  const directShare = Math.max(0, 1 - tunShareReal - vShareReal);
+  const directPct = Math.max(0, 100 - tunSharePct - vSharePct);
   const weaveRate = Math.max(liveFlow.domBps, Math.max(0, totalRate - liveFlow.vipBps));
-  $('#bp-dom-rate').textContent = fmtRate(weaveRate).full;
-  renderSegMeter($('#bp-dom-meter'), chargedRatio, 10, 'blue');
-  $('#bp-dom-pct').textContent = `${w.charged_count ?? 0}/${nH}`;
-  if ($('#bp-dom-share')) $('#bp-dom-share').textContent = `${Math.round(directShare * 100)}% 流佔比`;
+  setTxt('#bp-dom-rate', fmtRate(weaveRate).full);
+  renderSegMeter($('#bp-dom-meter'), directShare, 10, 'blue');
+  setTxt('#bp-dom-pct', `${w.charged_count ?? 0}/${nH} 滿桶`);
+  setTxt('#bp-dom-share', `${directPct}% 流佔比`);
   renderMiniSpectrum(strands);
   if ($('#bp-dom-slots')) $('#bp-dom-slots').textContent = `${w.slots ?? 126} (${w.affinity || 'flow'})`;
   if ($('#bp-dom-direct')) {

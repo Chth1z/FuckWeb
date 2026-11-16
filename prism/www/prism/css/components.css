@@ -8,9 +8,6 @@ html.prism-booting *::before,
 html.prism-booting *::after {
   transition: none !important;
 }
-.main-stage {
-  transition: opacity 0.14s ease-out;
-}
 html.prism-cold .main-stage {
   opacity: 0;
 }
@@ -319,7 +316,7 @@ html.prism-cold .main-stage {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
   padding: 1px;
-  min-height: 76px;
+  min-height: 98px;
 }
 
 .guard-inv-cell {
@@ -330,7 +327,8 @@ html.prism-cold .main-stage {
     var(--tray-inset),
     0 0 5px rgba(var(--gi-rgb), 0.14),
     inset 0 0 10px rgba(var(--gi-rgb), 0.12);
-  padding: 5px 7px;
+  padding: 4px 7px;
+  height: 27px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -441,13 +439,18 @@ html.prism-cold .main-stage {
   background-color: rgba(var(--cb-rgb, 52, 58, 72), var(--cb-fill, 0.06));
   border: none;
   box-shadow: var(--tray-inset);
-  padding: 5.5px 9px;
+  padding: 3.5px 8px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 5px;
+  gap: 3px;
   flex: 0 0 auto;
-  transition: box-shadow 0.72s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.72s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.classify-bar-card .seg-meter {
+  height: 11px;
+  padding: 1.5px 2px;
 }
 
 .classify-bar-card.active {
@@ -980,6 +983,14 @@ html.prism-cold .main-stage {
   .classify-bar-card {
     padding: 3px 7px;
     gap: 2px;
+  }
+  .guard-invariants-grid {
+    min-height: 80px;
+    gap: 5px;
+  }
+  .guard-inv-cell {
+    height: 23px;
+    padding: 2px 6px;
   }
   .bp-kv-strip {
     padding: 3px 6px;
