@@ -64,7 +64,7 @@
         <div class="dsotm-stage">
           <canvas id="topo"></canvas>
 
-          <div class="corner-hud tl">
+          <div id="ov-hud-tl" class="corner-hud tl">
             <div id="ov-ver" class="corner-tag">PRISM v5.1.0 · DISPERSION FLUX</div>
             <div class="corner-rate-row">
               <span id="ov-down" class="corner-rate-main">0 Mbps</span>
@@ -77,13 +77,14 @@
             </div>
           </div>
 
-          <div class="corner-hud tr">
+          <div id="ov-hud-tr" class="corner-hud tr">
             <div class="corner-tag">SPECTRUM · @vip_lane</div>
             <div class="corner-sub">
               <span>光譜健康 <strong id="ov-healthy" class="c-mint">0 / 21</strong></span>
               <span>·</span>
               <span>滿桶 <strong id="ov-charged" class="c-mint">0</strong></span>
             </div>
+            <div id="ov-mini-spectrum" class="ov-mini-spectrum" aria-hidden="true"></div>
             <div class="corner-sub">
               <span>專線 <strong id="ov-vip" class="c-blue">—</strong></span>
               <span>·</span>
@@ -91,21 +92,21 @@
             </div>
           </div>
 
-          <div class="corner-hud bl">
+          <div id="ov-hud-bl" class="corner-hud bl">
             <div class="corner-tag">INCIDENT WHITE BEAM</div>
             <div class="corner-sub">
               <span>在線終端 <strong id="ov-devs" class="c-bright">0 台</strong></span>
               <span>·</span>
               <span id="ov-site-name" class="c-spectrum">—</span>
             </div>
-            <div class="corner-sub c-muted">
-              <span>累計 ↓ <span id="ov-total-down">0 B</span></span>
+            <div class="corner-sub ov-sub-muted">
+              <span>累計 ↓ <span id="ov-total-down" class="c-bright">0 B</span></span>
               <span>·</span>
-              <span>↑ <span id="ov-total-up">0 B</span></span>
+              <span>↑ <span id="ov-total-up" class="c-bright">0 B</span></span>
             </div>
           </div>
 
-          <div class="corner-hud br">
+          <div id="ov-hud-br" class="corner-hud br">
             <div class="corner-tag">TW-HOME PRIVACY CAGE</div>
             <div class="corner-sub">
               <span id="ov-relay" class="c-bright">—</span>

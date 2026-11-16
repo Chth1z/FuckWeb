@@ -5,7 +5,7 @@
  * bands (no curves, no core lines, no particles), zero shadowBlur lag.
  * ============================================================================ */
 
-import { S, spectralColor, fmtRate } from '../state.js?v=5.6.6';
+import { S, SPECTRUM_STOPS, spectralColor, parseRgb, mixWhiteRgb, desatObsidianRgb, fmtRate } from '../state.js?v=5.6.6';
 import { $ } from '../dom.js?v=5.6.6';
 
 let rafId = null;
@@ -126,8 +126,8 @@ function handlePrismHover(rect) {
     const stateTxt = !s.healthy ? '離線 / 待認證' : (s.vip ? '💎 VIP 電競零丟包專線' : (bucketNames[s.bucket] || s.bucket));
     tip.classList.remove('spectrum');
     tip.style.borderImage = '';
-    tip.style.borderColor = col.css;
-    tip.style.boxShadow = `0 0 18px rgba(${col.rgb}, 0.34), 0 0 38px rgba(${col.rgb}, 0.14), inset 0 0 12px rgba(${col.rgb}, 0.10), 0 14px 36px rgba(0, 0, 0, 0.90)`;
+    tip.style.borderColor = `rgba(${col.rgb}, 0.85)`;
+    tip.style.boxShadow = `0 0 18px rgba(${col.rgb}, 0.30), 0 0 38px rgba(${col.rgb}, 0.14), inset 0 0 14px rgba(${col.rgb}, 0.10), 0 14px 36px rgba(0, 0, 0, 0.90)`;
     tip.innerHTML = `
       <div class="tt-head">
         <span style="color:${col.css}">${s.dev} (#${s.id})</span>
@@ -199,6 +199,15 @@ function clipSlopeHalfPlane(ctx, ax, ay, bx, by, sideSign, W, H) {
   }
   ctx.closePath();
   ctx.clip();
+}
+
+function composeObsidianRgb(rgbStr, intensity, fade = 1) {
+  const [r, g, b] = parseRgb(rgbStr);
+  const k = Math.max(0, Math.min(1, intensity)) * Math.max(0, Math.min(1, fade));
+  const rr = Math.min(255, Math.round(4 + (r - 4) * k));
+  const gg = Math.min(255, Math.round(5 + (g - 5) * k));
+  const bb = Math.min(255, Math.round(9 + (b - 9) * k));
+  return `rgb(${rr}, ${gg}, ${bb})`;
 }
 
 function drawFeatheredEdge(ctx, x0, y0, x1, y1, nx, ny, dist, rgb, alpha) {
@@ -289,8 +298,8 @@ function drawPrismFrame() {
   const incidentAngle = 14.5 * Math.PI / 180;
   const startX = 0;
   const startY = entryY + entryX * Math.tan(incidentAngle);
-  const beamHalf = Math.min(4.8, 1.5 + Math.sqrt(Math.max(0, totalMbps)) * 0.32);
-  const beamGlowHalf = beamHalf * (5.4 + Math.min(2.6, totalMbps * 0.05));
+  const beamHalf = Math.min(4.2, 1.35 + Math.sqrt(Math.max(0, totalMbps)) * 0.28);
+  const beamGlowHalf = beamHalf * (5.2 + Math.min(2.4, totalMbps * 0.05));
 
   // Normal vector & unit direction to incident beam
   const bLen = Math.hypot(entryX - startX, entryY - startY) || 1;
@@ -302,22 +311,22 @@ function drawPrismFrame() {
   const beamEndY = entryY + uy * 90;
 
   // Dual-tier Gaussian-feathered optical luminance halo clipped flush to prism's left crystal face
-  const outerGlowAlpha = Math.min(0.36, 0.18 + Math.sqrt(Math.max(0, totalMbps)) * 0.030);
-  const innerGlowAlpha = Math.min(0.42, 0.24 + Math.sqrt(Math.max(0, totalMbps)) * 0.032);
+  const outerGlowAlpha = Math.min(0.32, 0.16 + Math.sqrt(Math.max(0, totalMbps)) * 0.026);
+  const innerGlowAlpha = Math.min(0.38, 0.22 + Math.sqrt(Math.max(0, totalMbps)) * 0.028);
   ctx.save();
   clipSlopeHalfPlane(ctx, topX, topY, leftX, leftY, -1, W, H);
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   // Wide soft outer Gaussian feather
-  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, nx, ny, beamGlowHalf, '215, 236, 255', outerGlowAlpha);
-  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamGlowHalf, '215, 236, 255', outerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, nx, ny, beamGlowHalf, '195, 224, 255', outerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamGlowHalf, '195, 224, 255', outerGlowAlpha);
   // Tight core bloom
-  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, nx, ny, beamHalf * 2.4, '255, 255, 255', innerGlowAlpha);
-  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamHalf * 2.4, '255, 255, 255', innerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, nx, ny, beamHalf * 2.2, '255, 255, 255', innerGlowAlpha);
+  drawFeatheredEdge(ctx, startX, startY, beamEndX, beamEndY, -nx, -ny, beamHalf * 2.2, '255, 255, 255', innerGlowAlpha);
   ctx.restore();
 
   // Solid crisp white incident beam (also flush-clipped to left glass bevel)
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#f6faff';
   ctx.beginPath();
   ctx.moveTo(startX + nx * beamHalf, startY + ny * beamHalf);
   ctx.lineTo(beamEndX + nx * (beamHalf * 0.85), beamEndY + ny * (beamHalf * 0.85));
@@ -334,7 +343,7 @@ function drawPrismFrame() {
     tol: Math.max(12, beamGlowHalf + 6)
   });
 
-  // 4. Right Straight Spectrum Bands (21 Uniform Flat Color Bands, No Curves, No Dots)
+  // 4. Right Straight Spectrum Bands (21 Obsidian-Aligned Longitudinal Optical Bands)
   // Straight dispersion fan from right face to right edge of canvas (x = W)
   const rightSpan = W - exitTopX;
   const farTopY = exitTopY + rightSpan * Math.tan(10.0 * Math.PI / 180);
@@ -358,16 +367,15 @@ function drawPrismFrame() {
     let targetAlpha = 0.84;
     let targetGlow = 0.42;
     if (!s.healthy) {
-      targetW = 0.38;
-      targetAlpha = 0.22;
+      targetW = 0.42;
+      targetAlpha = 0.36;
       targetGlow = 0.0;
     } else if (s.bucket === 'depleted') {
-      targetW = 0.56;
-      targetAlpha = 0.48;
+      targetW = 0.60;
+      targetAlpha = 0.56;
       targetGlow = 0.16;
     } else {
-      // Gentle traffic-responsive band widening (subtle +widening on heavy strands without crushing peers)
-      targetW = 1.0 + 0.08 * tokRatio + Math.min(1.05, Math.sqrt(Math.max(0, mbps)) * 0.26);
+      targetW = 1.0 + 0.08 * tokRatio + Math.min(1.00, Math.sqrt(Math.max(0, mbps)) * 0.25);
       targetAlpha = Math.min(0.98, 0.80 + 0.08 * tokRatio + Math.min(0.14, Math.sqrt(Math.max(0, mbps)) * 0.04));
       targetGlow = Math.min(1.0, 0.36 + 0.10 * tokRatio + Math.log10(1 + Math.max(0, mbps) * 4.5) * 0.40);
     }
@@ -380,7 +388,6 @@ function drawPrismFrame() {
     if (Math.abs(dw) > 0.003 || Math.abs(da) > 0.003 || Math.abs(dg) > 0.002) {
       sm.w += dw * 0.18;
       sm.alpha += da * 0.18;
-      // Fast optical attack, slow phosphor decay prevents intermittent flash/blinking on burst shifts
       sm.glow += dg * (dg > 0 ? 0.24 : 0.055);
       stillMoving = true;
     } else {
@@ -408,11 +415,11 @@ function drawPrismFrame() {
   const rxBot = exitBotX - (botDx / botLen) * 65;
   const ryBot = exitBotY - (botDy / botLen) * 65;
 
-  // Soft atmospheric outer glow along Red (top) & Violet (bottom) fading cleanly to 0
+  // Soft atmospheric outer glow along Red (top) & Violet (bottom) aligned with obsidian spectrum
   const anyHover = S.hoverStrand !== null;
   if (!anyHover) {
-    const outerReach = Math.min(34, 18 + Math.sqrt(Math.max(0, totalMbps)) * 2.6);
-    const outerAlpha = Math.min(0.32, 0.16 + Math.sqrt(Math.max(0, totalMbps)) * 0.026);
+    const outerReach = Math.min(34, 18 + Math.sqrt(Math.max(0, totalMbps)) * 2.5);
+    const outerAlpha = Math.min(0.28, 0.14 + Math.sqrt(Math.max(0, totalMbps)) * 0.024);
     const colTop = spectralColor(0, nStrands);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -422,7 +429,7 @@ function drawPrismFrame() {
       W, farTopY,
       topDy / topLen, -topDx / topLen,
       outerReach,
-      colTop.rgb,
+      desatObsidianRgb(colTop.rgb, 0.85),
       outerAlpha
     );
 
@@ -433,13 +440,13 @@ function drawPrismFrame() {
       W, farBotY,
       -botDy / botLen, botDx / botLen,
       outerReach,
-      colBot.rgb,
+      desatObsidianRgb(colBot.rgb, 0.85),
       outerAlpha
     );
     ctx.restore();
   }
 
-  // Draw seamless contiguous opaque bands via stacked full-tail layering (zero seam overlap/gap lines!)
+  // Draw seamless contiguous opaque bands using PRISM obsidian desaturation + longitudinal ether roll-off
   let cum = 0;
   const bandGeoms = [];
   for (let i = 0; i < nStrands; i++) {
@@ -468,19 +475,55 @@ function drawPrismFrame() {
     const isHover = S.hoverStrand === s.id;
     const smoothGlow = S.bandSmooth[i].glow;
 
-    // Luminance pre-composited onto obsidian #040509 so every adjacent band stacks at alpha=1.0 seamlessly
-    const intensity = anyHover
-      ? (isHover ? 1.0 : 0.24)
-      : (!s.healthy ? 0.22 : (s.bucket === 'depleted' ? 0.46 : Math.min(1.0, 0.78 + smoothGlow * 0.22)));
-    const lift = isHover ? 0.16 : (!anyHover && s.healthy ? smoothGlow * 0.07 : 0);
-    const rr = Math.min(255, Math.round(4 + (col.r - 4) * intensity + (255 - col.r) * lift));
-    const gg = Math.min(255, Math.round(5 + (col.g - 5) * intensity + (255 - col.g) * lift));
-    const bb = Math.min(255, Math.round(9 + (col.b - 9) * intensity + (255 - col.b) * lift));
+    let exitRgb, midRgb, farRgb, exitLum, farLum;
+    if (anyHover) {
+      if (isHover) {
+        exitRgb = mixWhiteRgb(col.rgb, 0.28);
+        midRgb = mixWhiteRgb(col.rgb, 0.12);
+        farRgb = col.rgb;
+        exitLum = 1.0;
+        farLum = 0.86;
+      } else {
+        const calmObs = desatObsidianRgb(col.rgb, 0.38);
+        exitRgb = calmObs;
+        midRgb = calmObs;
+        farRgb = calmObs;
+        exitLum = 0.56;
+        farLum = 0.42;
+      }
+    } else if (!s.healthy) {
+      const deadObs = desatObsidianRgb(col.rgb, 0.16);
+      exitRgb = deadObs;
+      midRgb = deadObs;
+      farRgb = deadObs;
+      exitLum = 0.38;
+      farLum = 0.28;
+    } else if (s.bucket === 'depleted') {
+      const depObs = desatObsidianRgb(col.rgb, 0.34);
+      exitRgb = depObs;
+      midRgb = depObs;
+      farRgb = depObs;
+      exitLum = 0.58;
+      farLum = 0.44;
+    } else {
+      const k = Math.max(0.18, Math.min(1, smoothGlow));
+      const sat = 0.46 + 0.54 * Math.pow(k, 0.78);
+      const litObs = desatObsidianRgb(col.rgb, sat);
+      const coreRgb = k > 0.72 ? mixWhiteRgb(litObs, (k - 0.72) * 0.36) : litObs;
+      exitRgb = mixWhiteRgb(coreRgb, 0.10 + 0.08 * k);
+      midRgb = coreRgb;
+      farRgb = litObs;
+      exitLum = 0.76 + 0.24 * k;
+      farLum = exitLum * 0.80;
+    }
 
-    ctx.fillStyle = `rgb(${rr}, ${gg}, ${bb})`;
+    const rayGrad = ctx.createLinearGradient(x0Top, y0Top, W, y1Top);
+    rayGrad.addColorStop(0.00, composeObsidianRgb(exitRgb, exitLum));
+    rayGrad.addColorStop(0.38, composeObsidianRgb(midRgb, exitLum * 0.96));
+    rayGrad.addColorStop(1.00, composeObsidianRgb(farRgb, farLum));
+
+    ctx.fillStyle = rayGrad;
     ctx.beginPath();
-    // Extend downward to bottom boundary (t = 1.0); subsequent band i+1 cleanly paints over [t_{i+1}..1.0]
-    // producing mathematically exact AA interpolation between Color i and Color i+1 with zero seam lines!
     ctx.moveTo(bx0Top, by0Top);
     ctx.lineTo(W, y1Top);
     ctx.lineTo(W, farBotY + 0.5);
@@ -500,10 +543,24 @@ function drawPrismFrame() {
     });
   }
 
-  // Focused outer optical aura ONLY when hovering an individual strand (never draws internal seam lines)
+  // Soft crystal-exit sheen right where the 21 rays leave the prism right slope
+  const eDx = exitBotX - exitTopX;
+  const eDy = exitBotY - exitTopY;
+  const eLen = Math.hypot(eDx, eDy) || 1;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  drawFeatheredEdge(
+    ctx,
+    exitTopX, exitTopY,
+    exitBotX, exitBotY,
+    eDy / eLen, -eDx / eLen,
+    Math.max(10, side * 0.055),
+    '205, 228, 255',
+    anyHover ? 0.09 : 0.16
+  );
+
+  // Calm Gaussian optical aura when hovering an individual strand (never harsh neon bar)
   if (anyHover) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < bandGeoms.length; i++) {
       const b = bandGeoms[i];
       if (!b.isHover) continue;
@@ -512,27 +569,33 @@ function drawPrismFrame() {
       const tDx = W - b.bx0Top;
       const tDy = b.y1Top - b.by0Top;
       const tLen = Math.hypot(tDx, tDy) || 1;
-      drawFeatheredEdge(ctx, b.bx0Top, b.by0Top, W, b.y1Top, tDy / tLen, -tDx / tLen, bloomPad, b.col.rgb, 0.42);
+      drawFeatheredEdge(ctx, b.bx0Top, b.by0Top, W, b.y1Top, tDy / tLen, -tDx / tLen, bloomPad, b.col.rgb, 0.24);
       const bDx = W - b.bx0Bot;
       const bDy = b.y1Bot - b.by0Bot;
       const bLen = Math.hypot(bDx, bDy) || 1;
-      drawFeatheredEdge(ctx, b.bx0Bot, b.by0Bot, W, b.y1Bot, -bDy / bLen, bDx / bLen, bloomPad, b.col.rgb, 0.42);
+      drawFeatheredEdge(ctx, b.bx0Bot, b.by0Bot, W, b.y1Bot, -bDy / bLen, bDx / bLen, bloomPad, b.col.rgb, 0.24);
     }
-    ctx.restore();
   }
+  ctx.restore();
   ctx.restore(); // End right-bevel half-plane clip
 
-  // 5. Equilateral Prism Body & Internal Dispersion Wedge (Iconic Album Cover Look)
-  // Fill dark glass interior
-  ctx.fillStyle = '#04060a';
+  // 5. Iconic "The Dark Side of the Moon" Crystalline Beveled Glass Prism
+  // 5A. Subtle external celestial aura around crystal perimeter
+  ctx.save();
+  ctx.shadowColor = 'rgba(138, 198, 255, 0.30)';
+  ctx.shadowBlur = Math.round(14 + Math.min(10, totalMbps * 0.22));
+  ctx.strokeStyle = 'rgba(165, 214, 255, 0.16)';
+  ctx.lineWidth = 4.2;
+  ctx.lineJoin = 'miter';
   ctx.beginPath();
   ctx.moveTo(topX, topY);
   ctx.lineTo(rightX, rightY);
   ctx.lineTo(leftX, leftY);
   ctx.closePath();
-  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 
-  // Internal dispersion wedge inside dark glass prism with true 2D Gaussian blur halo (zero hard polygon step)
+  // 5B. Clipped Deep Obsidian Interior + 3-Layer Cyan-Blue Glass Bevel + Unified Misty Wedge
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(topX, topY);
@@ -541,83 +604,120 @@ function drawPrismFrame() {
   ctx.closePath();
   ctx.clip();
 
+  const interiorGrad = ctx.createLinearGradient(topX, topY, cx, leftY);
+  interiorGrad.addColorStop(0.00, '#03050a');
+  interiorGrad.addColorStop(0.60, '#050811');
+  interiorGrad.addColorStop(1.00, '#080e1c');
+  ctx.fillStyle = interiorGrad;
+  ctx.fillRect(leftX - 2, topY - 2, side + 4, triH + 4);
+
+  // Iconic Album-Cover Stepped Cyan-Blue Crystal Inner Bevels (clipped strictly inward)
+  const makeBevelGrad = (topCol, botCol) => {
+    const bg = ctx.createLinearGradient(topX, topY, cx, leftY);
+    bg.addColorStop(0.00, topCol);
+    bg.addColorStop(0.65, topCol);
+    bg.addColorStop(1.00, botCol);
+    return bg;
+  };
+  const strokeClippedPrism = (width, style) => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'miter';
+    ctx.beginPath();
+    ctx.moveTo(topX, topY);
+    ctx.lineTo(rightX, rightY);
+    ctx.lineTo(leftX, leftY);
+    ctx.closePath();
+    ctx.stroke();
+  };
+  strokeClippedPrism(Math.max(8, side * 0.072),  makeBevelGrad('rgba(116, 184, 252, 0.15)', 'rgba(74, 134, 218, 0.06)'));
+  strokeClippedPrism(Math.max(4, side * 0.036),  makeBevelGrad('rgba(162, 218, 255, 0.25)', 'rgba(98, 166, 240, 0.10)'));
+  strokeClippedPrism(Math.max(2, side * 0.014),  makeBevelGrad('rgba(214, 240, 255, 0.42)', 'rgba(148, 204, 250, 0.20)'));
+
   const exitMidX = (exitTopX + exitBotX) * 0.5;
   const exitMidY = (exitTopY + exitBotY) * 0.5;
+  const wEntTopY = entryY - beamHalf * 0.72;
+  const wEntBotY = entryY + beamHalf * 0.72;
 
-  // Tight smooth 6-stop radial crystal entry glow (zero blocky edge)
-  const entryRadius = Math.max(22, side * 0.18);
-  const entryPeak = Math.min(0.24, 0.12 + Math.sqrt(Math.max(0, totalMbps)) * 0.022);
-  const entryGlow = ctx.createRadialGradient(entryX + 2, entryY, 0.5, entryX + 3, entryY, entryRadius);
+  // Unified Seamless Internal Scattering Wedge (eliminates 0.78 double-step polygon seam)
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const wedgeGrad = ctx.createLinearGradient(entryX, entryY, exitMidX, exitMidY);
+  wedgeGrad.addColorStop(0.00, 'rgba(255, 255, 255, 0.94)');
+  wedgeGrad.addColorStop(0.12, 'rgba(234, 244, 255, 0.66)');
+  wedgeGrad.addColorStop(0.28, 'rgba(198, 224, 252, 0.38)');
+  wedgeGrad.addColorStop(0.50, 'rgba(162, 198, 240, 0.18)');
+  wedgeGrad.addColorStop(0.72, 'rgba(134, 174, 224, 0.08)');
+  wedgeGrad.addColorStop(0.90, 'rgba(118, 160, 214, 0.03)');
+  wedgeGrad.addColorStop(1.00, 'rgba(110, 154, 210, 0.015)');
+
+  ctx.beginPath();
+  ctx.moveTo(entryX - 1.5, wEntTopY);
+  ctx.lineTo(exitTopX + 2, exitTopY);
+  ctx.lineTo(exitBotX + 2, exitBotY);
+  ctx.lineTo(entryX - 1.5, wEntBotY);
+  ctx.closePath();
+  ctx.fillStyle = wedgeGrad;
+  ctx.fill();
+
+  // Whisper-soft internal chromatic pre-dispersion against right glass slope
+  ctx.save();
+  ctx.clip();
+  const preDispX = entryX + (exitMidX - entryX) * 0.56;
+  const preSpecGrad = ctx.createLinearGradient(exitTopX, exitTopY, exitBotX, exitBotY);
+  SPECTRUM_STOPS.forEach((rgb, idx) => {
+    const frac = idx / Math.max(1, SPECTRUM_STOPS.length - 1);
+    preSpecGrad.addColorStop(frac, `rgba(${rgb}, 0.10)`);
+  });
+  ctx.fillStyle = preSpecGrad;
+  ctx.fillRect(preDispX, exitTopY - 4, (exitBotX - preDispX) + 6, (exitBotY - exitTopY) + 8);
+  ctx.restore();
+
+  // Feathered upper and lower Gaussian edge mist along internal fan boundaries
+  const wtDx = exitTopX - entryX;
+  const wtDy = exitTopY - wEntTopY;
+  const wtLen = Math.hypot(wtDx, wtDy) || 1;
+  drawFeatheredEdge(ctx, entryX, wEntTopY, exitTopX, exitTopY, wtDy / wtLen, -wtDx / wtLen, side * 0.042, '182, 216, 255', 0.14);
+
+  const wbDx = exitBotX - entryX;
+  const wbDy = exitBotY - wEntBotY;
+  const wbLen = Math.hypot(wbDx, wbDy) || 1;
+  drawFeatheredEdge(ctx, entryX, wEntBotY, exitBotX, exitBotY, -wbDy / wbLen, wbDx / wbLen, side * 0.042, '182, 216, 255', 0.14);
+
+  // Tight smooth crystal entry glint where white beam pierces left slope
+  const entryRadius = Math.max(18, side * 0.16);
+  const entryPeak = Math.min(0.28, 0.14 + Math.sqrt(Math.max(0, totalMbps)) * 0.022);
+  const entryGlow = ctx.createRadialGradient(entryX + 1.5, entryY, 0.5, entryX + 2.5, entryY, entryRadius);
   entryGlow.addColorStop(0.00, `rgba(255, 255, 255, ${entryPeak.toFixed(3)})`);
-  entryGlow.addColorStop(0.22, `rgba(225, 240, 255, ${(entryPeak * 0.58).toFixed(3)})`);
-  entryGlow.addColorStop(0.46, `rgba(205, 228, 255, ${(entryPeak * 0.24).toFixed(3)})`);
-  entryGlow.addColorStop(0.72, `rgba(185, 212, 248, ${(entryPeak * 0.07).toFixed(3)})`);
-  entryGlow.addColorStop(1.00, 'rgba(180, 208, 246, 0)');
+  entryGlow.addColorStop(0.24, `rgba(220, 238, 255, ${(entryPeak * 0.56).toFixed(3)})`);
+  entryGlow.addColorStop(0.55, `rgba(185, 216, 252, ${(entryPeak * 0.20).toFixed(3)})`);
+  entryGlow.addColorStop(1.00, 'rgba(170, 206, 248, 0)');
   ctx.fillStyle = entryGlow;
   ctx.fillRect(entryX - entryRadius, entryY - entryRadius, entryRadius * 2, entryRadius * 2);
+  ctx.restore();
+  ctx.restore(); // End interior prism clip
 
-  // Soft 2D Gaussian blurred scatter halo fading cleanly to 0 before touching the right wall
+  // 5C. Crisp Outer Metallic Ice-White & Sapphire Prism Rim Edges
   ctx.save();
-  const mistEndX = entryX + (exitMidX - entryX) * 0.78;
-  const mistEndY = entryY + (exitMidY - entryY) * 0.78;
-  const mistGrad = ctx.createLinearGradient(entryX, entryY, mistEndX, mistEndY);
-  const mistA = Math.min(0.42, 0.24 + Math.sqrt(Math.max(0, totalMbps)) * 0.03);
-  mistGrad.addColorStop(0.00, `rgba(225, 240, 255, ${mistA.toFixed(3)})`);
-  mistGrad.addColorStop(0.45, `rgba(195, 222, 252, ${(mistA * 0.36).toFixed(3)})`);
-  mistGrad.addColorStop(1.00, 'rgba(170, 204, 244, 0)');
-  ctx.shadowColor = 'rgba(195, 224, 255, 0.44)';
-  ctx.shadowBlur = 18;
-  ctx.fillStyle = mistGrad;
-  ctx.beginPath();
-  ctx.moveTo(entryX, entryY - beamHalf * 0.78);
-  ctx.lineTo(entryX + (exitTopX - entryX) * 0.78, entryY - beamHalf * 0.78 + (exitTopY - (entryY - beamHalf * 0.78)) * 0.78);
-  ctx.lineTo(entryX + (exitBotX - entryX) * 0.78, entryY + beamHalf * 0.78 + (exitBotY - (entryY + beamHalf * 0.78)) * 0.78);
-  ctx.lineTo(entryX, entryY + beamHalf * 0.78);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  // Main crisp internal white-to-mist dispersion fan
-  ctx.globalCompositeOperation = 'source-over';
-  const wedgeGrad = ctx.createLinearGradient(entryX, entryY, exitMidX, exitMidY);
-  wedgeGrad.addColorStop(0.00, 'rgba(255, 255, 255, 0.90)');
-  wedgeGrad.addColorStop(0.22, 'rgba(224, 238, 254, 0.44)');
-  wedgeGrad.addColorStop(0.60, 'rgba(175, 202, 236, 0.14)');
-  wedgeGrad.addColorStop(0.88, 'rgba(148, 180, 218, 0.04)');
-  wedgeGrad.addColorStop(1.00, 'rgba(135, 170, 210, 0.015)');
-
-  ctx.fillStyle = wedgeGrad;
-  ctx.beginPath();
-  ctx.moveTo(entryX, entryY - beamHalf * 0.85);
-  ctx.lineTo(exitTopX, exitTopY);
-  ctx.lineTo(exitBotX, exitBotY);
-  ctx.lineTo(entryX, entryY + beamHalf * 0.85);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  // Subtle dark crystal inner glass bevel (keeps prism glass deep & clean without hazy gray wall)
-  ctx.strokeStyle = 'rgba(155, 185, 215, 0.08)';
-  ctx.lineWidth = 4;
+  ctx.shadowColor = 'rgba(150, 210, 255, 0.38)';
+  ctx.shadowBlur = 10;
+  ctx.strokeStyle = 'rgba(170, 220, 255, 0.34)';
+  ctx.lineWidth = 2.6;
   ctx.lineJoin = 'miter';
-  ctx.beginPath();
-  ctx.moveTo(topX, topY + 2.5);
-  ctx.lineTo(rightX - 2.2, rightY - 1.4);
-  ctx.lineTo(leftX + 2.2, leftY - 1.4);
-  ctx.closePath();
-  ctx.stroke();
-
-  // Crisp outer silver-white prism edge with light optical bloom
-  ctx.save();
-  ctx.shadowColor = 'rgba(180, 214, 250, 0.22)';
-  ctx.shadowBlur = 8;
-  ctx.strokeStyle = 'rgba(232, 242, 255, 0.88)';
-  ctx.lineWidth = 2.0;
   ctx.beginPath();
   ctx.moveTo(topX, topY);
   ctx.lineTo(rightX, rightY);
   ctx.lineTo(leftX, leftY);
   ctx.closePath();
+  ctx.stroke();
+
+  const rimGrad = ctx.createLinearGradient(topX, topY, cx, leftY);
+  rimGrad.addColorStop(0.00, 'rgba(246, 251, 255, 0.96)');
+  rimGrad.addColorStop(0.65, 'rgba(226, 242, 255, 0.90)');
+  rimGrad.addColorStop(1.00, 'rgba(194, 222, 250, 0.82)');
+  ctx.shadowBlur = 4;
+  ctx.strokeStyle = rimGrad;
+  ctx.lineWidth = 1.65;
   ctx.stroke();
   ctx.restore();
 
