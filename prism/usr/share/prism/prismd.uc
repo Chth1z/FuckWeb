@@ -33,7 +33,7 @@ let history = series.create(HISTORY);
 let load = {};                          // dev -> { down, up, bucket, flows }
 let flow_counts = {};                   // strand id -> ESTABLISHED flow count
 let lan = { list: [], rate: {}, samples: 0 };
-let sampled = 0, series_at = 0;
+let sampled = 0, series_at = 0, pattern_at = 0;
 let running = false, again = false, first = true;
 let reconcile_timer, sample_timer;
 let kick_pending = false;
@@ -47,20 +47,29 @@ function healthy() {
 	return filter(snapshot?.strands ?? [], (s) => s.healthy);
 }
 
-function drift(a, b) {
+function pattern_diff(a, b) {
 	if (length(a) != length(b))
-		return length(b);
-	let count = {}, moved = 0;
+		return { moved: length(b), edge: true };
+	let ca = {}, cb = {};
 	for (let id in a)
-		count[id] = (count[id] ?? 0) + 1;
+		ca[id] = (ca[id] ?? 0) + 1;
 	for (let id in b)
-		count[id] = (count[id] ?? 0) - 1;
-	for (let id, n in count)
-		moved += n > 0 ? n : 0;
-	return moved;
+		cb[id] = (cb[id] ?? 0) + 1;
+	let moved = 0, edge = false;
+	for (let id, n in ca) {
+		let d = n - (cb[id] ?? 0);
+		if (d > 0)
+			moved += d;
+		if ((cb[id] ?? 0) == 0)
+			edge = true;
+	}
+	for (let id in cb)
+		if ((ca[id] ?? 0) == 0)
+			edge = true;
+	return { moved, edge };
 }
 
-function relay() {
+function relay(now) {
 	let strands = healthy(), n = snapshot?.weave?.slots ?? 0;
 	if (!length(strands) || n <= 0)
 		return;
@@ -70,11 +79,17 @@ function relay() {
 	let next_vip = weave.select_vip(strands, load, mptcp_ids);
 	let next = weave.compose(cfg.weave, strands, load, n, next_vip);
 	let vip_changed = (next_vip[0] ?? 0) != (vip_lane[0] ?? 0);
-	if (!vip_changed && drift(pattern, next) <= SETTLE)
-		return;
-	if (weave.program(next, next_vip)) {
+	let d = pattern_diff(pattern, next);
+	if (!vip_changed && !d.edge) {
+		if (d.moved <= SETTLE)
+			return;
+		if (d.moved < 10 && pattern_at && now - pattern_at < 5)
+			return;
+	}
+	if (weave.program(next, vip_changed ? next_vip : null)) {
 		pattern = next;
 		vip_lane = next_vip;
+		pattern_at = now;
 	}
 }
 
@@ -143,7 +158,7 @@ function sample() {
 		series_at = now;
 		series.add(history, time(), total.down, total.up, per, per_up);
 	}
-	relay();
+	relay(now);
 }
 
 let reconcile;
@@ -173,7 +188,7 @@ reconcile = function() {
 		snapshot = core.load_json(STATUS, snapshot);
 		pattern = weave.current();
 		vip_lane = weave.current_vip();
-		relay();
+		relay(monotonic());
 		if (again) {
 			again = false;
 			kick(DEBOUNCE_MS);

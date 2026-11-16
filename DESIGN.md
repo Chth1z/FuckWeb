@@ -287,12 +287,12 @@ tc qdisc add dev $DEV parent 1:30 handle 30: fq_codel limit 2000 target 5ms inte
 4. **構建零洩漏的 `PROXY` 選擇器與持久化狀態**：
    - `PROXY` 組列表：`[ "TW-HOME", ...tw_nodes, ...other_nodes ]`（**徹底移除 `"DIRECT"`，並移除包含香港節點的 `"AUTO"` 默認首項**）。
    - 將 Mihomo 的運行目錄緩存或選中狀態保存在 `/etc/prism/state/selected.json`：當用戶通過 `ubus call prism select` 選擇節點時寫入 `/etc/prism/state/selected.json`，並在 Mihomo 啟動或熱重載後自動同步恢復（默認為 `TW-HOME` / `🇹🇼【亚洲】台湾家宽01丨专线【3x】`）。
-5. **替換台灣家寬兼容的高可用遠程 DoH**：
+5. **替換台灣家寬兼容的高可用純 IP 遠程 DoH（零內地前置解析依賴）**：
    ```javascript
    nameserver: [
        "https://9.9.9.9/dns-query#PROXY",
-       "https://dns.quad9.net/dns-query#PROXY",
-       "https://dns.adguard-dns.com/dns-query#PROXY",
+       "https://149.112.112.112/dns-query#PROXY",
+       "https://94.140.14.14/dns-query#PROXY",
        "https://208.67.222.222/dns-query#PROXY",
    ]
    ```

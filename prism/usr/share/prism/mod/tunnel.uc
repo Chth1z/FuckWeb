@@ -226,8 +226,8 @@ function build_config(cfg, lan_ip, proxies) {
 			"proxy-server-nameserver": cn_doh,
 			nameserver: length(names) ? [
 				"https://9.9.9.9/dns-query#PROXY",
-				"https://dns.quad9.net/dns-query#PROXY",
-				"https://dns.adguard-dns.com/dns-query#PROXY",
+				"https://149.112.112.112/dns-query#PROXY",
+				"https://94.140.14.14/dns-query#PROXY",
 				"https://208.67.222.222/dns-query#PROXY",
 			] : cn_doh,
 		},

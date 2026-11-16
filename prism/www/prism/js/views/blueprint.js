@@ -1193,29 +1193,33 @@ export function renderBlueprint() {
 
   const invGrid = $('#adv-invariants-grid');
   if (invGrid && checks.length) {
-    const groups = [
-      { label: 'fw4/guard',  test: c => c.id.startsWith('privacy_') || c.id === 'nft_table' || c.id === 'ip_forward' || c.id === 'ssh_public' || c.id === 'http_public' || c.id === 'secret_perms' || c.id === 'overlay_space' },
-      { label: 'dns/6053',   test: c => c.id.includes('dns') || c.id.includes('dhcp') },
-      { label: 'tproxy/cage',test: c => c.id.startsWith('tunnel_') },
-      { label: 'weave/21ch', test: c => c.id === 'weave' || c.id === 'pattern' || c.id.startsWith('strands_') || c.id === 'domestic4_loaded' },
-      { label: 'mptcp/htb',  test: c => c.id.startsWith('mptcp_') || c.id === 'uplink_carrier' || c.id === 'shaper' },
-      { label: 'wifi/ap',    test: c => c.id === 'hostapd' || c.id.startsWith('wifi_') || c.id.startsWith('ap:') || c.id.startsWith('ap_ssid:') || c.id === 'sta_with_copper' },
-    ];
-    const gFrag = document.createDocumentFragment();
-    for (const grp of groups) {
-      const matched = checks.filter(grp.test);
-      const passed = matched.filter(c => c.ok).length;
-      const allOk = matched.length === 0 || passed === matched.length;
-      gFrag.appendChild(el('div', { class: `guard-inv-cell ${allOk ? 'ok' : 'bad'}` },
-        el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '5px', minWidth: '0' } },
-          el('span', { class: `run-dot ${allOk ? 'violet' : 'crimson'}` }),
-          el('span', { class: 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, grp.label)
-        ),
-        el('span', { class: allOk ? 'c-bright' : 'c-crimson', style: { fontWeight: '600', fontVariantNumeric: 'tabular-nums', flexShrink: '0' } }, matched.length ? `${passed}/${matched.length}` : 'n/a')
-      ));
+    const invSig = checks.map(c => `${c.id}:${c.ok ? 1 : 0}`).join(';');
+    if (invGrid._lastSig !== invSig) {
+      invGrid._lastSig = invSig;
+      const groups = [
+        { label: 'fw4/guard',  test: c => c.id.startsWith('privacy_') || c.id === 'nft_table' || c.id === 'ip_forward' || c.id === 'ssh_public' || c.id === 'http_public' || c.id === 'secret_perms' || c.id === 'overlay_space' },
+        { label: 'dns/6053',   test: c => c.id.includes('dns') || c.id.includes('dhcp') },
+        { label: 'tproxy/cage',test: c => c.id.startsWith('tunnel_') },
+        { label: 'weave/21ch', test: c => c.id === 'weave' || c.id === 'pattern' || c.id.startsWith('strands_') || c.id === 'domestic4_loaded' },
+        { label: 'mptcp/htb',  test: c => c.id.startsWith('mptcp_') || c.id === 'uplink_carrier' || c.id === 'shaper' },
+        { label: 'wifi/ap',    test: c => c.id === 'hostapd' || c.id.startsWith('wifi_') || c.id.startsWith('ap:') || c.id.startsWith('ap_ssid:') || c.id === 'sta_with_copper' },
+      ];
+      const gFrag = document.createDocumentFragment();
+      for (const grp of groups) {
+        const matched = checks.filter(grp.test);
+        const passed = matched.filter(c => c.ok).length;
+        const allOk = matched.length === 0 || passed === matched.length;
+        gFrag.appendChild(el('div', { class: `guard-inv-cell ${allOk ? 'ok' : 'bad'}` },
+          el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '5px', minWidth: '0' } },
+            el('span', { class: `run-dot ${allOk ? 'violet' : 'crimson'}` }),
+            el('span', { class: 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, grp.label)
+          ),
+          el('span', { class: allOk ? 'c-bright' : 'c-crimson', style: { fontWeight: '600', fontVariantNumeric: 'tabular-nums', flexShrink: '0' } }, matched.length ? `${passed}/${matched.length}` : 'n/a')
+        ));
+      }
+      invGrid.innerHTML = '';
+      invGrid.appendChild(gFrag);
     }
-    invGrid.innerHTML = '';
-    invGrid.appendChild(gFrag);
   }
 
   if ($('#adv-relays')) {
