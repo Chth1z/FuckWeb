@@ -521,32 +521,43 @@
       </section>
 
       <!-- ================================================================
-           PAGE 03: LEFT [BORDERLESS SQUARE HEATMAP + OSCILLOSCOPE] + RIGHT [21-CH LIST]
+           PAGE 03: FULL-WIDTH FUSED 21-CH MATRIX + COMPACT OSCILLOSCOPE DOCK
            ================================================================ -->
       <section id="page-spectrum" class="page page-contained">
         <div class="spectrum-stage">
 
-          <!-- Left Column: Top Pure Square Heatmap + Bottom Optical Flux Oscilloscope -->
-          <div class="spectrum-left-col">
-            <div class="s-box spectrum spec-heat-panel">
-              <div class="panel-head" style="margin-bottom:2px;padding-bottom:5px">
-                <div>
-                  <span class="panel-title c-spectrum">21-WAVELENGTH EMISSION MATRIX</span>
-                  <span id="weave-cap" class="c-sec" style="font-size:10.5px;margin-left:8px">126 slots</span>
-                </div>
-                <span class="c-muted" style="font-size:10px">點擊鎖定 · 發光強度=負載</span>
+          <!-- Hero Stage: Full-Page 21-Wavelength Fused Telemetry Matrix + 126-Slot Kernel Ribbon -->
+          <div class="s-box spectrum spec-heat-panel">
+            <div class="panel-head" style="margin-bottom:0;padding-bottom:6px">
+              <div style="display:flex;align-items:baseline;gap:10px;min-width:0;flex-wrap:wrap">
+                <span class="panel-title c-spectrum">21-WAVELENGTH SPECTRUM MATRIX</span>
+                <span id="weave-cap" class="c-sec" style="font-size:10.5px">126 slots</span>
               </div>
-              <div id="spectrum-heatmap" class="heatmap-grid" role="grid" aria-label="21 波長實時發光強度矩陣"></div>
-              <div class="heatmap-legend">
-                <span>700nm ──▶ 380nm · 純色對比 + 發光強度</span>
+              <div class="spec-head-right">
+                <span id="spec-pin-hint" class="c-muted" style="font-size:10px">懸停／點擊鎖定單路並疊加示波器</span>
                 <span class="math-formula">Wᵢ ∝ (Bᵢ/Bᶜ)²·(1+0.35Δτᵢ)⁻¹</span>
               </div>
-              <div id="pattern" class="slot-ribbon"></div>
             </div>
 
-            <div class="s-box blue spec-scope-panel">
-              <div class="panel-head" style="margin-bottom:2px;padding-bottom:5px">
-                <span class="panel-title c-blue">OPTICAL FLUX OSCILLOSCOPE</span>
+            <div id="spectrum-heatmap" class="heatmap-grid" role="grid" aria-label="21 波長實時發光強度與遙測矩陣"></div>
+
+            <div class="spec-ribbon-row">
+              <div id="pattern" class="slot-ribbon" aria-label="126 槽位實時調度色帶"></div>
+              <div class="heatmap-legend">
+                <span>700nm ──▶ 380nm · 發光強度=實時負載 · 微折線=鏈路歷程</span>
+                <span id="spec-active-tag" class="c-sec">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Compact Bottom Full-Width Oscilloscope + 4 Aggregate Gauges -->
+          <div class="s-box blue spec-scope-panel">
+            <div class="spec-scope-main">
+              <div class="panel-head" style="margin-bottom:0;padding-bottom:4px">
+                <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                  <span class="panel-title c-blue">OPTICAL FLUX OSCILLOSCOPE</span>
+                  <span id="scope-live-kpi" class="spec-scope-kpi">↓ 0 bps · ↑ 0 bps</span>
+                </div>
                 <div id="chart-range" class="seg-group" aria-label="示波器時間窗">
                   <button type="button" class="seg-btn" data-limit="150">5m</button>
                   <button type="button" class="seg-btn on" data-limit="360">12m</button>
@@ -554,37 +565,11 @@
                 </div>
               </div>
               <div class="scope-box">
-                <svg id="chart" viewBox="0 0 900 210" preserveAspectRatio="none"></svg>
+                <svg id="chart" viewBox="0 0 1040 96" preserveAspectRatio="none"></svg>
                 <div id="tip" class="topo-tooltip"></div>
               </div>
-              <div id="scope-buckets" class="bucket-summary-strip"></div>
             </div>
-          </div>
-
-          <!-- Right Full-Height Column: 21-Strand Telemetry List (Status Badge Column Removed as Redundant) -->
-          <div class="spectrum-right-col">
-            <div class="s-box mint spec-right-panel">
-              <div class="panel-head" style="margin-bottom:4px;padding-bottom:5px">
-                <span class="panel-title c-mint">STRAND TELEMETRY · 21 CHANNELS</span>
-                <span class="c-muted" style="font-size:10.5px">1.0 MB burst · loss · τ_net</span>
-              </div>
-              <div class="table-wrap spec-table-scroll">
-                <table class="bp-table compact">
-                  <thead>
-                    <tr>
-                      <th>波長</th>
-                      <th class="num">τ / 丟包</th>
-                      <th class="num">下行</th>
-                      <th class="num">上行</th>
-                      <th class="num">峰值</th>
-                      <th>令牌桶</th>
-                      <th class="num">槽位</th>
-                    </tr>
-                  </thead>
-                  <tbody id="strands-tbody"></tbody>
-                </table>
-              </div>
-            </div>
+            <div id="scope-buckets" class="bucket-summary-strip"></div>
           </div>
 
         </div>

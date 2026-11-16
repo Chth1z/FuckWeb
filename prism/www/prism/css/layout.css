@@ -273,32 +273,16 @@
   z-index: 2;
 }
 
-/* View 03: Left [Borderless Square Heatmap + Oscilloscope] + Right Full-Height 21-Ch Telemetry */
+/* View 03: Full-Width Fused 21-Wavelength Matrix + Compact Bottom Oscilloscope Dock */
 .spectrum-stage {
-  display: grid;
-  grid-template-columns: clamp(395px, 39vw, 495px) minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.spectrum-left-col {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
   min-width: 0;
   min-height: 0;
   height: 100%;
-}
-
-.spectrum-right-col {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
+  overflow: hidden;
 }
 
 /* View 04: Wider Merged Device & Policy Matrix Left + Full-Height Live Connections Right */

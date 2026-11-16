@@ -1,28 +1,60 @@
 /* ============================================================================
- * PRISM 5.0 — Dual-Channel SVG Throughput Oscilloscope
+ * PRISM 5.6 — Dual-Channel + Hovered-Strand SVG Throughput Oscilloscope
  * ============================================================================ */
 
 import { S, fmtRate, fmtClock } from '../state.js?v=5.6.6';
-import { $, svgEl } from '../dom.js?v=5.6.6';
+import { $, el, svgEl } from '../dom.js?v=5.6.6';
 
 let lastSig = '';
 let chartLimit = 360;
+let lastFocus = null;
 
 export function setChartLimit(lim) {
   chartLimit = lim;
   lastSig = '';
-  renderOscilloscope();
+  renderOscilloscope(lastFocus);
 }
 
 export function getChartLimit() {
   return chartLimit;
 }
 
-export function renderOscilloscope() {
+function buildLinePath(series, n, toX, toY) {
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const cmd = i === 0 ? 'M' : 'L';
+    d += `${cmd}${toX(i).toFixed(1)},${toY(series[i] || 0).toFixed(1)}`;
+  }
+  return d;
+}
+
+function updateLiveKpi(downNow, upNow, focus, focusNow) {
+  const kpiEl = $('#scope-live-kpi');
+  if (!kpiEl) return;
+  kpiEl.innerHTML = '';
+  kpiEl.append(
+    el('span', { class: 'c-mint' }, `↓ ${fmtRate(downNow).full}`),
+    el('span', { class: 'c-muted' }, ' · '),
+    el('span', { class: 'c-blue' }, `↑ ${fmtRate(upNow).full}`)
+  );
+  if (focus) {
+    kpiEl.append(
+      el('span', { class: 'c-muted' }, ' │ '),
+      el('span', { style: { color: focus.css, fontWeight: '700' } }, `${focus.dev} (${focus.lambda}nm): ↓ ${fmtRate(focusNow).full}`)
+    );
+  }
+}
+
+export function renderOscilloscope(activeStrand = lastFocus) {
+  lastFocus = activeStrand || null;
   const svg = $('#chart');
   const tip = $('#tip');
   const ser = S.series;
-  if (!svg || !ser || !ser.ts || ser.ts.length < 2) return;
+  if (!svg || !ser || !ser.ts || ser.ts.length < 2) {
+    const fStrand = lastFocus ? (S.status?.strands || []).find(x => x.id === lastFocus.id) : null;
+    updateLiveKpi(S.status?.rate || 0, S.status?.rate_up || 0, lastFocus, fStrand ? (fStrand.now ?? fStrand.rate ?? 0) : 0);
+    return;
+  }
 
   const sliceStart = Math.max(0, ser.ts.length - chartLimit);
   const ts = ser.ts.slice(sliceStart);
@@ -30,14 +62,25 @@ export function renderOscilloscope() {
   const up = (ser.up || []).slice(sliceStart);
   const n = ts.length;
 
-  const sig = `${n}:${ts[n - 1]}:${down[n - 1]}:${up[n - 1]}:${chartLimit}`;
+  const focusDev = lastFocus?.dev || '';
+  const fRaw = focusDev && Array.isArray(ser.strands?.[focusDev]) ? ser.strands[focusDev] : null;
+  const focusDown = fRaw ? fRaw.slice(Math.max(0, fRaw.length - n)) : null;
+
+  updateLiveKpi(down[n - 1] || 0, up[n - 1] || 0, lastFocus, focusDown ? (focusDown[focusDown.length - 1] || 0) : 0);
+
+  const rect = svg.getBoundingClientRect?.();
+  const W = rect && rect.width > 120 ? Math.round(rect.width) : 1040;
+  const H = rect && rect.height > 40 ? Math.round(rect.height) : 96;
+
+  const sig = `${W}x${H}:${n}:${ts[n - 1]}:${down[n - 1]}:${up[n - 1]}:${chartLimit}:${focusDev}:${focusDown ? focusDown[focusDown.length - 1] : ''}`;
   if (sig === lastSig) return;
   lastSig = sig;
 
-  const W = 900, H = 210;
-  const padL = 44, padR = 12, padT = 14, padB = 22;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  const padL = 42, padR = 10, padT = 8, padB = 14;
+  const plotW = Math.max(20, W - padL - padR);
+  const plotH = Math.max(20, H - padT - padB);
 
   let maxBps = 1250000; // min 10 Mbps scale
   for (let i = 0; i < n; i++) {
@@ -53,14 +96,14 @@ export function renderOscilloscope() {
 
   const defs = svgEl('defs');
   const gradDown = svgEl('linearGradient', { id: 'scopeDownG', x1: '0', y1: '0', x2: '0', y2: '1' },
-    svgEl('stop', { offset: '0%', 'stop-color': '#5bc28c', 'stop-opacity': '0.32' }),
+    svgEl('stop', { offset: '0%', 'stop-color': '#5bc28c', 'stop-opacity': '0.26' }),
     svgEl('stop', { offset: '100%', 'stop-color': '#5bc28c', 'stop-opacity': '0.01' })
   );
   defs.appendChild(gradDown);
   svg.appendChild(defs);
 
-  // Horizontal dashed grid + Y-axis labels
-  const steps = 3;
+  // Horizontal reference grid + Y-axis labels
+  const steps = 2;
   for (let k = 0; k <= steps; k++) {
     const val = (maxBps / steps) * k;
     const y = toY(val);
@@ -70,28 +113,35 @@ export function renderOscilloscope() {
       'stroke-dasharray': k === 0 ? '' : '3 4'
     }));
     const lbl = svgEl('text', {
-      x: padL - 6, y: y + 4,
-      fill: '#7f8ca6', 'font-size': '11', 'text-anchor': 'end', 'font-family': 'monospace'
+      x: padL - 6, y: y + 3,
+      fill: '#7f8ca6', 'font-size': '9.5', 'text-anchor': 'end', 'font-family': 'monospace'
     });
     lbl.textContent = ((val * 8) / 1e6).toFixed(val * 8 >= 10e6 ? 0 : 1) + 'M';
     svg.appendChild(lbl);
   }
 
-  let dDown = '', dUp = '';
-  for (let i = 0; i < n; i++) {
-    const cmd = i === 0 ? 'M' : 'L';
-    const x = toX(i).toFixed(1);
-    dDown += `${cmd}${x},${toY(down[i]).toFixed(1)}`;
-    dUp += `${cmd}${x},${toY(up[i] || 0).toFixed(1)}`;
-  }
+  const dDown = buildLinePath(down, n, toX, toY);
+  const dUp = buildLinePath(up, n, toX, toY);
 
-  // Area fill + glowing dual-channel waveforms
+  // Aggregate area + dual-channel lines
   const dArea = dDown + ` L${toX(n - 1).toFixed(1)},${(padT + plotH).toFixed(1)} L${padL},${(padT + plotH).toFixed(1)} Z`;
   svg.appendChild(svgEl('path', { d: dArea, fill: 'url(#scopeDownG)' }));
-  svg.appendChild(svgEl('path', { d: dUp, fill: 'none', stroke: '#64aef5', 'stroke-width': '3.8', opacity: '0.22' }));
-  svg.appendChild(svgEl('path', { d: dUp, fill: 'none', stroke: '#64aef5', 'stroke-width': '1.4', opacity: '0.88' }));
-  svg.appendChild(svgEl('path', { d: dDown, fill: 'none', stroke: '#57d192', 'stroke-width': '4.6', opacity: '0.24' }));
-  svg.appendChild(svgEl('path', { d: dDown, fill: 'none', stroke: '#57d192', 'stroke-width': '1.8' }));
+  svg.appendChild(svgEl('path', { d: dUp, fill: 'none', stroke: '#64aef5', 'stroke-width': '3.2', opacity: '0.20' }));
+  svg.appendChild(svgEl('path', { d: dUp, fill: 'none', stroke: '#64aef5', 'stroke-width': '1.3', opacity: '0.88' }));
+  svg.appendChild(svgEl('path', { d: dDown, fill: 'none', stroke: '#57d192', 'stroke-width': '4.0', opacity: '0.22' }));
+  svg.appendChild(svgEl('path', { d: dDown, fill: 'none', stroke: '#57d192', 'stroke-width': '1.6' }));
+
+  // Active/pinned strand overlay waveform using the same shared Y-scale
+  if (focusDown && focusDown.length >= 2 && lastFocus) {
+    const fn = focusDown.length;
+    const fOff = Math.max(0, n - fn);
+    const toFocusX = (i) => toX(fOff + i);
+    const dFocus = buildLinePath(focusDown, fn, toFocusX, toY);
+    const dFocusArea = dFocus + ` L${toFocusX(fn - 1).toFixed(1)},${(padT + plotH).toFixed(1)} L${toFocusX(0).toFixed(1)},${(padT + plotH).toFixed(1)} Z`;
+    svg.appendChild(svgEl('path', { d: dFocusArea, fill: `rgba(${lastFocus.rgb}, 0.16)` }));
+    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: lastFocus.css, 'stroke-width': '4.2', opacity: '0.32' }));
+    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: lastFocus.css, 'stroke-width': '1.8' }));
+  }
 
   const cursorLine = svgEl('line', {
     x1: -10, y1: padT, x2: -10, y2: padT + plotH,
@@ -109,15 +159,19 @@ export function renderOscilloscope() {
     cursorLine.setAttribute('x2', cx);
     cursorLine.setAttribute('visibility', 'visible');
     if (tip) {
+      const fVal = focusDown ? focusDown[idx - Math.max(0, n - focusDown.length)] : null;
+      const focusRow = (lastFocus && fVal != null)
+        ? `<span class="tt-k" style="color:${lastFocus.css}">${lastFocus.dev}</span><span class="tt-v">${fmtRate(fVal).full}</span>`
+        : '';
       tip.innerHTML = `
         <div class="tt-head"><span>${fmtClock(ts[idx])}</span><span class="c-muted">2s window</span></div>
         <div class="tt-grid">
-          <span class="tt-k c-mint">下行</span><span class="tt-v">${fmtRate(down[idx]).full}</span>
-          <span class="tt-k c-blue">上行</span><span class="tt-v">${fmtRate(up[idx] || 0).full}</span>
+          <span class="tt-k c-mint">總下行</span><span class="tt-v">${fmtRate(down[idx]).full}</span>
+          <span class="tt-k c-blue">總上行</span><span class="tt-v">${fmtRate(up[idx] || 0).full}</span>
+          ${focusRow}
         </div>
       `;
-      tip.style.left = Math.min(box.width - 190, Math.max(10, e.clientX - box.left + 12)) + 'px';
-      tip.style.top = '10px';
+      tip.style.left = Math.min(Math.max(10, box.width - 220), Math.max(10, e.clientX - box.left + 12)) + 'px';
       tip.classList.add('show');
     }
   });
