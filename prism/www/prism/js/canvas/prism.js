@@ -539,23 +539,33 @@ function drawPrismFrame() {
     });
   }
 
-  // Subtle prism-exit optical shimmer & soft hover strand bloom (slope-aligned, never clipped polygon bands)
+  // Subtle prism-exit optical shimmer (clipped strictly inside dispersion trapezoid) & hover strand bloom
   ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(exitTopX, exitTopY);
+  ctx.lineTo(W, farTopY);
+  ctx.lineTo(W, farBotY);
+  ctx.lineTo(exitBotX, exitBotY);
+  ctx.closePath();
+  ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
   const eDx = exitBotX - exitTopX;
   const eDy = exitBotY - exitTopY;
   const eLen = Math.hypot(eDx, eDy) || 1;
   drawFeatheredEdge(
     ctx,
-    exitTopX, exitTopY,
-    exitBotX, exitBotY,
+    exitTopX - eDx * 0.05, exitTopY - eDy * 0.05,
+    exitBotX + eDx * 0.05, exitBotY + eDy * 0.05,
     eDy / eLen, -eDx / eLen,
     Math.max(10, side * 0.055),
     '220, 236, 252',
-    anyHover ? 0.07 : 0.14
+    anyHover ? 0.06 : 0.11
   );
+  ctx.restore();
 
   // Calm Gaussian optical aura when hovering an individual strand
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
   if (anyHover) {
     for (let i = 0; i < bandGeoms.length; i++) {
       const b = bandGeoms[i];
