@@ -439,18 +439,18 @@ html.prism-cold .main-stage {
   background-color: rgba(var(--cb-rgb, 52, 58, 72), var(--cb-fill, 0.06));
   border: none;
   box-shadow: var(--tray-inset);
-  padding: 3.5px 8px;
+  padding: 4.5px 8.5px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 3px;
+  gap: 4px;
   flex: 0 0 auto;
   transition: box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .classify-bar-card .seg-meter {
-  height: 11px;
-  padding: 1.5px 2px;
+  height: 13px;
+  padding: 1.5px 2.5px;
 }
 
 .classify-bar-card.active {
