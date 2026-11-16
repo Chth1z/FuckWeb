@@ -173,26 +173,21 @@ export function renderOscilloscope(activeStrand = lastFocus) {
     d: dUp, fill: 'none', stroke: 'rgba(218, 236, 255, 0.62)', 'stroke-width': '1.25', opacity: aggOp
   }));
 
-  // Phosphor bloom + crisp solid white download line
+  // Crisp single-stroke white download line (zero outer sleeve)
   svg.appendChild(svgEl('path', {
-    d: dDown, fill: 'none', stroke: 'rgba(255, 255, 255, 0.24)', 'stroke-width': '4.8', opacity: aggOp
-  }));
-  svg.appendChild(svgEl('path', {
-    d: dDown, fill: 'none', stroke: 'rgba(255, 255, 255, 0.96)', 'stroke-width': '1.9', opacity: aggOp
+    d: dDown, fill: 'none', stroke: 'rgba(255, 255, 255, 0.96)', 'stroke-width': '1.85', opacity: aggOp
   }));
 
-  // Focused strand overlay trace + live terminal beacon
+  // Focused strand clean overlay trace + terminal dot (zero outer halo/sleeve)
   const tipX = toX(n - 1);
   const tipY = hasFocus ? toY(focus[n - 1] || 0) : toY(down[n - 1] || 0);
   if (hasFocus) {
     const dFocus = buildSmoothPath(focus, n, toX, toY, padT, baseY);
     const dFocusArea = `${dFocus} L${tipX.toFixed(1)},${baseY.toFixed(1)} L${padL},${baseY.toFixed(1)} Z`;
     svg.appendChild(svgEl('path', { d: dFocusArea, fill: 'url(#scopeFocusG)' }));
-    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: 'rgba(255, 255, 255, 0.30)', 'stroke-width': '5.2' }));
-    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: '#ffffff', 'stroke-width': '2.1' }));
+    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: '#ffffff', 'stroke-width': '2.0' }));
   }
 
-  svg.appendChild(svgEl('circle', { cx: tipX.toFixed(1), cy: tipY.toFixed(1), r: '4.5', fill: 'rgba(255,255,255,0.28)' }));
   svg.appendChild(svgEl('circle', { cx: tipX.toFixed(1), cy: tipY.toFixed(1), r: '2.1', fill: '#ffffff' }));
 
   const cursorLine = svgEl('line', {
