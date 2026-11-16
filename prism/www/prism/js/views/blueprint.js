@@ -42,17 +42,17 @@ const moduleHeat = {
 const RULE_LABELS = {
   'device-block': '設備禁網',
   'relay': '中繼直連',
-  'quic': 'QUIC攔截',
+  'quic': 'QUIC 阻斷',
   'device-direct': '設備直連',
-  'device-tunnel': '設備隧道',
-  'device-game': '遊戲專線',
-  'tunnel-range': '強制IP段',
-  'tunnel-domain': 'SmartDNS釘選',
+  'device-tunnel': '設備入籠',
+  'device-game': '極速光道',
+  'tunnel-range': '強制IP入籠',
+  'tunnel-domain': 'SmartDNS 暗面釘選',
   'domestic': '國內直連',
-  'domestic-domain': 'SmartDNS國內',
-  'tunnel-port': '海外UDP端口',
-  'rest-tunnel': '其餘→TW-HOME',
-  'rest-direct': '其餘→直連'
+  'domestic-domain': 'SmartDNS 國內',
+  'tunnel-port': '海外 UDP 入籠',
+  'rest-tunnel': '餘流歸籠→TW-HOME',
+  'rest-direct': '餘流→直連'
 };
 
 // Normalized 0..1 wave phase & energy: 0=vip, 1=tw-home, 2=harvest, 3=weave_out, 4=ingress/uplink
@@ -1080,7 +1080,7 @@ export function bindBlueprintEvents() {
     const st = S.status;
     if (!st) return;
     if (st.site?.known) {
-      write('forget', {}, '已從配置忘記此站點');
+      write('forget', {}, '已清除此站點記憶');
     } else {
       const name = prompt('請輸入站點名稱 (如: IHG 酒店)', st.site?.name || 'site');
       if (name != null) {
@@ -1298,13 +1298,13 @@ export function renderBlueprint() {
       memBtn.textContent = `忘記: ${st.site.name}`;
     } else {
       memBtn.disabled = false;
-      memBtn.textContent = '記住站點';
+      memBtn.textContent = '記住座標';
     }
   }
 
   // Tier 1B: Nftables Classify Engine
   if ($('#bp-classify-sub')) {
-    const remMode = st.settings?.['classify.remainder'] === 'direct' ? '直連' : '隧道';
+    const remMode = st.settings?.['classify.remainder'] === 'direct' ? '直連' : '歸籠';
     $('#bp-classify-sub').textContent = `mangle · @dev_policy · 餘量${remMode}`;
   }
   $('#bp-ingress-rate').textContent = fmtRate(totalRate).full;
@@ -1317,7 +1317,7 @@ export function renderBlueprint() {
     const domShare = Math.round((liveFlow.domPkts / mixTot) * 100);
     const tunShare = Math.round((liveFlow.tunPkts / mixTot) * 100);
     const dropShare = Math.max(0, ((liveFlow.quicPkts / mixTot) * 100)).toFixed(1);
-    $('#bp-classify-mix').textContent = `直連 ${domShare}% · 隧道 ${tunShare}% · 攔截 ${dropShare}%`;
+    $('#bp-classify-mix').textContent = `直連 ${domShare}% · 歸籠 ${tunShare}% · 阻斷 ${dropShare}%`;
   }
   if ($('#bp-classify-foot')) {
     $('#bp-classify-foot').textContent = `prerouting · ${(S.rules?.rules || []).length} rules`;
@@ -1539,7 +1539,7 @@ export function renderBlueprint() {
   setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', false, ewmaMbps > 0.02);
   if ($('#bp-qos-mss-kv')) $('#bp-qos-mss-kv').textContent = `SYN MSS ${st.settings?.['main.mss'] ?? 1440}`;
   if ($('#bp-qos-st')) $('#bp-qos-st').textContent = `${liveFlow.vipBps > 400 ? '1:10+20+30' : '1:20+30'} shaping`;
-  if ($('#bp-qos-foot')) $('#bp-qos-foot').textContent = `MSS ${st.settings?.['main.mss'] ?? 1440} · 8MB 分界`;
+  if ($('#bp-qos-foot')) $('#bp-qos-foot').textContent = `MSS ${st.settings?.['main.mss'] ?? 1440} · 8MB 相變界`;
 
   if ($('#bp-up-rate')) $('#bp-up-rate').textContent = fmtRate(totalRate).full;
   const upSec = st.sys?.uptime || 0;
@@ -1623,7 +1623,7 @@ export function renderBlueprintDrawer() {
   if (!cp) return;
   if (!S.session) {
     cp.innerHTML = '';
-    cp.appendChild(el('div', { class: 'c-muted', style: { padding: '12px 0' } }, '需點擊右上角「管理登入」以修改 UCI 可調參數'));
+    cp.appendChild(el('div', { class: 'c-muted', style: { padding: '12px 0' } }, '需點擊右上角「管理登入」以調整 UCI 核心參數'));
     return;
   }
   const vals = S.config?.values || S.status?.settings || {};

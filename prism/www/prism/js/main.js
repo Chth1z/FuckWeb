@@ -25,7 +25,7 @@ function renderChrome() {
   $('#hdr-ip').textContent = st.lan_ip || location.hostname;
   $('#hdr-ver').textContent = `v${ver}`;
   if ($('#ov-ver')) $('#ov-ver').textContent = `PRISM v${ver} · DISPERSION FLUX`;
-  if ($('#modal-ver')) $('#modal-ver').textContent = `PRISM v${ver} · 路由器管理驗證`;
+  if ($('#modal-ver')) $('#modal-ver').textContent = `PRISM v${ver} · 系統管理認證`;
   document.title = `PRISM v${ver} · Optical Spectrum & Privacy Router`;
 
   $('#n-strands').textContent = st.strand_count || (st.strands || []).length || 21;
@@ -70,7 +70,7 @@ function renderActiveTab() {
 }
 
 export function switchTab(tab, updateHash = true, refresh = true) {
-  const valid = ['overview', 'blueprint', 'spectrum', 'clients'];
+  const valid = ['overview', 'spectrum', 'blueprint', 'clients'];
   if (!valid.includes(tab)) tab = 'overview';
   S.tab = tab;
 

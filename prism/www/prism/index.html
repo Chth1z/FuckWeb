@@ -34,22 +34,22 @@
         <button type="button" class="nav-tab active" data-tab="overview">
           <span class="tab-idx">01</span><span>總覽</span>
         </button>
-        <button type="button" class="nav-tab" data-tab="blueprint">
-          <span class="tab-idx">02</span><span>藍圖</span>
-        </button>
         <button type="button" class="nav-tab" data-tab="spectrum">
-          <span class="tab-idx">03</span><span>光譜</span>
+          <span class="tab-idx">02</span><span>光譜</span>
           <span id="n-strands" class="tab-badge">21</span>
         </button>
+        <button type="button" class="nav-tab" data-tab="blueprint">
+          <span class="tab-idx">03</span><span>藍圖</span>
+        </button>
         <button type="button" class="nav-tab" data-tab="clients">
-          <span class="tab-idx">04</span><span>終端與連接</span>
+          <span class="tab-idx">04</span><span>終端矩陣</span>
           <span id="n-devices" class="tab-badge">0</span>
         </button>
       </nav>
 
       <div class="topbar-right">
         <span id="site-badge" class="c-sec" style="font-size:11px">SITE · —</span>
-        <span id="health-pill" class="st-badge charged" role="button" tabindex="0" style="cursor:pointer" title="查看藍圖與體檢">DOCTOR · 檢查中</span>
+        <span id="health-pill" class="st-badge charged" role="button" tabindex="0" style="cursor:pointer" title="查看折射藍圖與體檢">DOCTOR · 檢查中</span>
         <button id="btn-auth" type="button" class="btn-cmd">管理登入</button>
       </div>
     </header>
@@ -65,7 +65,7 @@
           <canvas id="topo"></canvas>
 
           <div id="ov-hud-tl" class="corner-hud tl">
-            <div id="ov-ver" class="corner-tag">PRISM v5.1.0 · DISPERSION FLUX</div>
+            <div id="ov-ver" class="corner-tag">PRISM v5.6.6 · DISPERSION FLUX</div>
             <div class="corner-rate-row">
               <span id="ov-down" class="corner-rate-main">0 Mbps</span>
               <span id="ov-up" class="corner-rate-up">↑ 0 Mbps</span>
@@ -80,13 +80,13 @@
           <div id="ov-hud-tr" class="corner-hud tr">
             <div class="corner-tag">SPECTRUM · @vip_lane</div>
             <div class="corner-sub">
-              <span>光譜健康 <strong id="ov-healthy" class="c-mint">0 / 21</strong></span>
+              <span>光脈在線 <strong id="ov-healthy" class="c-mint">0 / 21</strong></span>
               <span>·</span>
-              <span>滿桶 <strong id="ov-charged" class="c-mint">0</strong></span>
+              <span>滿桶蓄能 <strong id="ov-charged" class="c-mint">0</strong></span>
             </div>
             <div id="ov-mini-spectrum" class="ov-mini-spectrum" aria-hidden="true"></div>
             <div class="corner-sub">
-              <span>專線 <strong id="ov-vip" class="c-blue">—</strong></span>
+              <span>極速光道 <strong id="ov-vip" class="c-blue">—</strong></span>
               <span>·</span>
               <span id="ov-guard" class="c-violet">FAIL-CLOSED 0x20000000</span>
             </div>
@@ -123,15 +123,71 @@
       </section>
 
       <!-- ================================================================
-           PAGE 02: LIVE KERNEL ROUTING ARCHITECTURE & LOGICAL DATAFLOW
+           PAGE 02: SPECTRUM MATRIX · 21-WAVELENGTH DISPERSION FIELD
+           ================================================================ -->
+      <section id="page-spectrum" class="page page-contained">
+        <div class="spectrum-stage">
+          <div class="s-box spectrum spec-heat-panel">
+            <div class="panel-head" style="margin-bottom:0;padding-bottom:5px">
+              <div style="display:flex;align-items:baseline;gap:10px;min-width:0;flex-wrap:wrap">
+                <span class="panel-title c-spectrum">21-WAVELENGTH SPECTRUM MATRIX</span>
+                <span id="weave-cap" class="c-sec" style="font-size:10.5px">VIP=— · 2s</span>
+              </div>
+              <div class="spec-head-right">
+                <span id="spec-active-tag" class="c-sec" style="font-size:10.5px"></span>
+                <span class="math-formula">Wᵢ ∝ (Bᵢ/Bᶜ)²·(1+0.35Δτᵢ)⁻¹</span>
+                <div id="chart-range" class="seg-group" aria-label="微折線時間窗">
+                  <button type="button" class="seg-btn" data-limit="150">5m</button>
+                  <button type="button" class="seg-btn on" data-limit="360">12m</button>
+                  <button type="button" class="seg-btn" data-limit="720">24m</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="heatmap-stage-wrap">
+              <div id="spectrum-heatmap" class="heatmap-grid" role="grid" aria-label="21 波長實時純色光譜矩陣"></div>
+            </div>
+
+            <div class="spec-ribbon-row">
+              <div id="spec-ribbon-scope" class="spec-ribbon-scope">
+                <div id="pattern" class="slot-ribbon" aria-label="126 槽位與總網速融合光譜帶"></div>
+                <svg id="chart" class="ribbon-scope-svg" viewBox="0 0 1200 112" preserveAspectRatio="none" aria-label="實時總網速示波器"></svg>
+                <div class="ribbon-hud">
+                  <div class="ribbon-hud-tl">
+                    <div class="heat-tl">
+                      <span class="heat-name">TOTAL FLUX</span>
+                      <span id="ribbon-slots-meta" class="heat-lam">126 slots</span>
+                    </div>
+                    <div class="heat-speed-tl">
+                      <span id="ribbon-rate-down" class="heat-rate-down idle">idle</span>
+                      <span id="ribbon-rate-sub" class="heat-rate-sub">↑0 · pk 0</span>
+                    </div>
+                  </div>
+                  <div class="ribbon-hud-tr">
+                    <span id="ribbon-health-meta" class="ribbon-tr-txt">—</span>
+                  </div>
+                </div>
+                <div id="tip" class="topo-tooltip spectrum"></div>
+              </div>
+              <div class="heatmap-legend">
+                <span>700nm ──▶ 380nm · 光束輝度=實時負載 · 126槽彩虹融合示波器（實線總下行 / 細線總上行）</span>
+                <span id="spec-pin-hint" class="c-muted">懸停／點擊鎖定單路 · Esc 解除</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================
+           PAGE 03: REFRACTION BLUEPRINT · KERNEL ARCHITECTURE MATRIX
            ================================================================ -->
       <section id="page-blueprint" class="page page-contained">
 
         <div class="bp-compact-legend">
           <div class="legend-group">
             <span class="legend-item"><span class="legend-sq" style="background:var(--prism-spectrum);box-shadow:0 0 8px rgba(100,174,245,0.55)"></span><span>ingress · classify</span></span>
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-red);box-shadow:0 0 8px var(--c-red)"></span><span>@vip_lane · 遊戲專線</span></span>
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-mint);box-shadow:0 0 8px var(--c-mint)"></span><span>TW-HOME · Mihomo &amp; weave_out</span></span>
+            <span class="legend-item"><span class="legend-sq" style="background:var(--c-red);box-shadow:0 0 8px var(--c-red)"></span><span>@vip_lane · 極速光道</span></span>
+            <span class="legend-item"><span class="legend-sq" style="background:var(--c-mint);box-shadow:0 0 8px var(--c-mint)"></span><span>TW-HOME · 暗面隔離籠</span></span>
             <span class="legend-item"><span class="legend-sq" style="background:var(--c-blue);box-shadow:0 0 8px var(--c-blue)"></span><span>burst-harvest · 21 光譜織網</span></span>
           </div>
           <span id="bp-mptcp-badge" class="st-badge vip">MPTCP · checking</span>
@@ -162,7 +218,7 @@
                 <div class="bp-kv-cell"><span class="k">DNS劫持</span><span id="adv-dns" class="v c-violet">53→6053</span></div>
                 <div class="bp-kv-cell"><span class="k">卸載</span><span id="adv-offload" class="v c-violet">per-pkt</span></div>
                 <div class="bp-kv-cell"><span class="k">站點</span><span id="adv-site" class="v">—</span></div>
-                <div class="bp-kv-cell"><span class="k">鏈路</span><span id="adv-strands" class="v">21/21</span></div>
+                <div class="bp-kv-cell"><span class="k">光脈</span><span id="adv-strands" class="v">21/21</span></div>
                 <div class="bp-kv-cell"><span class="k">連接表</span><span id="adv-ct" class="v">0</span></div>
                 <div class="bp-kv-cell"><span class="k">TProxy</span><span id="adv-relays" class="v">:61235</span></div>
                 <div class="bp-kv-cell"><span class="k">餘量</span><span id="adv-classify-mode" class="v">tunnel</span></div>
@@ -220,7 +276,7 @@
                   <div class="bp-kv-strip cols-2">
                     <div class="bp-kv-cell"><span class="k">DNS劫持</span><span id="bp-dns-port" class="v">:6053 · ads</span></div>
                     <div class="bp-kv-cell"><span class="k">國內庫</span><span id="bp-dns-st" class="v">0 + 0</span></div>
-                    <div class="bp-kv-cell"><span class="k">隧道庫</span><span id="bp-dns-tun" class="v">0 IP · 0 dom</span></div>
+                    <div class="bp-kv-cell"><span class="k">暗面域集</span><span id="bp-dns-tun" class="v">0 IP · 0 dom</span></div>
                     <div class="bp-kv-cell"><span class="k">動態DNS</span><span id="bp-dns-dyn" class="v">0 · 0</span></div>
                     <div class="bp-kv-cell"><span class="k">QUIC攔截</span><span id="bp-quic-bytes" class="v">0 B</span></div>
                     <div class="bp-kv-cell"><span class="k">站點籠</span><span id="bp-site-name" class="v">auto</span></div>
@@ -246,7 +302,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title"><span class="c-spectrum">NFTABLES CLASSIFY</span></div>
-                    <div id="bp-classify-sub" class="bp-card-sub">mangle · @dev_policy · 餘量隧道</div>
+                    <div id="bp-classify-sub" class="bp-card-sub">mangle · @dev_policy · 餘量歸籠</div>
                   </div>
                   <div class="bp-head-kpi">
                     <div id="bp-ingress-rate" class="bp-live-rate c-bright">0 Mbps</div>
@@ -256,7 +312,7 @@
                 <div id="bp-classify-grid" class="classify-strip"></div>
                 <div id="bp-classify-split" class="bp-inline-summary">
                   <span class="c-sec">分流匯總</span>
-                  <span id="bp-classify-mix" class="c-bright" style="font-variant-numeric:tabular-nums">直連 — · 隧道 — · QUIC —</span>
+                  <span id="bp-classify-mix" class="c-bright" style="font-variant-numeric:tabular-nums">直連 — · 歸籠 — · QUIC —</span>
                 </div>
                 <div class="bp-node-foot bp-node-foot-rule">
                   <span style="display:inline-flex;align-items:center;gap:5px;min-width:0">
@@ -273,8 +329,8 @@
               <div id="bp-card-vip" class="s-box red bp-stage-card">
                 <div class="bp-node-head">
                   <div>
-                    <div class="bp-card-title c-red">@vip_lane · 電競專線</div>
-                    <div class="bp-card-sub">0x100 · 小包UDP/DSCP · ≥50MB降級</div>
+                    <div class="bp-card-title c-red">@vip_lane · 極速光道</div>
+                    <div class="bp-card-sub">0x100 · ≤256B極微/DSCP · ≥50MB降階</div>
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-vip-rate" class="bp-live-rate c-red">0 bps</span>
@@ -287,7 +343,7 @@
                     <strong id="bp-vip-pct" class="bp-meter-val c-bright">—</strong>
                   </div>
                   <div class="bp-kv-strip cols-2">
-                    <div class="bp-kv-cell"><span class="k">錨定鏈路</span><span id="bp-vip-iface" class="v c-red">—</span></div>
+                    <div class="bp-kv-cell"><span class="k">錨定光脈</span><span id="bp-vip-iface" class="v c-red">—</span></div>
                     <div class="bp-kv-cell"><span class="k">時延丟包</span><span id="bp-vip-rtt" class="v">— ms · 0%</span></div>
                     <div class="bp-kv-cell"><span class="k">累計下行</span><span id="bp-vip-down" class="v c-red">0 B</span></div>
                     <div class="bp-kv-cell"><span class="k">累計上行</span><span id="bp-vip-up" class="v c-red">0 B</span></div>
@@ -306,7 +362,7 @@
               <div id="bp-card-tun" class="s-box mint bp-stage-card">
                 <div class="bp-node-head">
                   <div>
-                    <div class="bp-card-title c-mint">TW-HOME · 台灣家寬零跳變籠</div>
+                    <div class="bp-card-title c-mint">TW-HOME · 暗面零跳隔離籠</div>
                     <div class="bp-card-sub">TProxy :61235 · @tunnel4 → weave_out</div>
                   </div>
                   <div class="bp-head-kpi">
@@ -348,7 +404,7 @@
               <div id="bp-card-dom" class="s-box blue bp-stage-card">
                 <div class="bp-node-head">
                   <div>
-                    <div class="bp-card-title c-blue">Burst-Harvest 2.0 · 收割池</div>
+                    <div class="bp-card-title c-blue">Burst-Harvest 2.0 · 脈衝收割池</div>
                     <div class="bp-card-sub">@domestic4 &amp; weave_out · 126槽 ISWRR</div>
                   </div>
                   <div class="bp-head-kpi">
@@ -388,7 +444,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title"><span class="c-spectrum">3-BAND HTB + FQ_CODEL</span></div>
-                    <div class="bp-card-sub">postrouting · ≤256B 小包零延遲</div>
+                    <div class="bp-card-sub">postrouting · ≤256B 極微封包零延遲</div>
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-qos-rate" class="bp-live-rate c-bright">0 bps</span>
@@ -404,7 +460,7 @@
                     </div>
                     <span id="bp-qos-10-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
-                      <span class="c-sec">遊戲 UDP / SYN·ACK / DNS</span>
+                      <span class="c-sec">極速信標 · UDP / SYN·ACK / DNS</span>
                       <span id="bp-qos-10-sub" class="c-muted">fq_codel 2ms</span>
                     </div>
                   </div>
@@ -416,7 +472,7 @@
                     </div>
                     <span id="bp-qos-20-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
-                      <span class="c-sec">TW-HOME 隧道 / 互動網頁突發</span>
+                      <span class="c-sec">TW-HOME 隔離籠 / 互動突發</span>
                       <span id="bp-qos-20-sub" class="c-muted">interactive</span>
                     </div>
                   </div>
@@ -428,7 +484,7 @@
                     </div>
                     <span id="bp-qos-30-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
-                      <span class="c-sec">直連收割 / ct≥8MB 大流降級</span>
+                      <span class="c-sec">直連收割 / ct≥8MB 大流降階</span>
                       <span id="bp-qos-30-sub" class="c-muted">21-strand bulk</span>
                     </div>
                   </div>
@@ -451,7 +507,7 @@
 
                 <div class="bp-node-foot bp-node-foot-rule">
                   <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0"><span class="run-dot spectrum"></span><span id="bp-qos-st" class="c-bright">3-band active</span></span>
-                  <span id="bp-qos-foot" class="c-sec">SYN MSS clamp · 8MB 分界</span>
+                  <span id="bp-qos-foot" class="c-sec">SYN MSS clamp · 8MB 相變界</span>
                 </div>
               </div>
 
@@ -522,62 +578,6 @@
       </section>
 
       <!-- ================================================================
-           PAGE 03: FULL-PAGE GAPLESS 21-WAVELENGTH PURE COLOR MATRIX
-           ================================================================ -->
-      <section id="page-spectrum" class="page page-contained">
-        <div class="spectrum-stage">
-          <div class="s-box spectrum spec-heat-panel">
-            <div class="panel-head" style="margin-bottom:0;padding-bottom:5px">
-              <div style="display:flex;align-items:baseline;gap:10px;min-width:0;flex-wrap:wrap">
-                <span class="panel-title c-spectrum">21-WAVELENGTH SPECTRUM MATRIX</span>
-                <span id="weave-cap" class="c-sec" style="font-size:10.5px">VIP=— · 2s</span>
-              </div>
-              <div class="spec-head-right">
-                <span id="spec-active-tag" class="c-sec" style="font-size:10.5px"></span>
-                <span class="math-formula">Wᵢ ∝ (Bᵢ/Bᶜ)²·(1+0.35Δτᵢ)⁻¹</span>
-                <div id="chart-range" class="seg-group" aria-label="微折線時間窗">
-                  <button type="button" class="seg-btn" data-limit="150">5m</button>
-                  <button type="button" class="seg-btn on" data-limit="360">12m</button>
-                  <button type="button" class="seg-btn" data-limit="720">24m</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="heatmap-stage-wrap">
-              <div id="spectrum-heatmap" class="heatmap-grid" role="grid" aria-label="21 波長實時純色光譜矩陣"></div>
-            </div>
-
-            <div class="spec-ribbon-row">
-              <div id="spec-ribbon-scope" class="spec-ribbon-scope">
-                <div id="pattern" class="slot-ribbon" aria-label="126 槽位與總網速融合光譜帶"></div>
-                <svg id="chart" class="ribbon-scope-svg" viewBox="0 0 1200 112" preserveAspectRatio="none" aria-label="實時總網速示波器"></svg>
-                <div class="ribbon-hud">
-                  <div class="ribbon-hud-tl">
-                    <div class="heat-tl">
-                      <span class="heat-name">TOTAL FLUX</span>
-                      <span id="ribbon-slots-meta" class="heat-lam">126 slots</span>
-                    </div>
-                    <div class="heat-speed-tl">
-                      <span id="ribbon-rate-down" class="heat-rate-down idle">idle</span>
-                      <span id="ribbon-rate-sub" class="heat-rate-sub">↑0 · pk 0</span>
-                    </div>
-                  </div>
-                  <div class="ribbon-hud-tr">
-                    <span id="ribbon-health-meta" class="ribbon-tr-txt">—</span>
-                  </div>
-                </div>
-                <div id="tip" class="topo-tooltip spectrum"></div>
-              </div>
-              <div class="heatmap-legend">
-                <span>700nm ──▶ 380nm · 純色發光強度=實時負載 · 126槽彩虹融合示波器（實線總下行 / 細線總上行）</span>
-                <span id="spec-pin-hint" class="c-muted">懸停／點擊鎖定單路 · Esc 解除</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================
            PAGE 04: WIDE MERGED DEVICE POLICY MATRIX LEFT + FULL CONNECTIONS RIGHT
            ================================================================ -->
       <section id="page-clients" class="page page-contained">
@@ -586,7 +586,7 @@
           <!-- Wide Left Rail: Merged Terminal List + Sort Mode + Non-Closing Policy Matrix -->
           <aside class="s-box violet dev-menu-panel">
             <div class="panel-head" style="margin-bottom:6px;padding-bottom:6px">
-              <span class="panel-title c-violet">終端列表與分流矩陣 · LAN</span>
+              <span class="panel-title c-violet">終端名冊與光路矩陣 · LAN</span>
               <span id="clients-online-cnt" class="c-mint" style="font-size:11px">0 在線</span>
             </div>
 
@@ -629,7 +629,7 @@
                     <button type="button" class="seg-btn on" data-route="all">全部</button>
                     <button type="button" class="seg-btn" data-route="direct">直連</button>
                     <button type="button" class="seg-btn" data-route="tunnel">TW-HOME</button>
-                    <button type="button" class="seg-btn" data-route="vip">VIP專線</button>
+                    <button type="button" class="seg-btn" data-route="vip">極速光道</button>
                   </div>
                   <input id="conn-q" class="bp-input" type="search" placeholder="過濾目標 / 域名 / 端口..." aria-label="過濾連接目標" style="width:152px">
                 </div>
@@ -643,7 +643,7 @@
                       <th>源終端</th>
                       <th>目標地址 / 域名</th>
                       <th>端口 / 協議</th>
-                      <th>路由出口</th>
+                      <th>光路出口</th>
                       <th class="num">實時下行</th>
                       <th class="num">實時上行</th>
                       <th class="num">累計流量</th>
@@ -693,7 +693,7 @@
         <div id="doctor-list" class="doctor-grid"></div>
         <div class="bp-split-2">
           <div class="s-box spectrum">
-            <div style="font-weight:700;margin-bottom:6px;font-size:12px"><span class="c-spectrum">核心架構鎖定項 (IMMUTABLE)</span></div>
+            <div style="font-weight:700;margin-bottom:6px;font-size:12px"><span class="c-spectrum">核心架構鐵律 (IMMUTABLE)</span></div>
             <div id="locked-panel"></div>
           </div>
           <div class="s-box mint">
@@ -708,7 +708,7 @@
   <!-- Admin Auth Modal -->
   <div id="scrim" class="modal-scrim" role="dialog" aria-modal="true" aria-labelledby="modal-ver">
     <div class="modal-box">
-      <div id="modal-ver" class="c-spectrum" style="font-weight:700;margin-bottom:4px;width:fit-content">PRISM v5.4.1 · 路由器管理驗證</div>
+      <div id="modal-ver" class="c-spectrum" style="font-weight:700;margin-bottom:4px;width:fit-content">PRISM v5.6.6 · 系統管理認證</div>
       <div class="c-sec" style="font-size:11.5px;margin-bottom:12px">通過 OpenWrt ubus /rpcd 建立加密管理會話</div>
       <form id="login-form" style="display:flex;flex-direction:column;gap:10px">
         <div>

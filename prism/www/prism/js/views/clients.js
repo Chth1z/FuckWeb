@@ -8,10 +8,10 @@ import { write, openLoginModal } from '../api.js?v=5.6.6';
 
 const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
 const POLICY_META = {
-  auto:   { short: '自動', label: '自動分類',     rgb: '100, 174, 245' },
-  game:   { short: 'VIP',  label: '@vip_lane 專線', rgb: '100, 174, 245' },
+  auto:   { short: '自動', label: '自動分流',     rgb: '100, 174, 245' },
+  game:   { short: '光道', label: '@vip_lane 極速光道', rgb: '100, 174, 245' },
   direct: { short: '直連', label: '強制直連',     rgb: '87, 209, 146' },
-  tunnel: { short: '隧道', label: '強制 TW-HOME', rgb: '170, 142, 240' },
+  tunnel: { short: '入籠', label: '強制歸入 TW-HOME', rgb: '170, 142, 240' },
   block:  { short: '禁網', label: '禁止聯網',     rgb: '230, 108, 120' }
 };
 
@@ -172,7 +172,7 @@ function createDeviceCard(mac) {
     type: 'text',
     class: 'bp-input',
     style: { display: 'none', padding: '1px 6px', fontSize: '11.5px', width: '138px' },
-    placeholder: '輸入設備別名...'
+    placeholder: '輸入終端別名...'
   });
   const renameBtn = el('button', {
     type: 'button',
@@ -204,7 +204,7 @@ function createDeviceCard(mac) {
       if ((d.policy || 'auto') === p) return;
       d.policy = p; // optimistic UI state
       syncDeviceCard(card, d, card._dr, S.selectedDeviceMac === mac);
-      write('device', { mac: d.mac, name: d.name || '', policy: p }, `${d.name || d.mac} 策略已設為 ${POLICY_META[p].label}`);
+      write('device', { mac: d.mac, name: d.name || '', policy: p }, `${d.name || d.mac} 分流律令已設為 ${POLICY_META[p].label}`);
     });
     pillBtns[p] = b;
     pillBar.appendChild(b);
@@ -497,7 +497,7 @@ function renderConnections(devs, selectedDev, rows) {
     let routeText = f.route === 'tunnel' ? `TW-HOME · ${f.via || 'proxy'}` : `直連 · ${f.via || 'wan'}`;
     if (f.vip) {
       badgeClass = 'vip';
-      routeText = `VIP專線 · ${f.via || 'vip'}`;
+      routeText = `光道 · ${f.via || 'vip'}`;
     }
 
     frag.appendChild(el('tr', {},

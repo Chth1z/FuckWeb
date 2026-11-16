@@ -127,12 +127,12 @@ function handlePrismHover(rect) {
     const s = hit.data;
     const col = hit.col;
     const bucketNames = {
-      charged: '⚡ 滿桶脈衝 (CHARGED)',
+      charged: '⚡ 滿桶蓄能 (CHARGED)',
       draining: '🔥 脈衝釋放 (DRAINING)',
-      cooling: '❄️ 冷卻回血 (COOLING)',
+      cooling: '❄️ 冷卻回充 (COOLING)',
       depleted: '🛑 觸頂退避 (DEPLETED)'
     };
-    const stateTxt = !s.healthy ? '離線 / 待認證' : (s.vip ? '💎 VIP 電競零丟包專線' : (bucketNames[s.bucket] || s.bucket));
+    const stateTxt = !s.healthy ? '離線 / 待認證' : (s.vip ? '💎 @vip_lane 極速光道' : (bucketNames[s.bucket] || s.bucket));
     tip.classList.remove('spectrum');
     tip.style.borderImage = '';
     tip.style.borderColor = `rgba(${col.rgb}, 0.85)`;
@@ -162,14 +162,14 @@ function handlePrismHover(rect) {
     tip.style.boxShadow = '';
     tip.innerHTML = `
       <div class="tt-head">
-        <span class="c-bright">INCIDENT BEAM · 聚合入射白光</span>
+        <span class="c-bright">INCIDENT BEAM · 原初聚合白光</span>
         <span class="c-spectrum">${devs.length} 終端</span>
       </div>
       <div class="tt-grid">
         <span class="tt-k">總下行吞吐</span><span class="tt-v">${fmtRate(st.rate).full}</span>
         <span class="tt-k">總上行吞吐</span><span class="tt-v">${fmtRate(st.rate_up).full}</span>
         <span class="tt-k">健康光譜</span><span class="tt-v">${st.healthy_count ?? 0} / ${st.strand_count ?? 21} 條</span>
-        <span class="tt-k">VIP 專線</span><span class="tt-v">${st.weave?.vip_dev || '自動選舉'}</span>
+        <span class="tt-k">極速光道</span><span class="tt-v">${st.weave?.vip_dev || '自動選舉'}</span>
         <span class="tt-k">滿桶待命</span><span class="tt-v">${st.weave?.charged_count ?? 0} 條</span>
       </div>
     `;

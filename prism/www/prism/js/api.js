@@ -197,7 +197,7 @@ export async function submitLogin(e) {
     updateAuthButton();
     const fn = pendingAction;
     closeLoginModal();
-    toast('管理會話已建立');
+    toast('管理會話已解鎖');
     if (fn) await fn();
     else if (onAuthSuccessCallback) onAuthSuccessCallback();
   } catch (err) {
