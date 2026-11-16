@@ -1,23 +1,18 @@
 /* ============================================================================
- * PRISM — View 03: Full-Width Fused 21-Ch Emission Matrix & Oscilloscope Dock
+ * PRISM — View 03: Full-Page Gapless 21-Ch Pure Color Matrix & Slot Bars
  * ============================================================================ */
 
 import { S, spectralColor, fmtRateCompact } from '../state.js?v=5.6.6';
-import { $, $$, el, svgEl, renderSegMeter } from '../dom.js?v=5.6.6';
-import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.6.6';
+import { $, $$, el, svgEl } from '../dom.js?v=5.6.6';
 
 let hoverStrandId = null;
+let chartLimit = 360;
 const strandMetaById = new Map();
 
 const fmtShortRate = (bps) => fmtRateCompact(bps, '0');
 
 function getActiveStrandId() {
   return hoverStrandId != null ? hoverStrandId : S.pinnedStrandId;
-}
-
-function getActiveStrandMeta() {
-  const id = getActiveStrandId();
-  return id != null ? (strandMetaById.get(id) || null) : null;
 }
 
 function downsamplePeak(arr, maxPts = 44) {
@@ -50,13 +45,12 @@ function sparkPathCoords(pts, maxVal) {
   return d;
 }
 
-function renderTileSpark(tile, dev, rgb, css) {
+function renderTileSpark(tile, dev) {
   const svg = tile._ui?.spark;
   if (!svg) return;
   const ser = S.series;
-  const limit = getChartLimit();
   const lastTs = ser?.ts?.length ? ser.ts[ser.ts.length - 1] : 0;
-  const key = `${dev}:${limit}:${lastTs}:${rgb}`;
+  const key = `${dev}:${chartLimit}:${lastTs}`;
   if (tile._sparkKey === key) return;
   tile._sparkKey = key;
 
@@ -65,12 +59,12 @@ function renderTileSpark(tile, dev, rgb, css) {
   if (!Array.isArray(rawDown) || rawDown.length < 2) return;
 
   const rawUp = Array.isArray(ser?.strands_up?.[dev]) ? ser.strands_up[dev] : [];
-  const slDown = downsamplePeak(rawDown.slice(Math.max(0, rawDown.length - limit)), 44);
+  const slDown = downsamplePeak(rawDown.slice(Math.max(0, rawDown.length - chartLimit)), 44);
   const slUp = rawUp.length >= 2
-    ? downsamplePeak(rawUp.slice(Math.max(0, rawUp.length - limit)), slDown.length)
+    ? downsamplePeak(rawUp.slice(Math.max(0, rawUp.length - chartLimit)), slDown.length)
     : [];
 
-  let peakBps = 125000; // 1 Mbps noise floor keeps idle lines low and calm
+  let peakBps = 125000;
   for (let i = 0; i < slDown.length; i++) {
     if ((slDown[i] || 0) > peakBps) peakBps = slDown[i];
     if ((slUp[i] || 0) > peakBps) peakBps = slUp[i];
@@ -79,30 +73,47 @@ function renderTileSpark(tile, dev, rgb, css) {
 
   const dDown = sparkPathCoords(slDown, scaleMax);
   const dArea = `${dDown} L100.0,32.0 L0.0,32.0 Z`;
-  svg.appendChild(svgEl('path', { d: dArea, fill: `rgba(${rgb}, 0.16)` }));
+  svg.appendChild(svgEl('path', { d: dArea, fill: 'rgba(255, 255, 255, 0.11)' }));
 
   if (slUp.length === slDown.length && slUp.some(v => v > 0)) {
-    const dUp = sparkPathCoords(slUp, scaleMax);
     svg.appendChild(svgEl('path', {
-      d: dUp,
+      d: sparkPathCoords(slUp, scaleMax),
       fill: 'none',
-      stroke: 'rgba(215, 232, 255, 0.36)',
-      'stroke-width': '0.9'
+      stroke: 'rgba(255, 255, 255, 0.24)',
+      'stroke-width': '0.85'
     }));
   }
 
   svg.appendChild(svgEl('path', {
     d: dDown,
     fill: 'none',
-    stroke: css,
-    'stroke-width': '1.5',
-    'stroke-opacity': '0.92'
+    stroke: 'rgba(255, 255, 255, 0.48)',
+    'stroke-width': '1.2'
   }));
+}
+
+function renderSlotBar(barEl, slotsCount, slotCols, maxSlots, healthy) {
+  if (!barEl) return;
+  const lit = !healthy ? 0
+    : (maxSlots > slotCols
+      ? Math.min(slotCols, Math.round((slotsCount / maxSlots) * slotCols))
+      : Math.min(slotCols, Math.max(0, slotsCount)));
+  const sig = `${slotCols}:${lit}`;
+  if (barEl.dataset.sig === sig) return;
+  barEl.dataset.sig = sig;
+  barEl.style.setProperty('--slot-cols', String(slotCols));
+
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < slotCols; i++) {
+    frag.appendChild(el('span', { class: i < lit ? 'heat-slot-cell on' : 'heat-slot-cell' }));
+  }
+  barEl.innerHTML = '';
+  barEl.appendChild(frag);
 }
 
 function syncStrandHighlight() {
   const activeId = getActiveStrandId();
-  const activeMeta = getActiveStrandMeta();
+  const activeMeta = activeId != null ? (strandMetaById.get(activeId) || null) : null;
 
   const tiles = $('#spectrum-heatmap')?.children || [];
   for (const tile of tiles) {
@@ -145,10 +156,8 @@ function syncStrandHighlight() {
   if (hintEl) {
     hintEl.textContent = S.pinnedStrandId != null
       ? `已鎖定 ${strandMetaById.get(S.pinnedStrandId)?.dev || ''} · 再按一次或 Esc 解除`
-      : '懸停／點擊鎖定單路並疊加示波器';
+      : '懸停／點擊鎖定單路 · Esc 解除';
   }
-
-  renderOscilloscope(activeMeta);
 }
 
 function setHoverStrand(strandId) {
@@ -164,9 +173,8 @@ function togglePinStrand(strandId) {
 export function bindSpectrumEvents() {
   $$('#chart-range .seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const lim = Number(btn.dataset.limit || 360);
-      $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === lim));
-      setChartLimit(lim);
+      chartLimit = Number(btn.dataset.limit || 360);
+      $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === chartLimit));
       renderSpectrum();
     });
   });
@@ -194,14 +202,12 @@ function buildHeatmapTiles(grid, strands) {
     });
     const nameEl = el('span', { class: 'heat-name' }, shortName);
     const lamEl = el('span', { class: 'heat-lam' }, `${col.lambda}nm`);
-    const badgeEl = el('span', { class: 'heat-badge' }, `#${s.id}`);
-    const downEl = el('span', { class: 'heat-rate-down idle' }, 'idle');
-    const upEl = el('span', { class: 'heat-rate-up' }, '↑0');
-    const peakEl = el('span', { class: 'heat-peak' }, 'pk 0');
+    const flagEl = el('span', { class: 'heat-flag' }, '');
     const rttEl = el('span', { class: 'heat-rtt' }, '—');
-    const meterEl = el('span', { class: 'seg-meter compact' });
-    const tokTxtEl = el('span', { class: 'heat-token-txt' }, '100%');
-    const slotsEl = el('span', { class: 'heat-slots' }, '0槽');
+    const downEl = el('span', { class: 'heat-rate-down idle' }, 'idle');
+    const subEl = el('span', { class: 'heat-rate-sub' }, '');
+    const brEl = el('span', { class: 'heat-br' }, '100% · 0槽');
+    const slotsBarEl = el('div', { class: 'heat-slots-bar', 'aria-label': '分配槽位條' });
 
     const tile = el('div', {
       class: 'heat-tile',
@@ -224,20 +230,19 @@ function buildHeatmapTiles(grid, strands) {
     },
       spark,
       el('div', { class: 'heat-top' },
-        el('div', { class: 'heat-id' }, nameEl, lamEl),
-        badgeEl
+        el('div', { class: 'heat-tl' }, nameEl, lamEl),
+        el('div', { class: 'heat-tr' }, rttEl, flagEl)
       ),
-      el('div', { class: 'heat-mid' },
-        el('div', { class: 'heat-rates' }, downEl, upEl),
-        el('div', { class: 'heat-meta' }, peakEl, rttEl)
-      ),
-      el('div', { class: 'heat-foot' },
-        el('div', { class: 'heat-token-wrap' }, meterEl, tokTxtEl),
-        slotsEl
+      el('div', { class: 'heat-bottom' },
+        el('div', { class: 'heat-corners-bot' },
+          el('div', { class: 'heat-bl' }, downEl, subEl),
+          brEl
+        ),
+        slotsBarEl
       )
     );
 
-    tile._ui = { spark, badgeEl, downEl, upEl, peakEl, rttEl, meterEl, tokTxtEl, slotsEl };
+    tile._ui = { spark, rttEl, flagEl, downEl, subEl, brEl, slotsBarEl };
     frag.appendChild(tile);
   });
   grid.innerHTML = '';
@@ -254,11 +259,14 @@ function updateHeatmap(strands) {
 
   const total = Math.max(1, strands.length);
   let maxMbps = 0.05;
+  let maxSlots = 6;
   const mbpsList = strands.map(s => {
     const m = ((s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0)) * 8 / 1e6;
     if (m > maxMbps) maxMbps = m;
+    if ((s.slots || 0) > maxSlots) maxSlots = s.slots;
     return m;
   });
+  const slotCols = Math.min(18, Math.max(6, maxSlots));
 
   const tiles = grid.children;
   for (let i = 0; i < strands.length; i++) {
@@ -276,67 +284,68 @@ function updateHeatmap(strands) {
     const absPulse = Math.min(1, Math.log10(1 + mbps * 6) / 1.45);
     const activeIntensity = Math.max(absPulse, rel * 0.90);
 
+    // Rich saturated pure color fill modulated by real-time load
     const baseContrast = !s.healthy ? 0.06
-      : (s.bucket === 'depleted' ? 0.07
-        : (s.bucket === 'cooling' ? 0.09 : (0.10 + (pct / 100) * 0.04)));
+      : (s.bucket === 'depleted' ? 0.08
+        : (s.bucket === 'cooling' ? 0.10 : (0.12 + (pct / 100) * 0.06)));
     const heat = s.healthy ? Math.min(1, activeIntensity * 0.88 + (s.vip ? 0.12 : 0)) : 0;
-    // Cap fill alpha below 0.54 so overlaid rate typography and micro-sparkline stay razor crisp
-    const fillAlpha = !s.healthy ? 0.08 : Math.min(0.54, baseContrast + activeIntensity * 0.42);
-    const bdrAlpha = !s.healthy ? 0.24 : (0.18 + heat * 0.68);
+    const fillAlpha = !s.healthy ? 0.08 : Math.min(0.88, baseContrast + activeIntensity * 0.74);
 
     tile.classList.toggle('vip', !!s.vip);
     tile.classList.toggle('down', !s.healthy);
 
     tile.style.setProperty('--sc-rgb', col.rgb);
     tile.style.setProperty('--heat-fill', fillAlpha.toFixed(2));
-    tile.style.setProperty('--heat-bdr', bdrAlpha.toFixed(2));
-    tile.style.setProperty('--heat-halo', (heat > 0.08 ? 0.12 + heat * 0.66 : 0.04).toFixed(2));
-    tile.style.setProperty('--heat-outer', (heat > 0.12 ? 0.05 + heat * 0.34 : 0.00).toFixed(2));
-    tile.style.setProperty('--heat-crest', (0.02 + heat * 0.22).toFixed(2));
+    tile.style.setProperty('--heat-halo', (heat > 0.08 ? 0.14 + heat * 0.68 : 0.04).toFixed(2));
+    tile.style.setProperty('--heat-outer', (heat > 0.12 ? 0.06 + heat * 0.34 : 0.00).toFixed(2));
+    tile.style.setProperty('--heat-crest', (0.03 + heat * 0.24).toFixed(2));
     tile.style.setProperty('--heat-blur', `${Math.round(12 + heat * 18)}px`);
-    tile.style.setProperty('--heat-bloom', `${Math.round(20 + heat * 26)}px`);
-    tile.style.setProperty('--heat-label-op', (!s.healthy ? 0.44 : (0.72 + heat * 0.28)).toFixed(2));
+    tile.style.setProperty('--heat-bloom', `${Math.round(22 + heat * 26)}px`);
+    tile.style.setProperty('--heat-label-op', (!s.healthy ? 0.44 : (0.76 + heat * 0.24)).toFixed(2));
 
     tile.title = `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ↓${fmtShortRate(downBps)} ↑${fmtShortRate(upBps)} · pk ${fmtShortRate(s.peak)} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}% · slots ${s.slots ?? 0}`;
 
     const ui = tile._ui;
 
-    // 1. Background per-strand live sparkline
-    renderTileSpark(tile, s.dev, col.rgb, col.css);
+    // Subtle contour sparkline at tile lower background
+    renderTileSpark(tile, s.dev);
 
-    // 2. Top state badge (VIP / PARK / OFF / cooldown / #id)
-    if (!s.healthy) {
-      ui.badgeEl.className = 'heat-badge down';
-      ui.badgeEl.textContent = s.parked ? 'PARK' : 'OFF';
-    } else if (s.vip) {
-      ui.badgeEl.className = 'heat-badge vip';
-      ui.badgeEl.textContent = 'VIP';
-    } else if (s.cooldown_rem > 0) {
-      ui.badgeEl.className = 'heat-badge cool';
-      ui.badgeEl.textContent = `${s.cooldown_rem}s`;
-    } else {
-      ui.badgeEl.className = 'heat-badge';
-      ui.badgeEl.textContent = `#${s.id}`;
-    }
-
-    // 3. Real-time down / up + peak + τ / loss
-    const hasDown = downBps * 8 > 500;
-    ui.downEl.textContent = hasDown ? `↓${fmtShortRate(downBps)}` : (rateTotal > 0 ? '↓0' : 'idle');
-    ui.downEl.className = `heat-rate-down${hasDown ? '' : ' idle'}`;
-    ui.upEl.textContent = upBps * 8 > 500 ? `↑${fmtShortRate(upBps)}` : '↑0';
-    ui.peakEl.textContent = `pk ${fmtShortRate(s.peak)}`;
-
+    // Top-right corner: RTT/loss + status flag
     const lossPct = s.loss_pct ?? 0;
     const rttTxt = s.ttfb_ms > 0 ? `${s.ttfb_ms}ms` : '—';
     ui.rttEl.textContent = lossPct > 0 ? `${rttTxt}·${lossPct}%` : rttTxt;
-    ui.rttEl.style.color = !s.healthy ? 'var(--c-crimson)' : (lossPct >= 15 ? 'var(--c-amber)' : '');
+    ui.rttEl.style.color = lossPct >= 15 ? 'var(--c-amber)' : '';
 
-    // 4. Footer token meter (6 segs) + token % + kernel slot count
-    const meterColor = !s.healthy ? 'crimson' : (s.vip ? 'blue' : (s.bucket === 'charged' ? 'mint' : (s.bucket === 'cooling' ? 'violet' : 'amber')));
-    renderSegMeter(ui.meterEl, pct / 100, 6, meterColor, true);
-    ui.tokTxtEl.textContent = s.cooldown_rem > 0 ? `${Math.round(pct)}%·${s.cooldown_rem}s` : `${Math.round(pct)}%`;
-    ui.slotsEl.textContent = s.vip ? 'VIP' : `${s.slots ?? 0}槽`;
-    ui.slotsEl.style.color = s.vip ? '#ffffff' : '';
+    if (!s.healthy) {
+      ui.flagEl.className = 'heat-flag down';
+      ui.flagEl.textContent = s.parked ? 'PARK' : 'OFF';
+      ui.flagEl.style.display = '';
+    } else if (s.vip) {
+      ui.flagEl.className = 'heat-flag vip';
+      ui.flagEl.textContent = 'VIP';
+      ui.flagEl.style.display = '';
+    } else if (s.cooldown_rem > 0) {
+      ui.flagEl.className = 'heat-flag cool';
+      ui.flagEl.textContent = `${s.cooldown_rem}s`;
+      ui.flagEl.style.display = '';
+    } else {
+      ui.flagEl.style.display = 'none';
+    }
+
+    // Bottom-left corner: speed + upload/peak compact inline
+    const hasDown = downBps * 8 > 500;
+    const hasUp = upBps * 8 > 500;
+    ui.downEl.textContent = hasDown ? `↓${fmtShortRate(downBps)}` : (rateTotal > 0 ? '↓0' : 'idle');
+    ui.downEl.className = `heat-rate-down${hasDown ? '' : ' idle'}`;
+    ui.subEl.textContent = hasUp ? `↑${fmtShortRate(upBps)}·pk${fmtShortRate(s.peak)}` : `pk${fmtShortRate(s.peak)}`;
+
+    // Bottom-right corner: token % + slots count
+    const tokLabel = `${Math.round(pct)}%`;
+    const slotLabel = s.vip ? ((s.slots || 0) > 0 ? `VIP·${s.slots}槽` : 'VIP') : `${s.slots ?? 0}槽`;
+    ui.brEl.textContent = `${tokLabel} · ${slotLabel}`;
+
+    // Bottom edge: slot bar in matching wavelength color & exact slot count
+    renderSlotBar(ui.slotsBarEl, s.slots || 0, slotCols, maxSlots, s.healthy);
   }
 }
 
@@ -359,12 +368,18 @@ export function renderSpectrum() {
     S.pinnedStrandId = null;
   }
 
-  // 1. Full-Width 21-Wavelength Fused Emission Matrix
+  // 1. Header capacity & compact summary KPIs
   const capEl = $('#weave-cap');
   if (capEl) capEl.textContent = `${w.slots || pat.length || 126} slots · VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`;
+  const kpiEl = $('#spec-summary-kpi');
+  if (kpiEl) {
+    kpiEl.textContent = `${w.charged_count ?? 0}/${st.healthy_count ?? strands.length} 滿桶 · ↓ ${fmtShortRate(st.rate || 0)} · ↑ ${fmtShortRate(st.rate_up || 0)}`;
+  }
+
+  // 2. Full-Page Gapless 21-Wavelength Pure Color Matrix
   updateHeatmap(strands);
 
-  // 2. Full-Width 126-Slot Kernel Timeline Ribbon
+  // 3. Full-Width 126-Slot Kernel Timeline Ribbon
   const mat = $('#pattern');
   if (mat) {
     const sig = pat.join(',');
@@ -390,32 +405,6 @@ export function renderSpectrum() {
     }
   }
 
-  // 3. Bottom Oscilloscope Dock + 4 Aggregate Bucket Summary Cards
-  $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === getChartLimit()));
-
-  const sb = $('#scope-buckets');
-  if (sb) {
-    const vipS = strands.find(s => s.vip);
-    sb.innerHTML = '';
-    sb.append(
-      el('div', { class: 'bucket-stat-cell' },
-        el('span', { class: 'k' }, 'charged 滿桶'),
-        el('span', { class: 'v c-mint' }, `${w.charged_count ?? 0}/${st.healthy_count ?? strands.length}`)
-      ),
-      el('div', { class: 'bucket-stat-cell' },
-        el('span', { class: 'k' }, 'draining / cool'),
-        el('span', { class: 'v c-amber' }, `${w.draining_count ?? 0} / ${(w.cooling_count || 0) + (w.depleted_count || 0)}`)
-      ),
-      el('div', { class: 'bucket-stat-cell' },
-        el('span', { class: 'k' }, '@vip_lane'),
-        el('span', { class: 'v c-blue' }, vipS ? `${vipS.dev}` : '—')
-      ),
-      el('div', { class: 'bucket-stat-cell' },
-        el('span', { class: 'k' }, 'slots 總槽位'),
-        el('span', { class: 'v c-bright' }, `${pat.length || w.slots || 126}`)
-      )
-    );
-  }
-
+  $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === chartLimit));
   syncStrandHighlight();
 }

@@ -521,57 +521,38 @@
       </section>
 
       <!-- ================================================================
-           PAGE 03: FULL-WIDTH FUSED 21-CH MATRIX + COMPACT OSCILLOSCOPE DOCK
+           PAGE 03: FULL-PAGE GAPLESS 21-WAVELENGTH PURE COLOR MATRIX
            ================================================================ -->
       <section id="page-spectrum" class="page page-contained">
         <div class="spectrum-stage">
-
-          <!-- Hero Stage: Full-Page 21-Wavelength Fused Telemetry Matrix + 126-Slot Kernel Ribbon -->
           <div class="s-box spectrum spec-heat-panel">
-            <div class="panel-head" style="margin-bottom:0;padding-bottom:6px">
+            <div class="panel-head" style="margin-bottom:0;padding-bottom:5px">
               <div style="display:flex;align-items:baseline;gap:10px;min-width:0;flex-wrap:wrap">
                 <span class="panel-title c-spectrum">21-WAVELENGTH SPECTRUM MATRIX</span>
                 <span id="weave-cap" class="c-sec" style="font-size:10.5px">126 slots</span>
+                <span id="spec-summary-kpi" class="c-bright" style="font-size:10.5px;font-variant-numeric:tabular-nums">—</span>
               </div>
               <div class="spec-head-right">
-                <span id="spec-pin-hint" class="c-muted" style="font-size:10px">懸停／點擊鎖定單路並疊加示波器</span>
+                <span id="spec-active-tag" class="c-sec" style="font-size:10.5px">—</span>
                 <span class="math-formula">Wᵢ ∝ (Bᵢ/Bᶜ)²·(1+0.35Δτᵢ)⁻¹</span>
-              </div>
-            </div>
-
-            <div id="spectrum-heatmap" class="heatmap-grid" role="grid" aria-label="21 波長實時發光強度與遙測矩陣"></div>
-
-            <div class="spec-ribbon-row">
-              <div id="pattern" class="slot-ribbon" aria-label="126 槽位實時調度色帶"></div>
-              <div class="heatmap-legend">
-                <span>700nm ──▶ 380nm · 發光強度=實時負載 · 微折線=鏈路歷程</span>
-                <span id="spec-active-tag" class="c-sec">—</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Compact Bottom Full-Width Oscilloscope + 4 Aggregate Gauges -->
-          <div class="s-box blue spec-scope-panel">
-            <div class="spec-scope-main">
-              <div class="panel-head" style="margin-bottom:0;padding-bottom:4px">
-                <div style="display:flex;align-items:center;gap:10px;min-width:0">
-                  <span class="panel-title c-blue">OPTICAL FLUX OSCILLOSCOPE</span>
-                  <span id="scope-live-kpi" class="spec-scope-kpi">↓ 0 bps · ↑ 0 bps</span>
-                </div>
-                <div id="chart-range" class="seg-group" aria-label="示波器時間窗">
+                <div id="chart-range" class="seg-group" aria-label="微折線時間窗">
                   <button type="button" class="seg-btn" data-limit="150">5m</button>
                   <button type="button" class="seg-btn on" data-limit="360">12m</button>
                   <button type="button" class="seg-btn" data-limit="720">24m</button>
                 </div>
               </div>
-              <div class="scope-box">
-                <svg id="chart" viewBox="0 0 1040 96" preserveAspectRatio="none"></svg>
-                <div id="tip" class="topo-tooltip"></div>
+            </div>
+
+            <div id="spectrum-heatmap" class="heatmap-grid" role="grid" aria-label="21 波長實時純色光譜矩陣"></div>
+
+            <div class="spec-ribbon-row">
+              <div id="pattern" class="slot-ribbon" aria-label="126 槽位實時調度色帶"></div>
+              <div class="heatmap-legend">
+                <span>700nm ──▶ 380nm · 純色發光強度=負載 · 邊角=速率/槽位條</span>
+                <span id="spec-pin-hint" class="c-muted">懸停／點擊鎖定單路 · Esc 解除</span>
               </div>
             </div>
-            <div id="scope-buckets" class="bucket-summary-strip"></div>
           </div>
-
         </div>
       </section>
 
