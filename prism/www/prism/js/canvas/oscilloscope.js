@@ -1,8 +1,8 @@
 /* ============================================================================
- * PRISM 5.6 — Thick Rainbow-Bar Overlaid White SVG Throughput Oscilloscope
+ * PRISM 5.6 — Thick Rainbow-Bar Overlaid Smooth Phosphor SVG Oscilloscope
  * ============================================================================ */
 
-import { S, fmtRate, fmtClock } from '../state.js?v=5.6.6';
+import { S, fmtRate, fmtRateCompact, fmtClock } from '../state.js?v=5.6.6';
 import { $, svgEl } from '../dom.js?v=5.6.6';
 
 let lastSig = '';
@@ -19,11 +19,46 @@ export function getChartLimit() {
   return chartLimit;
 }
 
-function buildLinePath(series, n, toX, toY) {
-  let d = '';
-  for (let i = 0; i < n; i++) {
-    const cmd = i === 0 ? 'M' : 'L';
-    d += `${cmd}${toX(i).toFixed(1)},${toY(series[i] || 0).toFixed(1)}`;
+function downsampleWindow(ts, down, up, focus, maxPts = 140) {
+  const n = ts.length;
+  if (n <= maxPts) return { ts, down, up, focus };
+  const step = n / maxPts;
+  const oTs = new Array(maxPts);
+  const oDown = new Array(maxPts);
+  const oUp = new Array(maxPts);
+  const oFocus = focus ? new Array(maxPts) : null;
+  for (let i = 0; i < maxPts; i++) {
+    const start = Math.floor(i * step);
+    const end = Math.max(start + 1, Math.min(n, Math.floor((i + 1) * step)));
+    let maxD = 0, maxU = 0, maxF = 0;
+    for (let j = start; j < end; j++) {
+      if ((down[j] || 0) > maxD) maxD = down[j] || 0;
+      if ((up[j] || 0) > maxU) maxU = up[j] || 0;
+      if (oFocus && (focus[j] || 0) > maxF) maxF = focus[j] || 0;
+    }
+    oTs[i] = ts[end - 1];
+    oDown[i] = maxD;
+    oUp[i] = maxU;
+    if (oFocus) oFocus[i] = maxF;
+  }
+  return { ts: oTs, down: oDown, up: oUp, focus: oFocus };
+}
+
+function buildSmoothPath(series, n, toX, toY, minY, maxY) {
+  if (n < 2) return '';
+  const clampY = (y) => Math.max(minY, Math.min(maxY, y));
+  let d = `M${toX(0).toFixed(1)},${clampY(toY(series[0] || 0)).toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const y0 = clampY(toY(series[Math.max(0, i - 1)] || 0));
+    const y1 = clampY(toY(series[i] || 0));
+    const y2 = clampY(toY(series[i + 1] || 0));
+    const y3 = clampY(toY(series[Math.min(n - 1, i + 2)] || 0));
+    const x1 = toX(i);
+    const x2 = toX(i + 1);
+    const dx = (x2 - x1) / 3;
+    const cp1y = clampY(y1 + (y2 - y0) / 6);
+    const cp2y = clampY(y2 - (y3 - y1) / 6);
+    d += ` C${(x1 + dx).toFixed(1)},${cp1y.toFixed(1)} ${(x2 - dx).toFixed(1)},${cp2y.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
   }
   return d;
 }
@@ -36,30 +71,46 @@ export function renderOscilloscope(activeStrand = lastFocus) {
   if (!svg || !ser || !ser.ts || ser.ts.length < 2) return;
 
   const sliceStart = Math.max(0, ser.ts.length - chartLimit);
-  const ts = ser.ts.slice(sliceStart);
-  const down = ser.total.slice(sliceStart);
-  const up = (ser.up || []).slice(sliceStart);
-  const n = ts.length;
+  const rawTs = ser.ts.slice(sliceStart);
+  const rawDown = ser.total.slice(sliceStart);
+  const rawUp = (ser.up || []).slice(sliceStart);
 
   const focusDev = lastFocus?.dev || '';
   const fRaw = focusDev && Array.isArray(ser.strands?.[focusDev]) ? ser.strands[focusDev] : null;
-  const focusDown = fRaw ? fRaw.slice(Math.max(0, fRaw.length - n)) : null;
+  const fAligned = fRaw ? fRaw.slice(Math.max(0, fRaw.length - rawTs.length)) : null;
+  const focusFull = fAligned
+    ? (fAligned.length < rawTs.length
+      ? new Array(rawTs.length - fAligned.length).fill(0).concat(fAligned)
+      : fAligned)
+    : null;
+
+  const winPeakBps = Math.max(0, ...rawDown, ...rawUp);
+  const subEl = $('#ribbon-rate-sub');
+  if (subEl && S.status) {
+    const upNow = S.status.rate_up || rawUp[rawUp.length - 1] || 0;
+    subEl.textContent = `↑${fmtRateCompact(upNow, '0')} · pk ${fmtRateCompact(winPeakBps, '0')}`;
+  }
 
   const rect = svg.getBoundingClientRect?.();
   const W = rect && rect.width > 120 ? Math.round(rect.width) : 1200;
-  const H = rect && rect.height > 32 ? Math.round(rect.height) : 84;
+  const H = rect && rect.height > 40 ? Math.round(rect.height) : 112;
 
-  const sig = `${W}x${H}:${n}:${ts[n - 1]}:${down[n - 1]}:${up[n - 1]}:${chartLimit}:${focusDev}:${focusDown ? focusDown[focusDown.length - 1] : ''}`;
+  const lastF = focusFull ? focusFull[focusFull.length - 1] : '';
+  const sig = `${W}x${H}:${rawTs.length}:${rawTs[rawTs.length - 1]}:${rawDown[rawDown.length - 1]}:${rawUp[rawUp.length - 1]}:${chartLimit}:${focusDev}:${lastF}`;
   if (sig === lastSig) return;
   lastSig = sig;
 
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
 
-  const padL = 40, padR = 6, padT = 8, padB = 6;
-  const plotW = Math.max(20, W - padL - padR);
-  const plotH = Math.max(18, H - padT - padB);
+  const ds = downsampleWindow(rawTs, rawDown, rawUp, focusFull, 140);
+  const ts = ds.ts, down = ds.down, up = ds.up, focus = ds.focus;
+  const n = ts.length;
 
-  let maxBps = 1250000; // min 10 Mbps scale
+  const padL = 8, padR = 36, padT = 26, padB = 6;
+  const plotW = Math.max(20, W - padL - padR);
+  const plotH = Math.max(22, H - padT - padB);
+
+  let maxBps = 1250000; // min 10 Mbps baseline
   for (let i = 0; i < n; i++) {
     if (down[i] > maxBps) maxBps = down[i];
     if ((up[i] || 0) > maxBps) maxBps = up[i];
@@ -68,35 +119,40 @@ export function renderOscilloscope(activeStrand = lastFocus) {
 
   const toX = (i) => padL + (i / Math.max(1, n - 1)) * plotW;
   const toY = (bps) => padT + plotH - (Math.max(0, bps) / maxBps) * plotH;
+  const baseY = padT + plotH;
 
   svg.innerHTML = '';
 
   const defs = svgEl('defs');
   const gradWhite = svgEl('linearGradient', { id: 'scopeWhiteG', x1: '0', y1: '0', x2: '0', y2: '1' },
-    svgEl('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': '0.24' }),
+    svgEl('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': '0.28' }),
+    svgEl('stop', { offset: '100%', 'stop-color': '#ffffff', 'stop-opacity': '0.02' })
+  );
+  const gradFocus = svgEl('linearGradient', { id: 'scopeFocusG', x1: '0', y1: '0', x2: '0', y2: '1' },
+    svgEl('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': '0.32' }),
     svgEl('stop', { offset: '100%', 'stop-color': '#ffffff', 'stop-opacity': '0.03' })
   );
-  defs.appendChild(gradWhite);
+  defs.append(gradWhite, gradFocus);
   svg.appendChild(defs);
 
-  // Subtle translucent grid lines & white haloed Y scale text over rainbow bar
+  // Subtle horizontal guides & right-margin scale labels cleanly below HUD
   const steps = 2;
   for (let k = 0; k <= steps; k++) {
     const val = (maxBps / steps) * k;
     const y = toY(val);
     svg.appendChild(svgEl('line', {
       x1: padL, y1: y, x2: W - padR, y2: y,
-      stroke: k === 0 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)',
+      stroke: k === 0 ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.12)',
       'stroke-dasharray': k === 0 ? '' : '3 4'
     }));
     if (k > 0) {
       const lbl = svgEl('text', {
-        x: padL - 5, y: y + 3,
-        fill: 'rgba(255, 255, 255, 0.90)',
+        x: W - 4, y: y + 3,
+        fill: 'rgba(255, 255, 255, 0.84)',
         stroke: 'rgba(4, 6, 12, 0.85)',
-        'stroke-width': '2.6',
+        'stroke-width': '2.4',
         'paint-order': 'stroke',
-        'font-size': '9.5', 'font-weight': '600',
+        'font-size': '9', 'font-weight': '600',
         'text-anchor': 'end', 'font-family': 'monospace'
       });
       lbl.textContent = ((val * 8) / 1e6).toFixed(val * 8 >= 10e6 ? 0 : 1) + 'M';
@@ -104,40 +160,48 @@ export function renderOscilloscope(activeStrand = lastFocus) {
     }
   }
 
-  const dDown = buildLinePath(down, n, toX, toY);
-  const dUp = buildLinePath(up, n, toX, toY);
-  const hasFocus = !!(focusDown && focusDown.length >= 2 && lastFocus);
-  const aggOp = hasFocus ? '0.42' : '0.90';
+  const dDown = buildSmoothPath(down, n, toX, toY, padT, baseY);
+  const dUp = buildSmoothPath(up, n, toX, toY, padT, baseY);
+  const hasFocus = !!(focus && focus.length >= 2 && lastFocus);
+  const aggOp = hasFocus ? '0.38' : '0.94';
 
-  // White translucent area + dark halo shadow + crisp white strokes matching tile aesthetic
-  const dArea = `${dDown} L${toX(n - 1).toFixed(1)},${(padT + plotH).toFixed(1)} L${padL},${(padT + plotH).toFixed(1)} Z`;
-  svg.appendChild(svgEl('path', { d: dArea, fill: 'url(#scopeWhiteG)', opacity: hasFocus ? '0.45' : '1' }));
+  const dArea = `${dDown} L${toX(n - 1).toFixed(1)},${baseY.toFixed(1)} L${padL},${baseY.toFixed(1)} Z`;
+  svg.appendChild(svgEl('path', { d: dArea, fill: 'url(#scopeWhiteG)', opacity: hasFocus ? '0.35' : '1' }));
 
-  svg.appendChild(svgEl('path', { d: dUp, fill: 'none', stroke: 'rgba(4, 6, 12, 0.40)', 'stroke-width': '2.4', opacity: aggOp }));
-  svg.appendChild(svgEl('path', { d: dUp, fill: 'none', stroke: 'rgba(255, 255, 255, 0.56)', 'stroke-width': '1.15', 'stroke-dasharray': '3 2.5', opacity: aggOp }));
+  // Clean continuous translucent ice-white upload line (no solid dark shadow under dashes)
+  svg.appendChild(svgEl('path', {
+    d: dUp, fill: 'none', stroke: 'rgba(218, 236, 255, 0.62)', 'stroke-width': '1.25', opacity: aggOp
+  }));
 
-  svg.appendChild(svgEl('path', { d: dDown, fill: 'none', stroke: 'rgba(4, 6, 12, 0.50)', 'stroke-width': '3.6', opacity: aggOp }));
-  svg.appendChild(svgEl('path', { d: dDown, fill: 'none', stroke: 'rgba(255, 255, 255, 0.92)', 'stroke-width': '1.8', opacity: aggOp }));
+  // Phosphor bloom + crisp solid white download line
+  svg.appendChild(svgEl('path', {
+    d: dDown, fill: 'none', stroke: 'rgba(255, 255, 255, 0.24)', 'stroke-width': '4.8', opacity: aggOp
+  }));
+  svg.appendChild(svgEl('path', {
+    d: dDown, fill: 'none', stroke: 'rgba(255, 255, 255, 0.96)', 'stroke-width': '1.9', opacity: aggOp
+  }));
 
-  // Highlight hovered/pinned single strand directly over its bright rainbow slots
+  // Focused strand overlay trace + live terminal beacon
+  const tipX = toX(n - 1);
+  const tipY = hasFocus ? toY(focus[n - 1] || 0) : toY(down[n - 1] || 0);
   if (hasFocus) {
-    const fn = focusDown.length;
-    const fOff = Math.max(0, n - fn);
-    const toFocusX = (i) => toX(fOff + i);
-    const dFocus = buildLinePath(focusDown, fn, toFocusX, toY);
-    const dFocusArea = `${dFocus} L${toFocusX(fn - 1).toFixed(1)},${(padT + plotH).toFixed(1)} L${toFocusX(0).toFixed(1)},${(padT + plotH).toFixed(1)} Z`;
-    svg.appendChild(svgEl('path', { d: dFocusArea, fill: 'rgba(255, 255, 255, 0.20)' }));
-    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: 'rgba(4, 6, 12, 0.65)', 'stroke-width': '3.8' }));
-    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: '#ffffff', 'stroke-width': '2.0' }));
+    const dFocus = buildSmoothPath(focus, n, toX, toY, padT, baseY);
+    const dFocusArea = `${dFocus} L${tipX.toFixed(1)},${baseY.toFixed(1)} L${padL},${baseY.toFixed(1)} Z`;
+    svg.appendChild(svgEl('path', { d: dFocusArea, fill: 'url(#scopeFocusG)' }));
+    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: 'rgba(255, 255, 255, 0.30)', 'stroke-width': '5.2' }));
+    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: '#ffffff', 'stroke-width': '2.1' }));
   }
 
+  svg.appendChild(svgEl('circle', { cx: tipX.toFixed(1), cy: tipY.toFixed(1), r: '4.5', fill: 'rgba(255,255,255,0.28)' }));
+  svg.appendChild(svgEl('circle', { cx: tipX.toFixed(1), cy: tipY.toFixed(1), r: '2.1', fill: '#ffffff' }));
+
   const cursorLine = svgEl('line', {
-    x1: -10, y1: padT, x2: -10, y2: padT + plotH,
-    stroke: '#ffffff', 'stroke-width': '1.2', 'stroke-dasharray': '2 3', visibility: 'hidden'
+    x1: -10, y1: padT, x2: -10, y2: baseY,
+    stroke: '#ffffff', 'stroke-width': '1.1', 'stroke-dasharray': '2 3', visibility: 'hidden'
   });
   svg.appendChild(cursorLine);
 
-  const hit = svgEl('rect', { x: padL, y: padT, width: plotW, height: plotH, fill: 'transparent', style: 'cursor:crosshair' });
+  const hit = svgEl('rect', { x: padL, y: 0, width: plotW, height: H, fill: 'transparent', style: 'cursor:crosshair' });
   hit.addEventListener('mousemove', (e) => {
     const box = svg.getBoundingClientRect();
     const rx = ((e.clientX - box.left) / box.width) * W;
@@ -147,7 +211,7 @@ export function renderOscilloscope(activeStrand = lastFocus) {
     cursorLine.setAttribute('x2', cx);
     cursorLine.setAttribute('visibility', 'visible');
     if (tip) {
-      const fVal = focusDown ? focusDown[idx - Math.max(0, n - focusDown.length)] : null;
+      const fVal = hasFocus ? focus[idx] : null;
       const focusRow = (lastFocus && fVal != null)
         ? `<span class="tt-k" style="color:${lastFocus.css}">${lastFocus.dev}</span><span class="tt-v">${fmtRate(fVal).full}</span>`
         : '';

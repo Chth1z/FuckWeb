@@ -548,13 +548,28 @@
             </div>
 
             <div class="spec-ribbon-row">
-              <div class="spec-ribbon-scope">
+              <div id="spec-ribbon-scope" class="spec-ribbon-scope">
                 <div id="pattern" class="slot-ribbon" aria-label="126 槽位與總網速融合光譜帶"></div>
-                <svg id="chart" class="ribbon-scope-svg" viewBox="0 0 1200 84" preserveAspectRatio="none" aria-label="實時總網速示波器"></svg>
+                <svg id="chart" class="ribbon-scope-svg" viewBox="0 0 1200 112" preserveAspectRatio="none" aria-label="實時總網速示波器"></svg>
+                <div class="ribbon-hud">
+                  <div class="ribbon-hud-tl">
+                    <div class="heat-tl">
+                      <span class="heat-name">TOTAL FLUX</span>
+                      <span id="ribbon-slots-meta" class="heat-lam">126 slots</span>
+                    </div>
+                    <div class="heat-speed-tl">
+                      <span id="ribbon-rate-down" class="heat-rate-down idle">idle</span>
+                      <span id="ribbon-rate-sub" class="heat-rate-sub">↑0 · pk 0</span>
+                    </div>
+                  </div>
+                  <div class="ribbon-hud-tr">
+                    <span id="ribbon-health-meta" class="ribbon-tr-txt">—</span>
+                  </div>
+                </div>
                 <div id="tip" class="topo-tooltip"></div>
               </div>
               <div class="heatmap-legend">
-                <span>700nm ──▶ 380nm · 純色發光強度=負載 · 126槽彩虹條＋白線總網速示波器（實線下行 / 細線上行）</span>
+                <span>700nm ──▶ 380nm · 純色發光強度=實時負載 · 126槽彩虹融合示波器（實線總下行 / 細線總上行）</span>
                 <span id="spec-pin-hint" class="c-muted">懸停／點擊鎖定單路 · Esc 解除</span>
               </div>
             </div>

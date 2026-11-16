@@ -380,15 +380,59 @@ export function renderSpectrum() {
   // 1. Header capacity & compact summary KPIs
   const capEl = $('#weave-cap');
   if (capEl) capEl.textContent = `${w.slots || pat.length || 126} slots · VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`;
+  const downNow = st.rate || 0;
+  const upNow = st.rate_up || 0;
+  const totBps = downNow + upNow;
   const kpiEl = $('#spec-summary-kpi');
   if (kpiEl) {
-    kpiEl.textContent = `${w.charged_count ?? 0}/${st.healthy_count ?? strands.length} 滿桶 · ↓ ${fmtShortRate(st.rate || 0)} · ↑ ${fmtShortRate(st.rate_up || 0)}`;
+    kpiEl.textContent = `${w.charged_count ?? 0}/${st.healthy_count ?? strands.length} 滿桶 · ↓ ${fmtShortRate(downNow)} · ↑ ${fmtShortRate(upNow)}`;
   }
 
   // 2. Full-Page Gapless 21-Wavelength Pure Color Matrix
   updateHeatmap(strands);
 
-  // 3. Full-Width 126-Slot Kernel Timeline Ribbon
+  // 3. Modulate rainbow bar luminance, saturation & dominant spectral glow by total network speed
+  const ribScope = $('#spec-ribbon-scope');
+  if (ribScope) {
+    const totMbps = (totBps * 8) / 1e6;
+    const ribPulse = totMbps > 0.01 ? Math.min(1, Math.log10(1 + totMbps * 3.5) / 1.65) : 0;
+    let peakStrand = null;
+    let peakRate = 0;
+    for (const s of strands) {
+      const r = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
+      if (r > peakRate) {
+        peakRate = r;
+        peakStrand = s;
+      }
+    }
+    const domRgb = (peakStrand && colorById[peakStrand.id]?.rgb) || '100, 174, 245';
+    ribScope.style.setProperty('--ribbon-glow-rgb', domRgb);
+    ribScope.style.setProperty('--ribbon-fill', (0.14 + ribPulse * 0.72).toFixed(2));
+    ribScope.style.setProperty('--ribbon-sat', (0.42 + ribPulse * 0.78).toFixed(2));
+    ribScope.style.setProperty('--ribbon-blur', `${Math.round(12 + ribPulse * 18)}px`);
+    ribScope.style.setProperty('--ribbon-bloom', `${Math.round(22 + ribPulse * 28)}px`);
+    ribScope.style.setProperty('--ribbon-halo', (0.04 + ribPulse * 0.42).toFixed(2));
+    ribScope.style.setProperty('--ribbon-outer', (0.00 + ribPulse * 0.22).toFixed(2));
+  }
+
+  const ribDownEl = $('#ribbon-rate-down');
+  if (ribDownEl) {
+    const hasDown = downNow * 8 > 500;
+    ribDownEl.textContent = hasDown ? `↓${fmtShortRate(downNow)}` : (totBps > 0 ? '↓0' : 'idle');
+    ribDownEl.className = `heat-rate-down${hasDown ? '' : ' idle'}`;
+  }
+  const ribSubEl = $('#ribbon-rate-sub');
+  if (ribSubEl && (!S.series || !S.series.ts || S.series.ts.length < 2)) {
+    ribSubEl.textContent = `↑${fmtShortRate(upNow)}`;
+  }
+  const ribSlotsMeta = $('#ribbon-slots-meta');
+  if (ribSlotsMeta) ribSlotsMeta.textContent = `${w.slots || pat.length || 126} slots`;
+  const ribHealthEl = $('#ribbon-health-meta');
+  if (ribHealthEl) {
+    ribHealthEl.textContent = `${st.healthy_count ?? strands.length}/${strands.length || 21} UP · ${w.charged_count ?? 0} 滿桶`;
+  }
+
+  // 4. Full-Width 126-Slot Kernel Timeline Ribbon
   const mat = $('#pattern');
   if (mat) {
     const sig = pat.join(',');
