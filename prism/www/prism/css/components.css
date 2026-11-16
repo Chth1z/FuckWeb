@@ -1035,10 +1035,11 @@
   border: none;
   outline: none;
   border-radius: 0;
-  background-color: rgba(var(--lit-rgb, var(--sc-rgb, 100, 174, 245)), var(--heat-fill, 0.24));
+  background-color: rgba(var(--lit-rgb, var(--sc-rgb, 100, 174, 245)), var(--heat-fill, 0.22));
   box-shadow:
     inset 0 0 0 0.5px rgba(0, 0, 0, 0.34),
-    inset 0 0 var(--heat-blur, 10px) rgba(var(--lit-rgb, var(--sc-rgb, 100, 174, 245)), var(--heat-halo, 0));
+    inset 0 0 var(--heat-blur, 12px) rgba(var(--rim-rgb, var(--lit-rgb, 100, 174, 245)), var(--heat-halo, 0)),
+    inset 0 0 6px rgba(var(--rim-rgb, var(--lit-rgb, 100, 174, 245)), var(--heat-rim, 0));
   cursor: pointer;
   transition: transform 0.14s ease, box-shadow 0.35s ease, background-color 0.35s ease, opacity 0.2s ease;
 }
@@ -1047,10 +1048,10 @@
 .heat-tile.hi,
 .heat-tile.pinned {
   transform: scale(1.014);
-  background-color: rgba(var(--sc-rgb, 100, 174, 245), clamp(0.42, calc(var(--heat-fill, 0.24) + 0.16), 0.72));
+  background-color: rgba(var(--sc-rgb, 100, 174, 245), clamp(0.58, calc(var(--heat-fill, 0.22) + 0.22), 0.88));
   box-shadow:
-    0 0 9px rgba(var(--sc-rgb, 100, 174, 245), 0.34),
-    inset 0 0 16px rgba(var(--sc-rgb, 100, 174, 245), 0.24);
+    0 0 9px rgba(var(--sc-rgb, 100, 174, 245), 0.42),
+    inset 0 0 18px rgba(var(--rim-rgb, var(--sc-rgb, 100, 174, 245)), 0.44);
   z-index: 4;
 }
 
@@ -1073,7 +1074,7 @@
   height: 34%;
   pointer-events: none;
   z-index: 1;
-  opacity: 0.50;
+  opacity: var(--heat-spark-op, 0.48);
 }
 
 .heat-top,
@@ -1274,7 +1275,7 @@
 .slot-tick.dim { opacity: 0.48 !important; }
 .slot-tick.hi {
   opacity: 1 !important;
-  background: rgba(var(--pure-rgb), 0.76);
+  background: rgba(var(--pure-rgb), 0.62);
   z-index: 2;
 }
 

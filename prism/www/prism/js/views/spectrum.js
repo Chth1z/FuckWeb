@@ -299,26 +299,29 @@ function updateHeatmap(strands) {
     const rateTotal = downBps + upBps;
     const mbps = mbpsList[i];
     const rel = maxMbps > 0.12 ? mbps / maxMbps : 0;
-    const absPulse = Math.min(1, Math.log10(1 + mbps * 6) / 1.55);
-    const k = !s.healthy ? 0.04 : Math.max(0.08, Math.min(1, Math.max(absPulse * 0.85, rel * 0.72) + (s.vip ? 0.10 : 0)));
-    const sat = !s.healthy ? 0.18 : (0.26 + 0.74 * Math.pow(k, 0.78));
+    const absPulse = Math.min(1, Math.log10(1 + mbps * 6.5) / 1.48);
+    const k = !s.healthy ? 0.04 : Math.max(0.08, Math.min(1, Math.max(absPulse * 0.92, rel * 0.85) + (s.vip ? 0.08 : 0)));
+    const sat = !s.healthy ? 0.22 : (0.26 + 0.74 * Math.pow(k, 0.72));
     const litRgb = desatObsidianRgb(col.rgb, sat);
-    const coreRgb = k > 0.76 ? mixWhiteRgb(litRgb, (k - 0.76) * 0.28) : litRgb;
+    const kAct = !s.healthy ? 0 : Math.max(0, (k - 0.12) / 0.88);
+    const rimRgb = kAct > 0.05 ? mixWhiteRgb(col.rgb, 0.36 + 0.24 * kAct) : litRgb;
 
     const baseFill = !s.healthy ? 0.10
       : (s.bucket === 'depleted' ? 0.16
-        : (s.bucket === 'cooling' ? 0.19 : (0.22 + (pct / 100) * 0.04)));
-    const fillAlpha = !s.healthy ? 0.10 : Math.min(0.62, baseFill + k * 0.36);
+        : (s.bucket === 'cooling' ? 0.18 : (0.20 + (pct / 100) * 0.04)));
+    const fillAlpha = !s.healthy ? 0.10 : Math.min(0.82, baseFill + Math.pow(k, 0.84) * 0.58);
 
     tile.classList.toggle('vip', !!s.vip);
     tile.classList.toggle('down', !s.healthy);
 
     tile.style.setProperty('--sc-rgb', col.rgb);
-    tile.style.setProperty('--lit-rgb', coreRgb);
-    const kAct = !s.healthy ? 0 : Math.max(0, (k - 0.14) / 0.86);
+    tile.style.setProperty('--lit-rgb', litRgb);
+    tile.style.setProperty('--rim-rgb', rimRgb);
     tile.style.setProperty('--heat-fill', fillAlpha.toFixed(2));
-    tile.style.setProperty('--heat-halo', (kAct > 0 ? 0.04 + 0.24 * Math.pow(kAct, 1.05) : 0).toFixed(3));
-    tile.style.setProperty('--heat-blur', `${Math.round(6 + 10 * kAct)}px`);
+    tile.style.setProperty('--heat-rim', (kAct > 0.05 ? 0.10 + 0.28 * Math.pow(kAct, 0.95) : 0).toFixed(3));
+    tile.style.setProperty('--heat-halo', (kAct > 0.05 ? 0.14 + 0.44 * Math.pow(kAct, 0.90) : 0).toFixed(3));
+    tile.style.setProperty('--heat-blur', `${Math.round(10 + 8 * kAct)}px`);
+    tile.style.setProperty('--heat-spark-op', (0.44 + 0.34 * kAct).toFixed(2));
     tile.style.setProperty('--heat-label-op', (!s.healthy ? 0.48 : (0.80 + k * 0.20)).toFixed(2));
 
     tile.title = `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ↓${fmtShortRate(downBps)} ↑${fmtShortRate(upBps)} · pk ${fmtShortRate(s.peak)} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}% · slots ${s.slots ?? 0}`;
@@ -396,19 +399,19 @@ export function renderSpectrum() {
   // 2. Full-Page Gapless 21-Wavelength Matrix (unified obsidian saturation & glow)
   updateHeatmap(strands);
 
-  // 3. Modulate rainbow bar fill, obsidian saturation & 4-stop prism bloom smoothly by total network speed
+  // 3. Modulate rainbow bar fill, obsidian saturation & 4-stop prism bloom smoothly with higher total-Mbps ceiling
   const totMbps = (totBps * 8) / 1e6;
-  const ribK = totMbps > 0.01 ? Math.min(1, Math.max(0.08, Math.log10(1 + totMbps * 4.5) / 1.65)) : 0.08;
-  const ribSat = 0.34 + 0.66 * Math.pow(ribK, 0.78);
-  const ribFill = (0.36 + 0.30 * Math.pow(ribK, 0.85)).toFixed(2);
+  const ribK = totMbps > 0.05 ? Math.min(1, Math.max(0.06, Math.log10(1 + totMbps * 0.45) / 1.85)) : 0.06;
+  const ribSat = 0.24 + 0.50 * Math.pow(ribK, 0.88);
+  const ribFill = (0.20 + 0.26 * Math.pow(ribK, 0.90)).toFixed(2);
   const ribScope = $('#spec-ribbon-scope');
   if (ribScope) {
     const rLit = desatObsidianRgb(SPECTRUM_STOPS[0], ribSat);
     const gLit = desatObsidianRgb(SPECTRUM_STOPS[3], ribSat);
     const bLit = desatObsidianRgb(SPECTRUM_STOPS[5], ribSat);
     const vLit = desatObsidianRgb(SPECTRUM_STOPS[6], ribSat);
-    const sA = (0.03 + 0.16 * Math.pow(ribK, 1.12)).toFixed(3);
-    const vA = (0.02 + 0.12 * Math.pow(ribK, 1.18)).toFixed(3);
+    const sA = (0.02 + 0.10 * Math.pow(ribK, 1.15)).toFixed(3);
+    const vA = (0.015 + 0.07 * Math.pow(ribK, 1.20)).toFixed(3);
     const blur1 = Math.round(5 + 4 * ribK);
     const blur2 = Math.round(8 + 4 * ribK);
     ribScope.style.setProperty('--ribbon-fill', ribFill);
