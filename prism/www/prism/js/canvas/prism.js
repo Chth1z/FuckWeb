@@ -281,18 +281,10 @@ function drawPrismFrame(dt = 0.016) {
   const rightX = cx + side / 2;
   const rightY = topY + triH;
 
-  // Entry point on left slope (38% down from apex)
+  // Entry point centered on left crystal slope (38% down from apex)
   const entryT = 0.38;
   const entryX = topX + (leftX - topX) * entryT;
   const entryY = topY + (leftY - topY) * entryT;
-
-  // Exit span on right slope (33% to 56% down from apex)
-  const exitTopT = 0.33;
-  const exitBotT = 0.56;
-  const exitTopX = topX + (rightX - topX) * exitTopT;
-  const exitTopY = topY + (rightY - topY) * exitTopT;
-  const exitBotX = topX + (rightX - topX) * exitBotT;
-  const exitBotY = topY + (rightY - topY) * exitBotT;
 
   const st = S.status || {};
   const strands = st.strands || [];
@@ -312,6 +304,20 @@ function drawPrismFrame(dt = 0.016) {
   }
   const totalMbps = S.prismTotalMbps;
 
+  // Unified optical flux factor (0..1): thickens incident white beam AND proportionally widens refracted exit fan together
+  const fluxNorm = Math.min(1, Math.sqrt(Math.max(0, totalMbps)) * 0.11 + Math.log10(1 + Math.max(0, totalMbps)) * 0.16);
+  const beamHalf = 1.40 + fluxNorm * 3.10;
+  const beamGlowHalf = beamHalf * (5.2 + fluxNorm * 2.2);
+
+  const exitCenterT = 0.445;
+  const exitSpanT = 0.145 + fluxNorm * 0.145;
+  const exitTopT = exitCenterT - exitSpanT * 0.5;
+  const exitBotT = exitCenterT + exitSpanT * 0.5;
+  const exitTopX = topX + (rightX - topX) * exitTopT;
+  const exitTopY = topY + (rightY - topY) * exitTopT;
+  const exitBotX = topX + (rightX - topX) * exitBotT;
+  const exitBotY = topY + (rightY - topY) * exitBotT;
+
   S.hitBoxes = [];
 
   // 3. Single Straight Incident White Beam (Left Edge -> Prism Entry Point)
@@ -319,8 +325,6 @@ function drawPrismFrame(dt = 0.016) {
   const incidentAngle = 14.5 * Math.PI / 180;
   const startX = 0;
   const startY = entryY + entryX * Math.tan(incidentAngle);
-  const beamHalf = Math.min(4.2, 1.45 + Math.sqrt(Math.max(0, totalMbps)) * 0.28);
-  const beamGlowHalf = beamHalf * (5.6 + Math.min(2.4, totalMbps * 0.04));
 
   // Normal vector & unit direction to incident beam
   const bLen = Math.hypot(entryX - startX, entryY - startY) || 1;
@@ -367,8 +371,8 @@ function drawPrismFrame(dt = 0.016) {
   // 4. Right Straight Spectrum Bands (21 Radiant Photonic Rainbow Bands)
   // Straight dispersion fan from right face to right edge of canvas (x = W)
   const rightSpan = W - exitTopX;
-  const farTopY = exitTopY + rightSpan * Math.tan(10.0 * Math.PI / 180);
-  const farBotY = exitBotY + rightSpan * Math.tan(15.2 * Math.PI / 180);
+  const farTopY = exitTopY + rightSpan * Math.tan((10.0 - fluxNorm * 0.6) * Math.PI / 180);
+  const farBotY = exitBotY + rightSpan * Math.tan((15.2 + fluxNorm * 0.8) * Math.PI / 180);
 
   if (S.bandSmooth.length !== nStrands) {
     S.bandSmooth = new Array(nStrands).fill(null).map(() => ({ w: 1, alpha: 0.90, glow: 0.45 }));
@@ -619,42 +623,30 @@ function drawPrismFrame(dt = 0.016) {
   ctx.fillStyle = '#03050a';
   ctx.fillRect(leftX - 2, topY - 2, side + 4, triH + 4);
 
-  // Continuous C-infinity Gaussian inward teal-ice bevel (inverse winding outer frame casting inner shadow)
-  const castInwardBevel = (blurPx, shadowCol) => {
-    ctx.save();
-    ctx.fillStyle = '#03050a';
-    ctx.shadowColor = shadowCol;
-    ctx.shadowBlur = blurPx;
-    ctx.beginPath();
-    // Outer frame clockwise
-    ctx.moveTo(-80, -80);
-    ctx.lineTo(W + 80, -80);
-    ctx.lineTo(W + 80, H + 80);
-    ctx.lineTo(-80, H + 80);
-    ctx.closePath();
-    // Inner triangle counter-clockwise hole
-    ctx.moveTo(topX, topY);
-    ctx.lineTo(leftX, leftY);
-    ctx.lineTo(rightX, rightY);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+  // Frosted DSOTM inward cyan-slate bevel (no hard outer stroke line or flat border ring: pure inward light decay matching cover)
+  const bevelReach = Math.max(14, side * 0.105);
+  const drawInwardEdgeBevel = (ax, ay, bx, by, reach, alpha) => {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len = Math.hypot(dx, dy) || 1;
+    const uxEdge = dx / len;
+    const uyEdge = dy / len;
+    // Clockwise triangle winding (top -> right -> left): (-uy, ux) points strictly INWARD
+    drawFeatheredEdge(
+      ctx,
+      ax - uxEdge * 20, ay - uyEdge * 20,
+      bx + uxEdge * 20, by + uyEdge * 20,
+      -uyEdge, uxEdge,
+      reach,
+      '158, 200, 216',
+      alpha
+    );
   };
-  // Deep smooth frosted DSOTM cyan-white glass bevel fading seamlessly inward (no nested wireframe line)
-  castInwardBevel(Math.max(16, side * 0.095), 'rgba(136, 200, 224, 0.72)');
-  castInwardBevel(Math.max(6, side * 0.036), 'rgba(196, 232, 246, 0.68)');
-
-  // Dense inner crystal rim band clipped strictly inside the triangle silhouette for cover-faithful frame thickness
   ctx.save();
-  ctx.strokeStyle = 'rgba(218, 240, 250, 0.84)';
-  ctx.lineWidth = Math.max(4.4, side * 0.015);
-  ctx.lineJoin = 'miter';
-  ctx.beginPath();
-  ctx.moveTo(topX, topY);
-  ctx.lineTo(rightX, rightY);
-  ctx.lineTo(leftX, leftY);
-  ctx.closePath();
-  ctx.stroke();
+  ctx.globalCompositeOperation = 'screen';
+  drawInwardEdgeBevel(topX, topY, rightX, rightY, bevelReach, 0.72);
+  drawInwardEdgeBevel(rightX, rightY, leftX, leftY, bevelReach, 0.72);
+  drawInwardEdgeBevel(leftX, leftY, topX, topY, bevelReach, 0.72);
   ctx.restore();
 
   // Exact ray-slope intersection so internal wedge origin locks 1:1 to incident white beam at every beamHalf
@@ -715,34 +707,17 @@ function drawPrismFrame(dt = 0.016) {
   ctx.fillStyle = entryGlow;
   ctx.fillRect(entryX - entryRadius, entryY - entryRadius, entryRadius * 2, entryRadius * 2);
   ctx.restore();
-  ctx.restore(); // End interior prism clip
 
-  // Razor crisp outer crystal edge (zero outward blur smear onto white beam or exiting rays)
-  ctx.save();
-  const rimGrad = ctx.createLinearGradient(topX, topY, cx, leftY);
-  rimGrad.addColorStop(0.00, 'rgba(232, 246, 255, 0.88)');
-  rimGrad.addColorStop(0.65, 'rgba(202, 230, 246, 0.78)');
-  rimGrad.addColorStop(1.00, 'rgba(176, 212, 236, 0.72)');
-  ctx.strokeStyle = rimGrad;
-  ctx.lineWidth = 1.25;
-  ctx.lineJoin = 'miter';
-  ctx.beginPath();
-  ctx.moveTo(topX, topY);
-  ctx.lineTo(rightX, rightY);
-  ctx.lineTo(leftX, leftY);
-  ctx.closePath();
-  ctx.stroke();
-
-  // Crisp bright photon junction seamlessly joining left incident beam across the crystal rim
+  // Crisp bright left entry junction flush with incident white beam thickness
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.moveTo(hitTopX - ux * 1.4, hitTopY - uy * 1.4);
-  ctx.lineTo(hitTopX + ux * 2.2, hitTopY + uy * 2.2);
-  ctx.lineTo(hitBotX + ux * 2.2, hitBotY + uy * 2.2);
+  ctx.lineTo(hitTopX + ux * 1.8, hitTopY + uy * 1.8);
+  ctx.lineTo(hitBotX + ux * 1.8, hitBotY + uy * 1.8);
   ctx.lineTo(hitBotX - ux * 1.4, hitBotY - uy * 1.4);
   ctx.closePath();
   ctx.fill();
-  ctx.restore();
+  ctx.restore(); // End interior prism clip
 
   S.hitBoxes.push({
     kind: 'prism',
