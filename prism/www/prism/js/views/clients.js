@@ -3,7 +3,7 @@
  * ============================================================================ */
 
 import { S, desatObsidianRgb, opticalLoad, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.6.6';
-import { $, $$, el } from '../dom.js?v=5.6.6';
+import { $, $$, el, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.6.6';
 import { write, openLoginModal } from '../api.js?v=5.6.6';
 
 const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
@@ -61,15 +61,25 @@ function compareStableTie(a, b) {
   return String(a.mac || '').localeCompare(String(b.mac || ''));
 }
 
+function devEffectiveRates(d, flowByIp) {
+  const f = (d?.ip && flowByIp[d.ip]) ? flowByIp[d.ip] : null;
+  const down = Math.max(Number(d?.down) || 0, f?.down || 0);
+  const up = Math.max(Number(d?.up) || 0, f?.up || 0);
+  const count = f?.count || 0;
+  return { down, up, count };
+}
+
 function compareDevices(a, b, mode, byIp) {
   if (mode === 'ip') {
     return compareStableTie(a, b);
   }
   if (a.online !== b.online) return a.online ? -1 : 1;
   if (mode === 'rate') {
-    const ra = (byIp[a.ip]?.down || 0) + (byIp[a.ip]?.up || 0);
-    const rb = (byIp[b.ip]?.down || 0) + (byIp[b.ip]?.up || 0);
-    if (rb !== ra) return rb - ra;
+    const ra = devEffectiveRates(a, byIp);
+    const rb = devEffectiveRates(b, byIp);
+    const ta = ra.down + ra.up;
+    const tb = rb.down + rb.up;
+    if (tb !== ta) return tb - ta;
   } else if (mode === 'flows') {
     const fa = byIp[a.ip]?.count || 0;
     const fb = byIp[b.ip]?.count || 0;
@@ -79,19 +89,30 @@ function compareDevices(a, b, mode, byIp) {
 }
 
 let lastFlowSrc = null;
+let lastFlowByteSig = '';
 let lastFlowResult = { byIp: {}, rows: [] };
 let lastConnRender = null;
+
+function quickConnSig(conns) {
+  const n = conns.length;
+  if (!n) return '0';
+  const a = conns[0];
+  const b = conns[n - 1];
+  return `${n}:${a.key || ''}:${a.down || 0}:${a.up || 0}:${b.key || ''}:${b.down || 0}:${b.up || 0}`;
+}
 
 function computeFlowDeltas() {
   if (!S.session || !S.connections) {
     lastFlowSrc = S.connections;
+    lastFlowByteSig = '';
     lastFlowResult = { byIp: {}, rows: [] };
     return lastFlowResult;
   }
-  if (S.connections === lastFlowSrc)
+  const conns = S.connections.connections || [];
+  const qSig = quickConnSig(conns);
+  if (S.connections === lastFlowSrc && qSig === lastFlowByteSig)
     return lastFlowResult;
 
-  const conns = S.connections.connections || [];
   const now = performance.now();
   const dt = S.flowSnapshotTs ? (now - S.flowSnapshotTs) / 1000 : 0;
   const nextSnap = {};
@@ -101,7 +122,7 @@ function computeFlowDeltas() {
   for (const f of conns) {
     const prev = S.flowSnapshot[f.key];
     let rDown = 0, rUp = 0;
-    if (prev && dt > 0.4 && f.down >= prev.down && f.up >= prev.up) {
+    if (prev && dt > 0.35 && f.down >= prev.down && f.up >= prev.up) {
       rDown = (f.down - prev.down) / dt;
       rUp = (f.up - prev.up) / dt;
     }
@@ -117,6 +138,7 @@ function computeFlowDeltas() {
   S.flowSnapshot = nextSnap;
   S.flowSnapshotTs = now;
   lastFlowSrc = S.connections;
+  lastFlowByteSig = qSig;
   lastFlowResult = { byIp, rows };
   return lastFlowResult;
 }
@@ -181,7 +203,7 @@ function createDeviceCard(mac) {
   }, '✎');
 
   const linkEl = el('span', { class: 'c-sec', style: { fontSize: '10.5px', flexShrink: '0' } });
-  const flowsEl = el('span', { class: 'c-blue', style: { fontSize: '10.5px', fontWeight: '600', flexShrink: '0' } });
+  const flowsEl = el('span', { class: 'c-blue dev-flows-tag' });
   const ipRateEl = el('span', { class: 'c-muted', style: { fontSize: '10.5px', fontVariantNumeric: 'tabular-nums' } });
 
   const pillBtns = {};
@@ -283,63 +305,81 @@ function createDeviceCard(mac) {
 function syncDeviceCard(card, d, dr, isSelected) {
   card._dev = d;
   card._dr = dr;
-  const r = card._refs;
   const label = d.name || d.host || d.mac.slice(-8);
   const policy = d.policy || 'auto';
   const totalBps = (dr?.down || 0) + (dr?.up || 0);
-  const vis = deviceTileVisual(policy, !!d.online, totalBps);
-
-  card.className = `dev-nav-item ${d.online ? 'online' : 'offline'} ${isSelected ? 'active' : ''}`;
-  card.style.setProperty('--dev-sc-rgb', vis.scRgb);
-  card.style.setProperty('--dev-rgb', vis.litRgb);
-  card.style.setProperty('--dev-fill', vis.fill);
-  card.style.setProperty('--dev-glow', vis.glow);
-  r.dotEl.className = d.online ? 'run-dot mint' : 'run-dot off';
-
-  if (editingMac !== d.mac) {
-    r.nameEl.textContent = label;
-    r.nameEl.title = `${label} (${d.mac})`;
-  }
-
   const radio = d.signal ? ` ${d.signal}dBm` : '';
-  r.linkEl.textContent = `${d.link || 'wired'}${radio}`;
-  r.linkEl.className = d.online ? 'dev-meta-txt' : 'c-muted';
-  r.flowsEl.textContent = S.session && dr.count > 0 ? `${dr.count} 流` : (d.online ? '在線' : '離線');
-  r.flowsEl.className = S.session && dr.count > 0 ? 'c-blue dev-meta-strong' : (d.online ? 'c-mint dev-meta-strong' : 'c-muted');
-
-  const rateStr = S.session && (totalBps > 50)
+  const linkTxt = `${d.link || 'wired'}${radio}`;
+  const hasFlows = !!(S.session && dr.count > 0);
+  const flowTxt = hasFlows ? `${dr.count} 流` : (d.online ? '在線' : '離線');
+  const rateStr = totalBps > 50
     ? ` · ↓${fmtRateCompact(dr.down)} ↑${fmtRateCompact(dr.up)}`
     : '';
-  r.ipRateEl.textContent = `${d.ip || d.mac.slice(-8)}${rateStr}`;
-  r.ipRateEl.className = rateStr ? 'c-mint dev-meta-strong' : (d.online ? 'dev-meta-txt' : 'c-muted');
+  const ipRateTxt = `${d.ip || d.mac.slice(-8)}${rateStr}`;
+  const editing = editingMac === d.mac;
+  const sig = `${d.online ? 1 : 0}|${isSelected ? 1 : 0}|${policy}|${editing ? '' : label}|${linkTxt}|${flowTxt}|${ipRateTxt}|${Math.round(opticalLoad(totalBps, 6, 0.10) * 160)}`;
+  if (card._renderSig === sig) return;
+  card._renderSig = sig;
+
+  const r = card._refs;
+  const vis = deviceTileVisual(policy, !!d.online, totalBps);
+
+  setCls(card, `dev-nav-item ${d.online ? 'online' : 'offline'} ${isSelected ? 'active' : ''}`);
+  setVar(card, '--dev-sc-rgb', vis.scRgb);
+  setVar(card, '--dev-rgb', vis.litRgb);
+  setVar(card, '--dev-fill', vis.fill);
+  setVar(card, '--dev-glow', vis.glow);
+  setCls(r.dotEl, d.online ? 'run-dot mint' : 'run-dot off');
+
+  if (!editing) {
+    setTxt(r.nameEl, label);
+    setTitle(r.nameEl, `${label} (${d.mac})`);
+  }
+
+  setTxt(r.linkEl, linkTxt);
+  setCls(r.linkEl, d.online ? 'dev-meta-txt' : 'c-muted');
+  setTxt(r.flowsEl, flowTxt);
+  setCls(r.flowsEl, hasFlows ? 'c-blue dev-meta-strong dev-flows-tag' : (d.online ? 'c-mint dev-meta-strong dev-flows-tag' : 'c-muted dev-flows-tag'));
+
+  setTxt(r.ipRateEl, ipRateTxt);
+  setCls(r.ipRateEl, rateStr ? 'c-mint dev-meta-strong' : (d.online ? 'dev-meta-txt' : 'c-muted'));
 
   for (const p of POLICIES) {
     r.pillBtns[p].classList.toggle('on', p === policy);
   }
 }
 
-// Keyed in-place reconciliation: preserves DOM nodes & open inputs across 2s polls (Fixes 圖8)
+// Keyed in-place reconciliation: preserves DOM nodes & open inputs across 1s polls
 function renderDeviceMenu(devs, byIp, totalFlows) {
   const onlineCnt = devs.filter(d => d.online).length;
-  if ($('#clients-online-cnt')) $('#clients-online-cnt').textContent = `${onlineCnt} 在線 / ${devs.length} 台`;
+  setTxt('#clients-online-cnt', `${onlineCnt} 在線 / ${devs.length} 台`);
 
-  let totDown = 0;
-  let totUp = 0;
+  let flowDown = 0;
+  let flowUp = 0;
   for (const ip of Object.keys(byIp)) {
-    totDown += byIp[ip].down;
-    totUp += byIp[ip].up;
+    flowDown += byIp[ip].down;
+    flowUp += byIp[ip].up;
   }
-  if ($('#dev-all-rate')) $('#dev-all-rate').textContent = S.session ? fmtRate(totDown).full : `${onlineCnt} 台`;
-  if ($('#dev-all-flows')) $('#dev-all-flows').textContent = S.session ? `${totalFlows} 條活躍流` : '全局檢視';
+  let kernDown = 0;
+  let kernUp = 0;
+  for (const d of devs) {
+    kernDown += Number(d.down) || 0;
+    kernUp += Number(d.up) || 0;
+  }
+  const totDown = Math.max(kernDown, flowDown);
+  const totUp = Math.max(kernUp, flowUp);
+  setTxt('#dev-all-rate', fmtRate(totDown).full);
+  setTxt('#dev-all-flows', S.session ? `${totalFlows} 條活躍流` : `${onlineCnt} 台在線`);
 
   const navAll = $('#dev-nav-all');
   if (navAll) {
-    navAll.classList.toggle('active', S.selectedDeviceMac === 'all');
+    const wantAll = S.selectedDeviceMac === 'all';
+    if (navAll.classList.contains('active') !== wantAll) navAll.classList.toggle('active', wantAll);
     const allVis = deviceTileVisual('game', onlineCnt > 0 || devs.length > 0, totDown + totUp);
-    navAll.style.setProperty('--dev-sc-rgb', allVis.scRgb);
-    navAll.style.setProperty('--dev-rgb', allVis.litRgb);
-    navAll.style.setProperty('--dev-fill', allVis.fill);
-    navAll.style.setProperty('--dev-glow', allVis.glow);
+    setVar(navAll, '--dev-sc-rgb', allVis.scRgb);
+    setVar(navAll, '--dev-rgb', allVis.litRgb);
+    setVar(navAll, '--dev-fill', allVis.fill);
+    setVar(navAll, '--dev-glow', allVis.glow);
   }
 
   const list = $('#dev-menu-list');
@@ -353,7 +393,10 @@ function renderDeviceMenu(devs, byIp, totalFlows) {
   });
 
   const sortMode = S.devSort || 'stable';
-  $$('#dev-sort-seg .seg-btn').forEach(b => b.classList.toggle('on', b.dataset.sort === sortMode));
+  $$('#dev-sort-seg .seg-btn').forEach(b => {
+    const want = b.dataset.sort === sortMode;
+    if (b.classList.contains('on') !== want) b.classList.toggle('on', want);
+  });
 
   const sorted = [...filtered].sort((a, b) => compareDevices(a, b, sortMode, byIp));
 
@@ -403,7 +446,7 @@ function renderDeviceMenu(devs, byIp, totalFlows) {
   }
 
   ordered.forEach((d, idx) => {
-    const dr = byIp[d.ip] || { down: 0, up: 0, count: 0 };
+    const dr = devEffectiveRates(d, byIp);
     let card = existingByMac.get(d.mac);
     if (!card) card = createDeviceCard(d.mac);
     syncDeviceCard(card, d, dr, S.selectedDeviceMac === d.mac);
@@ -419,14 +462,8 @@ function renderDeviceMenu(devs, byIp, totalFlows) {
 }
 
 function renderConnections(devs, selectedDev, rows) {
-  const scopeBadge = $('#conn-scope-badge');
-  const clearBtn = $('#btn-conn-clear-dev');
-  if (scopeBadge) {
-    scopeBadge.textContent = selectedDev ? `${selectedDev.name || selectedDev.host || selectedDev.ip}` : '全局連接';
-  }
-  if (clearBtn) {
-    clearBtn.style.display = selectedDev ? 'inline-flex' : 'none';
-  }
+  setTxt('#conn-scope-badge', selectedDev ? `${selectedDev.name || selectedDev.host || selectedDev.ip}` : '全局連接');
+  setStyleProp($('#btn-conn-clear-dev'), 'display', selectedDev ? 'inline-flex' : 'none');
 
   const empty = $('#conn-empty');
   const wrap = $('#conn-table-wrap');
@@ -434,11 +471,11 @@ function renderConnections(devs, selectedDev, rows) {
   if (!S.session) {
     lastConnRender = null;
     if (empty) {
-      empty.textContent = '請點擊右上角「管理登入」查看實時連接流表';
-      empty.style.display = 'block';
+      setTxt(empty, '請點擊右上角「管理登入」查看實時連接流表');
+      setStyleProp(empty, 'display', 'block');
     }
-    if (wrap) wrap.style.display = 'none';
-    if ($('#conn-cap')) $('#conn-cap').textContent = '未認證';
+    setStyleProp(wrap, 'display', 'none');
+    setTxt('#conn-cap', '未認證');
     return;
   }
 

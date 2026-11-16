@@ -104,7 +104,7 @@
 
 .nav-tab .tab-badge {
   font-size: 10px;
-  min-width: 24px;
+  min-width: 26px;
   height: 17px;
   padding: 0 5px;
   display: inline-flex;
@@ -167,16 +167,18 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 108px;
   max-width: 165px;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
 #health-pill {
-  min-width: 138px;
+  min-width: 148px;
 }
 
 #btn-auth {
-  min-width: 96px;
+  min-width: 106px;
 }
 
 /* Main Workspace Locked Cleanly Inside Viewport */
@@ -382,14 +384,29 @@
   box-shadow: 0 0 6px var(--c-mint), 0 0 11px rgba(87, 209, 146, 0.42);
 }
 
-#ft-strands, #ft-vip, #ft-tunnel, #ft-guard, #ft-down {
-  font-variant-numeric: tabular-nums;
-}
+#cli-policy,
+#cli-cage,
+#cli-vip,
+#ft-strands,
+#ft-vip,
+#ft-tunnel,
+#ft-guard,
 #ft-down {
   display: inline-block;
-  min-width: 72px;
-  text-align: right;
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-variant-numeric: tabular-nums;
 }
+
+#cli-policy  { min-width: 56px; }
+#cli-cage    { min-width: 82px; max-width: 165px; overflow: hidden; text-overflow: ellipsis; }
+#cli-vip     { min-width: 52px; }
+#ft-strands  { min-width: 56px; }
+#ft-vip      { min-width: 114px; }
+#ft-tunnel   { min-width: 68px; }
+#ft-guard    { min-width: 92px; }
+#ft-down     { width: 86px; }
 
 @media (max-width: 1120px) {
   .topbar {
@@ -464,6 +481,11 @@
   }
   .telemetry-footer {
     height: auto;
+    flex-wrap: wrap;
+    padding: 6px 14px;
+  }
+  .footer-left,
+  .footer-right {
     flex-wrap: wrap;
   }
 }

@@ -7,6 +7,46 @@ import { fmtClock, spectralColor } from './state.js?v=5.6.6';
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+const resolveNode = (target) => (typeof target === 'string' ? $(target) : target);
+
+export function setTxt(target, val) {
+  const n = resolveNode(target);
+  if (!n) return null;
+  const s = String(val);
+  if (n.textContent !== s) n.textContent = s;
+  return n;
+}
+
+export function setCls(target, cls) {
+  const n = resolveNode(target);
+  if (!n) return null;
+  if (n.className !== cls) n.className = cls;
+  return n;
+}
+
+export function setTitle(target, val) {
+  const n = resolveNode(target);
+  if (!n) return null;
+  const s = String(val);
+  if (n.title !== s) n.title = s;
+  return n;
+}
+
+export function setVar(node, name, val) {
+  if (!node?.style?.setProperty) return;
+  const s = String(val);
+  const vars = node._cssVars || (node._cssVars = new Map());
+  if (vars.get(name) === s) return;
+  vars.set(name, s);
+  node.style.setProperty(name, s);
+}
+
+export function setStyleProp(node, prop, val) {
+  if (!node?.style) return;
+  const s = String(val);
+  if (node.style[prop] !== s) node.style[prop] = s;
+}
+
 export function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {

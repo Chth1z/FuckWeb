@@ -764,6 +764,34 @@
         <span>down <strong id="ft-down" class="c-bright">0 Mbps</strong></span>
       </div>
     </footer>
+    <script>
+    (function(){
+      try {
+        var raw = sessionStorage.getItem('prism_snap_v1');
+        if (!raw) return;
+        var snap = JSON.parse(raw);
+        var st = snap && snap.status;
+        if (!st || (Date.now() - (snap.savedAt || 0)) >= 180000) return;
+        var w = st.weave || {}, tun = snap.tunnel, strands = st.strands || [];
+        var setT = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
+        setT('cli-policy', w.policy || 'harvest');
+        setT('cli-cage', String((tun && (tun.tw_home || tun.selected)) || 'tw-home').slice(0, 22));
+        setT('cli-vip', w.vip_dev || 'auto');
+        setT('ft-strands', '[' + (st.healthy_count != null ? st.healthy_count : 0) + '/' + (st.strand_count != null ? st.strand_count : 21) + ']');
+        var vipS = null;
+        for (var i = 0; i < strands.length; i++) { if (strands[i] && strands[i].vip) { vipS = strands[i]; break; } }
+        setT('ft-vip', vipS ? ('[' + vipS.dev + ' · ' + vipS.ttfb_ms + 'ms]') : '[—]');
+        setT('ft-tunnel', '[' + (st.tunnel && st.tunnel.on ? 'tw-home' : 'direct') + ']');
+        setT('ft-guard', (st.tunnel && st.tunnel.fail_open) ? '[fail_open]' : '[fail_closed]');
+        var bps = Math.max(0, (st.rate || 0) * 8);
+        var f = bps < 1000 ? (bps.toFixed(0) + ' bps')
+          : (bps < 1e6 ? (((bps / 1000) < 10 ? (bps / 1000).toFixed(1) : (bps / 1000).toFixed(0)) + ' Kbps')
+            : (bps < 1e9 ? (((bps / 1e6) < 10 ? (bps / 1e6).toFixed(2) : (bps / 1e6).toFixed(1)) + ' Mbps')
+              : ((bps / 1e9).toFixed(2) + ' Gbps')));
+        setT('ft-down', f);
+      } catch (_) {}
+    })();
+    </script>
 
   </div>
 

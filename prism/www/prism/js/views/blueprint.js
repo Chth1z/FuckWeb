@@ -3,7 +3,7 @@
  * ============================================================================ */
 
 import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6';
-import { $, $$, el, renderSegMeter, renderSessionLog } from '../dom.js?v=5.6.6';
+import { $, $$, el, renderSegMeter, renderSessionLog, setTxt, setCls, setTitle, setVar } from '../dom.js?v=5.6.6';
 import { write, call } from '../api.js?v=5.6.6';
 
 let drawerOpen = false;
@@ -84,6 +84,9 @@ function paintModuleHeat(m, h) {
   const node = $(m.id);
   if (!node) return;
   const k = Math.max(0.03, Math.min(1, h));
+  const paintKey = `${m.kind}:${m.rgb || ''}:${Math.round(k * 200)}`;
+  if (m._lastPaintKey === paintKey) return;
+  m._lastPaintKey = paintKey;
   const sat = 0.16 + 0.84 * Math.pow(k, 0.78);
   const bdrA = (0.30 + 0.62 * Math.pow(k, 0.70)).toFixed(3);
   const glowA = (0.02 + 0.28 * Math.pow(k, 1.15)).toFixed(3);
@@ -293,8 +296,8 @@ function drawRefractedVerticalBridge(ctx, topCard, botCard, waveSt, phaseOffset,
 function makeFlowShimmerGradient(ctx, x0, y0, x1, y1, st, phaseOffset, rgb, maxAlpha) {
   const p = (st.phase + phaseOffset) % 1.0;
   const grad = ctx.createLinearGradient(x0, y0, x1, y1);
-  for (let i = 0; i <= 16; i++) {
-    const u = i / 16;
+  for (let i = 0; i <= 6; i++) {
+    const u = i / 6;
     const d1 = Math.abs((((u - p) % 1 + 1.5) % 1) - 0.5);
     const wave = Math.exp(-Math.pow(d1 / 0.16, 2));
     grad.addColorStop(u, `rgba(${rgb}, ${Math.min(maxAlpha, wave * st.glow * maxAlpha).toFixed(3)})`);
@@ -740,22 +743,17 @@ function drawDualPrismPipeline(ctx, W, H, ing, vip, tun, dom, qos, prismsQueue) 
   drawCrystalPrism(ctx, g2, 'merge');
 }
 
-function renderWaveguidesCanvas() {
-  const pipe = $('#bp-pipeline');
-  const canvas = $('#bp-flow-canvas');
-  if (!pipe || !canvas) return;
+let cachedBpLayout = null;
+let bpLayoutDirty = true;
+let lastCanvasPaintTs = 0;
 
+function markBpLayoutDirty() {
+  bpLayoutDirty = true;
+}
+
+function measureBpLayout(pipe) {
   const rect = pipe.getBoundingClientRect();
-  if (rect.width < 40 || rect.height < 40) return;
-
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const cw = Math.round(rect.width * dpr);
-  const ch = Math.round(rect.height * dpr);
-  if (canvas.width !== cw || canvas.height !== ch) {
-    canvas.width = cw;
-    canvas.height = ch;
-  }
-
+  if (rect.width < 40 || rect.height < 40) return null;
   const pre = relBox($('#bp-card-pregate'), rect);
   const ing = relBox($('#bp-card-ingress'), rect);
   const vip = relBox($('#bp-card-vip'), rect);
@@ -763,12 +761,34 @@ function renderWaveguidesCanvas() {
   const dom = relBox($('#bp-card-dom'), rect);
   const qos = relBox($('#bp-card-qos'), rect);
   const up  = relBox($('#bp-card-uplink'), rect);
-  if (!pre || !ing || !vip || !tun || !dom || !qos || !up) return;
+  if (!pre || !ing || !vip || !tun || !dom || !qos || !up) return null;
+  cachedBpLayout = { width: rect.width, height: rect.height, pre, ing, vip, tun, dom, qos, up };
+  bpLayoutDirty = false;
+  return cachedBpLayout;
+}
+
+function renderWaveguidesCanvas() {
+  const pipe = $('#bp-pipeline');
+  const canvas = $('#bp-flow-canvas');
+  if (!pipe || !canvas) return;
+
+  const lay = (!bpLayoutDirty && cachedBpLayout) ? cachedBpLayout : measureBpLayout(pipe);
+  if (!lay) return;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cw = Math.round(lay.width * dpr);
+  const ch = Math.round(lay.height * dpr);
+  if (canvas.width !== cw || canvas.height !== ch) {
+    canvas.width = cw;
+    canvas.height = ch;
+  }
+
+  const { pre, ing, vip, tun, dom, qos, up } = lay;
 
   const ctx = canvas.getContext('2d');
   ctx.save();
   ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, rect.width, rect.height);
+  ctx.clearRect(0, 0, lay.width, lay.height);
 
   const prismsQueue = [];
 
@@ -788,7 +808,7 @@ function renderWaveguidesCanvas() {
   }
 
   // Symmetric Center-Axis Dual Prisms + Single-Bend 45-deg TIR Mirrors
-  drawDualPrismPipeline(ctx, rect.width, rect.height, ing, vip, tun, dom, qos, prismsQueue);
+  drawDualPrismPipeline(ctx, lay.width, lay.height, ing, vip, tun, dom, qos, prismsQueue);
 
   // Render all 45-degree crystal turning prisms crisply above straight beam spans
   for (const p of prismsQueue) drawRightAngleTurningPrism(ctx, p);
@@ -815,13 +835,17 @@ function stepAnimation(now) {
     b.phase = (b.phase + b.vel * dt) % 1.0;
   }
 
+  let heatDirty = false;
   const heatElapsed = now - lastHeatPaintTs;
   if (heatElapsed >= 33) {
     lastHeatPaintTs = now;
-    paintAllModuleHeats(false, Math.min(0.1, heatElapsed / 1000));
+    heatDirty = paintAllModuleHeats(false, Math.min(0.1, heatElapsed / 1000));
   }
 
-  renderWaveguidesCanvas();
+  if (bpLayoutDirty || !lastCanvasPaintTs || (now - lastCanvasPaintTs) >= 28 || heatDirty) {
+    lastCanvasPaintTs = now;
+    renderWaveguidesCanvas();
+  }
   rafId = requestAnimationFrame(stepAnimation);
 }
 
@@ -838,6 +862,7 @@ export function stopBlueprintAnim() {
     cancelAnimationFrame(rafId);
     rafId = null;
     lastFrameTs = 0;
+    lastCanvasPaintTs = 0;
   }
 }
 
@@ -1096,16 +1121,19 @@ function renderMiniSpectrum(strands) {
     const cell = bar.children[i];
     if (!cell) continue;
     const col = spectralColor(i, strands.length);
+    const pct = (s.tokens_pct ?? 100) / 100;
+    const active = (s.now ?? s.rate ?? 0) > 2000;
     const rateTxt = fmtRateCompact((s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0));
-    cell.title = `${s.dev} (#${s.id}) · ${s.healthy ? `${rateTxt} · τ=${s.ttfb_ms ?? '—'}ms · ${s.tokens_pct ?? 100}%` : 'fault'}`;
+    const sig = `${s.healthy ? 1 : 0}:${Math.round(pct * 50)}:${active ? 1 : 0}:${rateTxt}:${s.ttfb_ms ?? ''}`;
+    if (cell._spSig === sig) continue;
+    cell._spSig = sig;
+    setTitle(cell, `${s.dev} (#${s.id}) · ${s.healthy ? `${rateTxt} · τ=${s.ttfb_ms ?? '—'}ms · ${s.tokens_pct ?? 100}%` : 'fault'}`);
     if (!s.healthy) {
       cell.style.backgroundColor = 'rgba(230, 108, 120, 0.35)';
       cell.style.boxShadow = 'none';
       cell.style.opacity = '0.45';
     } else {
       cell.style.backgroundColor = col.css;
-      const pct = (s.tokens_pct ?? 100) / 100;
-      const active = (s.now ?? s.rate ?? 0) > 2000;
       cell.style.opacity = String(0.36 + pct * 0.64);
       cell.style.boxShadow = active ? `0 0 8px ${col.css}` : 'none';
     }
@@ -1118,6 +1146,7 @@ function ensureBlueprintResizeObserver() {
   const pipe = $('#bp-pipeline');
   if (!pipe) return;
   bpResizeObserver = new ResizeObserver(() => {
+    markBpLayoutDirty();
     if (S.tab === 'blueprint') renderWaveguidesCanvas();
   });
   bpResizeObserver.observe(pipe);
@@ -1171,6 +1200,7 @@ export function renderBlueprint() {
   const st = S.status;
   if (!st) return;
 
+  markBpLayoutDirty();
   updateFlowPhysics(st);
   if (!lastHeatPaintTs) {
     lastHeatPaintTs = performance.now();
@@ -1188,11 +1218,11 @@ export function renderBlueprint() {
   if (mptcpBadge) {
     const mp = st.mptcp;
     if (mp?.enabled) {
-      mptcpBadge.className = 'st-badge charged';
-      mptcpBadge.textContent = `MPTCP · ${mp.subflows} subflows · ${mp.endpoints?.length || 0} ep`;
+      setCls(mptcpBadge, 'st-badge charged');
+      setTxt(mptcpBadge, `MPTCP · ${mp.subflows} subflows · ${mp.endpoints?.length || 0} ep`);
     } else {
-      mptcpBadge.className = 'st-badge draining';
-      mptcpBadge.textContent = 'MPTCP · standby';
+      setCls(mptcpBadge, 'st-badge draining');
+      setTxt(mptcpBadge, 'MPTCP · standby');
     }
   }
 
@@ -1201,52 +1231,52 @@ export function renderBlueprint() {
   const canaryFails = st.tunnel?.canary_fails ?? 0;
   const verdictEl = $('#adv-verdict');
   if (verdictEl) {
-    verdictEl.textContent = st.ok ? 'zero-leak' : (st.fail?.[0] || 'check failed');
-    verdictEl.className = `bp-meter-val ${st.ok ? 'c-violet' : 'c-crimson'}`;
+    setTxt(verdictEl, st.ok ? 'zero-leak' : (st.fail?.[0] || 'check failed'));
+    setCls(verdictEl, `bp-meter-val ${st.ok ? 'c-violet' : 'c-crimson'}`);
   }
 
   const failClosedEl = $('#adv-failclosed');
   if (failClosedEl) {
     const fc = !st.tunnel?.fail_open;
-    failClosedEl.textContent = fc ? 'v6✕ · DoT:853✕' : 'fail-open (!)';
-    failClosedEl.className = `v ${fc ? 'c-violet' : 'c-amber'}`;
+    setTxt(failClosedEl, fc ? 'v6✕ · DoT:853✕' : 'fail-open (!)');
+    setCls(failClosedEl, `v ${fc ? 'c-violet' : 'c-amber'}`);
   }
 
   const dnsEl = $('#adv-dns');
   if (dnsEl) {
-    dnsEl.textContent = st.dns?.smartdns
+    setTxt(dnsEl, st.dns?.smartdns
       ? `53→${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}`
-      : 'offline';
-    dnsEl.className = `v ${st.dns?.smartdns ? 'c-violet' : 'c-crimson'}`;
+      : 'offline');
+    setCls(dnsEl, `v ${st.dns?.smartdns ? 'c-violet' : 'c-crimson'}`);
   }
 
-  $('#adv-canary').textContent = canaryMs > 0 ? `${canaryMs} ms (${canaryFails}f)` : (st.tunnel?.on ? 'active' : 'off');
+  setTxt('#adv-canary', canaryMs > 0 ? `${canaryMs} ms (${canaryFails}f)` : (st.tunnel?.on ? 'active' : 'off'));
   const checks = S.doctor?.checks || [];
   const offCheck = checks.find(c => c.id === 'privacy_no_offload');
   const offEl = $('#adv-offload');
   if (offEl) {
     const offOk = offCheck ? !!offCheck.ok : true;
-    offEl.textContent = offOk ? 'per-pkt ok' : 'offload leak!';
-    offEl.className = `v ${offOk ? 'c-violet' : 'c-crimson'}`;
+    setTxt(offEl, offOk ? 'per-pkt ok' : 'offload leak!');
+    setCls(offEl, `v ${offOk ? 'c-violet' : 'c-crimson'}`);
   }
 
   const siteEl = $('#adv-site');
   if (siteEl) {
     const sName = st.site?.name || (st.site?.gateway ? 'unnamed gw' : 'direct');
-    siteEl.textContent = `${sName} · ${st.settings?.['strands.aggregate'] || st.site?.mode || 'auto'}`;
+    setTxt(siteEl, `${sName} · ${st.settings?.['strands.aggregate'] || st.site?.mode || 'auto'}`);
   }
 
   const ctCount = st.sys?.conntrack?.count ?? 0;
   const ctMax = Math.max(1, st.sys?.conntrack?.max ?? 131072);
-  $('#adv-ct').textContent = `${ctCount.toLocaleString()}/${(ctMax / 1024).toFixed(0)}k`;
-  $('#adv-strands').textContent = `${st.healthy_count ?? 0}/${st.strand_count ?? 21} (${st.role === 'primary' ? '主' : (st.role || '主')})`;
+  setTxt('#adv-ct', `${ctCount.toLocaleString()}/${(ctMax / 1024).toFixed(0)}k`);
+  setTxt('#adv-strands', `${st.healthy_count ?? 0}/${st.strand_count ?? 21} (${st.role === 'primary' ? '主' : (st.role || '主')})`);
 
   // Subsystem Invariants Grid inside PRISM_GUARD (exact disjoint partition of doctor checks)
   const totChecks = checks.length || 41;
   const okChecks = checks.length ? checks.filter(c => c.ok).length : (st.ok ? totChecks : 0);
   if ($('#adv-inv-score')) {
-    $('#adv-inv-score').textContent = `${okChecks}/${totChecks} ok`;
-    $('#adv-inv-score').className = `bp-live-rate ${okChecks === totChecks ? 'c-violet' : 'c-crimson'}`;
+    setTxt('#adv-inv-score', `${okChecks}/${totChecks} ok`);
+    setCls('#adv-inv-score', `bp-live-rate ${okChecks === totChecks ? 'c-violet' : 'c-crimson'}`);
   }
   renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, okChecks === totChecks ? 'violet' : 'crimson', false);
 
@@ -1335,11 +1365,19 @@ export function renderBlueprint() {
     $('#bp-site-name').textContent = siteName;
     $('#bp-site-name').title = `${siteName} (${curMode})`;
   }
-  if ($('#bp-pregate-rules')) {
-    const preEl = $('#bp-pregate-rules');
-    preEl.innerHTML = '';
-    preEl.appendChild(el('span', {}, 'IPv6 drop · DoT:853 drop'));
-    preEl.appendChild(el('span', { class: st.tunnel?.fail_open ? 'c-amber' : 'c-spectrum' }, st.tunnel?.fail_open ? 'fail-open' : 'fail-closed'));
+  const preEl = $('#bp-pregate-rules');
+  if (preEl) {
+    if (!preEl._init) {
+      preEl._init = true;
+      preEl.innerHTML = '';
+      preEl._leftSpan = el('span', {}, 'IPv6 drop · DoT:853 drop');
+      preEl._rightSpan = el('span', { class: 'c-spectrum' }, 'fail-closed');
+      preEl.appendChild(preEl._leftSpan);
+      preEl.appendChild(preEl._rightSpan);
+    }
+    const isOpen = !!st.tunnel?.fail_open;
+    setCls(preEl._rightSpan, isOpen ? 'c-amber' : 'c-spectrum');
+    setTxt(preEl._rightSpan, isOpen ? 'fail-open' : 'fail-closed');
   }
 
   const chargedRatio = (w.charged_count || 0) / nH;
@@ -1591,13 +1629,16 @@ export function renderBlueprint() {
     const ratio = bps > 32
       ? Math.min(1, Math.max(0.18, 0.16 + (bps / qosTotBps) * 0.55 + Math.min(0.45, Math.log10(1 + ((bps * 8) / 1e6) * 7) * 0.45)))
       : 0.04;
+    const q = `${baseRgb}:${Math.round(ratio * 180)}`;
+    if (chip._lastQ === q) return;
+    chip._lastQ = q;
     const sat = 0.22 + 0.78 * Math.pow(ratio, 0.8);
-    chip.style.setProperty('--qb-rgb', desatObsidianRgb(baseRgb, sat));
-    chip.style.setProperty('--qb-fill', (0.06 + 0.18 * ratio).toFixed(3));
-    chip.style.setProperty('--qb-inset-a', (0.06 + 0.18 * ratio).toFixed(3));
-    chip.style.setProperty('--qb-bdr-a', (0.20 + 0.58 * ratio).toFixed(2));
-    chip.style.setProperty('--qb-glow-blur', `${Math.round(4 + 14 * ratio)}px`);
-    chip.style.setProperty('--qb-glow-a', (0.03 + 0.24 * ratio).toFixed(2));
+    setVar(chip, '--qb-rgb', desatObsidianRgb(baseRgb, sat));
+    setVar(chip, '--qb-fill', (0.06 + 0.18 * ratio).toFixed(3));
+    setVar(chip, '--qb-inset-a', (0.06 + 0.18 * ratio).toFixed(3));
+    setVar(chip, '--qb-bdr-a', (0.20 + 0.58 * ratio).toFixed(2));
+    setVar(chip, '--qb-glow-blur', `${Math.round(4 + 14 * ratio)}px`);
+    setVar(chip, '--qb-glow-a', (0.03 + 0.24 * ratio).toFixed(2));
   };
   paintQosBandHeat('#bp-qos-10', '242, 90, 90',   liveFlow.vipBps);
   paintQosBandHeat('#bp-qos-20', '87, 209, 146',  liveFlow.tunBps);

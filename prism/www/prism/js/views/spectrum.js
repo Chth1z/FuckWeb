@@ -3,7 +3,7 @@
  * ============================================================================ */
 
 import { S, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRateCompact } from '../state.js?v=5.6.6';
-import { $, $$, el, svgEl } from '../dom.js?v=5.6.6';
+import { $, $$, el, svgEl, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.6.6';
 import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.6.6';
 
 let hoverStrandId = null;
@@ -55,19 +55,48 @@ function sparkPathCoords(pts, maxVal) {
   return d;
 }
 
+function ensureSparkPaths(svg, dev) {
+  if (svg._sparkPaths) return svg._sparkPaths;
+  const gId = `sp-grad-${String(dev).replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  svg.innerHTML = '';
+  svg.appendChild(
+    svgEl('defs', {},
+      svgEl('linearGradient', { id: gId, x1: '0', y1: '0', x2: '0', y2: '1' },
+        svgEl('stop', { offset: '0%', 'stop-color': 'rgba(255, 255, 255, 0.13)' }),
+        svgEl('stop', { offset: '68%', 'stop-color': 'rgba(255, 255, 255, 0.04)' }),
+        svgEl('stop', { offset: '100%', 'stop-color': 'rgba(255, 255, 255, 0)' })
+      )
+    )
+  );
+  const area = svgEl('path', { d: '', fill: `url(#${gId})` });
+  const up = svgEl('path', { d: '', fill: 'none', stroke: 'rgba(255, 255, 255, 0.22)', 'stroke-width': '0.85', visibility: 'hidden' });
+  const down = svgEl('path', { d: '', fill: 'none', stroke: 'rgba(255, 255, 255, 0.40)', 'stroke-width': '1.1' });
+  svg.appendChild(area);
+  svg.appendChild(up);
+  svg.appendChild(down);
+  svg._sparkPaths = { area, up, down };
+  return svg._sparkPaths;
+}
+
 function renderTileSpark(tile, dev) {
   const svg = tile._ui?.spark;
   if (!svg) return;
   const ser = S.series;
   const limit = getChartLimit();
-  const lastTs = ser?.ts?.length ? ser.ts[ser.ts.length - 1] : 0;
-  const key = `${dev}:${limit}:${lastTs}`;
+  const len = ser?.ts?.length || 0;
+  const lastTs = len ? ser.ts[len - 1] : 0;
+  const key = `${dev}:${limit}:${len}:${lastTs}`;
   if (tile._sparkKey === key) return;
   tile._sparkKey = key;
 
-  svg.innerHTML = '';
+  const paths = ensureSparkPaths(svg, dev);
   const rawDown = ser?.strands?.[dev];
-  if (!Array.isArray(rawDown) || rawDown.length < 2) return;
+  if (!Array.isArray(rawDown) || rawDown.length < 2) {
+    paths.area.setAttribute('d', '');
+    paths.down.setAttribute('d', '');
+    paths.up.setAttribute('visibility', 'hidden');
+    return;
+  }
 
   const rawUp = Array.isArray(ser?.strands_up?.[dev]) ? ser.strands_up[dev] : [];
   const slDown = downsamplePeak(rawDown.slice(Math.max(0, rawDown.length - limit)), 44);
@@ -82,36 +111,16 @@ function renderTileSpark(tile, dev) {
   }
   const scaleMax = peakBps * 1.10;
 
-  const gId = `sp-grad-${String(dev).replace(/[^a-zA-Z0-9_-]/g, '')}`;
-  svg.appendChild(
-    svgEl('defs', {},
-      svgEl('linearGradient', { id: gId, x1: '0', y1: '0', x2: '0', y2: '1' },
-        svgEl('stop', { offset: '0%', 'stop-color': 'rgba(255, 255, 255, 0.13)' }),
-        svgEl('stop', { offset: '68%', 'stop-color': 'rgba(255, 255, 255, 0.04)' }),
-        svgEl('stop', { offset: '100%', 'stop-color': 'rgba(255, 255, 255, 0)' })
-      )
-    )
-  );
-
   const dDown = sparkPathCoords(slDown, scaleMax);
-  const dArea = `${dDown} L100.0,32.0 L0.0,32.0 Z`;
-  svg.appendChild(svgEl('path', { d: dArea, fill: `url(#${gId})` }));
+  paths.area.setAttribute('d', `${dDown} L100.0,32.0 L0.0,32.0 Z`);
+  paths.down.setAttribute('d', dDown);
 
   if (slUp.length === slDown.length && slUp.some(v => v > 0)) {
-    svg.appendChild(svgEl('path', {
-      d: sparkPathCoords(slUp, scaleMax),
-      fill: 'none',
-      stroke: 'rgba(255, 255, 255, 0.22)',
-      'stroke-width': '0.85'
-    }));
+    paths.up.setAttribute('d', sparkPathCoords(slUp, scaleMax));
+    paths.up.setAttribute('visibility', 'visible');
+  } else {
+    paths.up.setAttribute('visibility', 'hidden');
   }
-
-  svg.appendChild(svgEl('path', {
-    d: dDown,
-    fill: 'none',
-    stroke: 'rgba(255, 255, 255, 0.40)',
-    'stroke-width': '1.1'
-  }));
 }
 
 function renderSlotBar(barEl, slotsCount, slotCols, maxSlots, healthy) {
@@ -133,50 +142,52 @@ function renderSlotBar(barEl, slotsCount, slotCols, maxSlots, healthy) {
   barEl.appendChild(frag);
 }
 
-function syncStrandHighlight() {
+let lastHighlightKey = '';
+
+function syncStrandHighlight(force = false) {
   const activeId = getActiveStrandId();
   const activeMeta = activeId != null ? (strandMetaById.get(activeId) || null) : null;
-
-  const tiles = $('#spectrum-heatmap')?.children || [];
-  for (const tile of tiles) {
-    const id = Number(tile.dataset.sid);
-    tile.classList.toggle('pinned', S.pinnedStrandId != null && id === S.pinnedStrandId);
-    if (activeId == null) {
-      tile.classList.remove('dim', 'hi');
-    } else {
-      tile.classList.toggle('hi', id === activeId);
-      tile.classList.toggle('dim', id !== activeId);
+  const hlKey = `${activeId ?? ''}:${S.pinnedStrandId ?? ''}:${strandMetaById.size}`;
+  if (force || hlKey !== lastHighlightKey) {
+    lastHighlightKey = hlKey;
+    const tiles = $('#spectrum-heatmap')?.children || [];
+    for (const tile of tiles) {
+      const id = Number(tile.dataset.sid);
+      tile.classList.toggle('pinned', S.pinnedStrandId != null && id === S.pinnedStrandId);
+      if (activeId == null) {
+        tile.classList.remove('dim', 'hi');
+      } else {
+        tile.classList.toggle('hi', id === activeId);
+        tile.classList.toggle('dim', id !== activeId);
+      }
     }
-  }
 
-  const ticks = $('#pattern')?.children || [];
-  for (const t of ticks) {
-    const id = Number(t.dataset.sid);
-    if (activeId == null) {
-      t.classList.remove('dim', 'hi');
-    } else {
-      t.classList.toggle('hi', id === activeId);
-      t.classList.toggle('dim', id !== activeId);
+    const ticks = $('#pattern')?.children || [];
+    for (const t of ticks) {
+      const id = Number(t.dataset.sid);
+      if (activeId == null) {
+        t.classList.remove('dim', 'hi');
+      } else {
+        t.classList.toggle('hi', id === activeId);
+        t.classList.toggle('dim', id !== activeId);
+      }
     }
-  }
 
-  const activeTag = $('#spec-active-tag');
-  if (activeTag) {
-    if (activeMeta) {
-      const modeLabel = hoverStrandId != null && hoverStrandId !== S.pinnedStrandId ? 'HOVER' : 'PINNED';
-      activeTag.textContent = `${modeLabel} · ${activeMeta.dev} (λ=${activeMeta.lambda}nm)`;
-      activeTag.style.color = activeMeta.css;
-    } else {
-      activeTag.textContent = '';
-      activeTag.style.color = '';
+    const activeTag = $('#spec-active-tag');
+    if (activeTag) {
+      if (activeMeta) {
+        const modeLabel = hoverStrandId != null && hoverStrandId !== S.pinnedStrandId ? 'HOVER' : 'PINNED';
+        setTxt(activeTag, `${modeLabel} · ${activeMeta.dev} (λ=${activeMeta.lambda}nm)`);
+        setStyleProp(activeTag, 'color', activeMeta.css);
+      } else {
+        setTxt(activeTag, '');
+        setStyleProp(activeTag, 'color', '');
+      }
     }
-  }
 
-  const hintEl = $('#spec-pin-hint');
-  if (hintEl) {
-    hintEl.textContent = S.pinnedStrandId != null
+    setTxt('#spec-pin-hint', S.pinnedStrandId != null
       ? `已鎖定 ${strandMetaById.get(S.pinnedStrandId)?.dev || ''} · 再按一次或 Esc 解除`
-      : '懸停／點擊鎖定單路 · Esc 解除';
+      : '懸停／點擊鎖定單路 · Esc 解除');
   }
 
   renderOscilloscope(activeMeta);
@@ -275,6 +286,10 @@ function buildHeatmapTiles(grid, strands) {
 
 function applyTileVisual(tile, meta, k) {
   const { col, healthy, bucket, pct } = meta;
+  const vKey = `${col.rgb}:${healthy ? 1 : 0}:${bucket}:${Math.round(pct)}:${Math.round(k * 200)}`;
+  if (tile._visKey === vKey) return;
+  tile._visKey = vKey;
+
   const sat = !healthy ? 0.22 : (0.26 + 0.74 * Math.pow(k, 0.72));
   const litRgb = desatObsidianRgb(col.rgb, sat);
   const kAct = !healthy ? 0 : Math.max(0, (k - 0.12) / 0.88);
@@ -285,22 +300,24 @@ function applyTileVisual(tile, meta, k) {
       : (bucket === 'cooling' ? 0.18 : (0.20 + (pct / 100) * 0.04)));
   const fillAlpha = !healthy ? 0.10 : Math.min(0.82, baseFill + Math.pow(k, 0.84) * 0.58);
 
-  tile.style.setProperty('--sc-rgb', col.rgb);
-  tile.style.setProperty('--lit-rgb', litRgb);
-  tile.style.setProperty('--rim-rgb', rimRgb);
-  tile.style.setProperty('--heat-fill', fillAlpha.toFixed(2));
-  tile.style.setProperty('--heat-rim', (kAct > 0.05 ? 0.10 + 0.28 * Math.pow(kAct, 0.95) : 0).toFixed(3));
-  tile.style.setProperty('--heat-halo', (kAct > 0.05 ? 0.14 + 0.44 * Math.pow(kAct, 0.90) : 0).toFixed(3));
-  tile.style.setProperty('--heat-blur', `${Math.round(10 + 8 * kAct)}px`);
-  tile.style.setProperty('--heat-spark-op', (0.44 + 0.34 * kAct).toFixed(2));
-  tile.style.setProperty('--heat-label-op', (!healthy ? 0.48 : (0.80 + k * 0.20)).toFixed(2));
+  setVar(tile, '--sc-rgb', col.rgb);
+  setVar(tile, '--lit-rgb', litRgb);
+  setVar(tile, '--rim-rgb', rimRgb);
+  setVar(tile, '--heat-fill', fillAlpha.toFixed(2));
+  setVar(tile, '--heat-rim', (kAct > 0.05 ? 0.10 + 0.28 * Math.pow(kAct, 0.95) : 0).toFixed(3));
+  setVar(tile, '--heat-halo', (kAct > 0.05 ? 0.14 + 0.44 * Math.pow(kAct, 0.90) : 0).toFixed(3));
+  setVar(tile, '--heat-blur', `${Math.round(10 + 8 * kAct)}px`);
+  setVar(tile, '--heat-spark-op', (0.44 + 0.34 * kAct).toFixed(2));
+  setVar(tile, '--heat-label-op', (!healthy ? 0.48 : (0.80 + k * 0.20)).toFixed(2));
 }
 
 function applyRibbonVisual(ribK) {
   const ribSat = 0.24 + 0.50 * Math.pow(ribK, 0.88);
   const ribFill = (0.20 + 0.26 * Math.pow(ribK, 0.90)).toFixed(2);
   const ribScope = $('#spec-ribbon-scope');
-  if (ribScope) {
+  const rk = Math.round(ribK * 180);
+  if (ribScope && ribScope._lastRibKey !== rk) {
+    ribScope._lastRibKey = rk;
     const rLit = desatObsidianRgb(SPECTRUM_STOPS[0], ribSat);
     const gLit = desatObsidianRgb(SPECTRUM_STOPS[3], ribSat);
     const bLit = desatObsidianRgb(SPECTRUM_STOPS[5], ribSat);
@@ -309,8 +326,8 @@ function applyRibbonVisual(ribK) {
     const vA = (0.015 + 0.07 * Math.pow(ribK, 1.20)).toFixed(3);
     const blur1 = Math.round(5 + 4 * ribK);
     const blur2 = Math.round(8 + 4 * ribK);
-    ribScope.style.setProperty('--ribbon-fill', ribFill);
-    ribScope.style.setProperty('--ribbon-shadow',
+    setVar(ribScope, '--ribbon-fill', ribFill);
+    setVar(ribScope, '--ribbon-shadow',
       `-4px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
       `0 0 ${blur1}px rgba(${gLit}, ${sA}), ` +
       `4px 0 ${blur1}px rgba(${bLit}, ${sA}), ` +
@@ -324,7 +341,7 @@ function applyRibbonVisual(ribK) {
     if (mat.dataset.satKey !== satKey) {
       mat.dataset.satKey = satKey;
       for (const tick of mat.children) {
-        if (tick._pureRgb) tick.style.setProperty('--tick-rgb', desatObsidianRgb(tick._pureRgb, ribSat));
+        if (tick._pureRgb) setVar(tick, '--tick-rgb', desatObsidianRgb(tick._pureRgb, ribSat));
       }
     }
   }
@@ -452,7 +469,7 @@ function updateHeatmap(strands) {
       }
     }
 
-    tile.title = `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ↓${fmtShortRate(downBps)} ↑${fmtShortRate(upBps)} · pk ${fmtShortRate(s.peak)} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}% · slots ${s.slots ?? 0}`;
+    setTitle(tile, `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ↓${fmtShortRate(downBps)} ↑${fmtShortRate(upBps)} · pk ${fmtShortRate(s.peak)} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}% · slots ${s.slots ?? 0}`);
 
     const ui = tile._ui;
 
@@ -462,36 +479,36 @@ function updateHeatmap(strands) {
     // Top-right corner: RTT/loss + status flag
     const lossPct = s.loss_pct ?? 0;
     const rttTxt = s.ttfb_ms > 0 ? `${s.ttfb_ms}ms` : '—';
-    ui.rttEl.textContent = lossPct > 0 ? `${rttTxt}·${lossPct}%` : rttTxt;
-    ui.rttEl.style.color = lossPct >= 15 ? 'var(--c-amber)' : '';
+    setTxt(ui.rttEl, lossPct > 0 ? `${rttTxt}·${lossPct}%` : rttTxt);
+    setStyleProp(ui.rttEl, 'color', lossPct >= 15 ? 'var(--c-amber)' : '');
 
     if (!s.healthy) {
-      ui.flagEl.className = 'heat-flag down';
-      ui.flagEl.textContent = s.parked ? 'PARK' : 'OFF';
-      ui.flagEl.style.display = '';
+      setCls(ui.flagEl, 'heat-flag down');
+      setTxt(ui.flagEl, s.parked ? 'PARK' : 'OFF');
+      setStyleProp(ui.flagEl, 'display', '');
     } else if (s.vip) {
-      ui.flagEl.className = 'heat-flag vip';
-      ui.flagEl.textContent = 'VIP';
-      ui.flagEl.style.display = '';
+      setCls(ui.flagEl, 'heat-flag vip');
+      setTxt(ui.flagEl, 'VIP');
+      setStyleProp(ui.flagEl, 'display', '');
     } else if (s.cooldown_rem > 0) {
-      ui.flagEl.className = 'heat-flag cool';
-      ui.flagEl.textContent = `${s.cooldown_rem}s`;
-      ui.flagEl.style.display = '';
+      setCls(ui.flagEl, 'heat-flag cool');
+      setTxt(ui.flagEl, `${s.cooldown_rem}s`);
+      setStyleProp(ui.flagEl, 'display', '');
     } else {
-      ui.flagEl.style.display = 'none';
+      setStyleProp(ui.flagEl, 'display', 'none');
     }
 
     // Bottom-left corner: speed + upload/peak compact inline
     const hasDown = downBps * 8 > 500;
     const hasUp = upBps * 8 > 500;
-    ui.downEl.textContent = hasDown ? `↓${fmtShortRate(downBps)}` : (rateTotal > 0 ? '↓0' : 'idle');
-    ui.downEl.className = `heat-rate-down${hasDown ? '' : ' idle'}`;
-    ui.subEl.textContent = hasUp ? `↑${fmtShortRate(upBps)}·pk${fmtShortRate(s.peak)}` : `pk${fmtShortRate(s.peak)}`;
+    setTxt(ui.downEl, hasDown ? `↓${fmtShortRate(downBps)}` : (rateTotal > 0 ? '↓0' : 'idle'));
+    setCls(ui.downEl, `heat-rate-down${hasDown ? '' : ' idle'}`);
+    setTxt(ui.subEl, hasUp ? `↑${fmtShortRate(upBps)}·pk${fmtShortRate(s.peak)}` : `pk${fmtShortRate(s.peak)}`);
 
     // Bottom-right corner: token % + slots count
     const tokLabel = `${Math.round(pct)}%`;
     const slotLabel = s.vip ? ((s.slots || 0) > 0 ? `VIP·${s.slots}槽` : 'VIP') : `${s.slots ?? 0}槽`;
-    ui.brEl.textContent = `${tokLabel} · ${slotLabel}`;
+    setTxt(ui.brEl, `${tokLabel} · ${slotLabel}`);
 
     // Bottom edge: slot bar in matching wavelength color & exact slot count
     renderSlotBar(ui.slotsBarEl, s.slots || 0, slotCols, maxSlots, s.healthy);
@@ -518,14 +535,15 @@ export function renderSpectrum() {
   }
 
   // 1. Header scheduler params (non-duplicate with bottom ribbon HUD)
-  const capEl = $('#weave-cap');
-  if (capEl) capEl.textContent = `VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`;
+  setTxt('#weave-cap', `VIP=${w.vip_dev || '—'} · ${w.interval || 2}s`);
   const downNow = st.rate || 0;
   const upNow = st.rate_up || 0;
   const totBps = downNow + upNow;
 
   // 2. Full-Page Gapless 21-Wavelength Matrix (unified obsidian saturation & glow)
+  const gridBefore = $('#spectrum-heatmap')?.dataset?.count;
   updateHeatmap(strands);
+  const gridRebuilt = $('#spectrum-heatmap')?.dataset?.count !== gridBefore;
 
   // 3. Modulate rainbow bar fill, obsidian saturation & 4-stop prism bloom smoothly with EWMA blend + high ceiling
   const ewmaTot = (st.rate_ewma ?? downNow) + (st.rate_up_ewma ?? upNow);
@@ -541,26 +559,23 @@ export function renderSpectrum() {
   const ribDownEl = $('#ribbon-rate-down');
   if (ribDownEl) {
     const hasDown = downNow * 8 > 500;
-    ribDownEl.textContent = hasDown ? `↓${fmtShortRate(downNow)}` : (totBps > 0 ? '↓0' : 'idle');
-    ribDownEl.className = `heat-rate-down${hasDown ? '' : ' idle'}`;
+    setTxt(ribDownEl, hasDown ? `↓${fmtShortRate(downNow)}` : (totBps > 0 ? '↓0' : 'idle'));
+    setCls(ribDownEl, `heat-rate-down${hasDown ? '' : ' idle'}`);
   }
-  const ribSubEl = $('#ribbon-rate-sub');
-  if (ribSubEl && (!S.series || !S.series.ts || S.series.ts.length < 2)) {
-    ribSubEl.textContent = `↑${fmtShortRate(upNow)}`;
+  if (!S.series || !S.series.ts || S.series.ts.length < 2) {
+    setTxt('#ribbon-rate-sub', `↑${fmtShortRate(upNow)}`);
   }
-  const ribSlotsMeta = $('#ribbon-slots-meta');
-  if (ribSlotsMeta) ribSlotsMeta.textContent = `${w.slots || pat.length || 126} slots`;
-  const ribHealthEl = $('#ribbon-health-meta');
-  if (ribHealthEl) {
-    ribHealthEl.textContent = `${st.healthy_count ?? strands.length}/${strands.length || 21} UP · ${w.charged_count ?? 0} 滿桶`;
-  }
+  setTxt('#ribbon-slots-meta', `${w.slots || pat.length || 126} slots`);
+  setTxt('#ribbon-health-meta', `${st.healthy_count ?? strands.length}/${strands.length || 21} UP · ${w.charged_count ?? 0} 滿桶`);
 
   // 4. Full-Width 126-Slot Kernel Timeline Ribbon with shared obsidian desaturation
   const mat = $('#pattern');
+  let patRebuilt = false;
   if (mat) {
     const sig = pat.join(',');
     const satKey = String(Math.round(ribSat * 60));
     if (mat.dataset.sig !== sig) {
+      patRebuilt = true;
       mat.dataset.sig = sig;
       mat.dataset.satKey = satKey;
       const frag = document.createDocumentFragment();
@@ -590,6 +605,6 @@ export function renderSpectrum() {
   }
 
   $$('#chart-range .seg-btn').forEach(b => b.classList.toggle('on', Number(b.dataset.limit) === getChartLimit()));
-  syncStrandHighlight();
+  syncStrandHighlight(gridRebuilt || patRebuilt);
   startSpectrumAnim();
 }

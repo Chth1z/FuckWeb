@@ -23,7 +23,7 @@ const HISTORY = 720;                    // samples kept (2s cadence -> 24 min wi
 const SERIES_CADENCE = 1.9;
 const PEAK_DECAY_PER_SEC = 0.999;       // ~0.998 per 2s
 const SETTLE = 2;                       // slot changes needed to trigger an update
-const DEVICE_SCAN = 5;                  // look for devices every this many samples
+const DEVICE_SCAN = 3;                  // look for devices every ~6s (~2s/sample * 3)
 
 let cfg = config.load();
 let snapshot = core.load_json(STATUS, null);
@@ -103,6 +103,29 @@ function sample_devices(dt) {
 	}
 	if (lan.samples++ % DEVICE_SCAN == 0)
 		lan.list = devices.scan(cfg);
+}
+
+function sync_lan_cfg() {
+	cfg = config.load();
+	let known = {};
+	for (let d in cfg.devices)
+		known[d.mac] = d;
+	let seen = {};
+	for (let x in lan.list) {
+		seen[x.mac] = true;
+		let k = known[x.mac];
+		x.policy = k?.policy ?? "auto";
+		x.named = !!k?.name;
+		x.name = k?.name || x.host || "";
+	}
+	for (let d in cfg.devices) {
+		if (!seen[d.mac])
+			push(lan.list, {
+				mac: d.mac, ip: "", host: "", name: d.name || "",
+				named: !!d.name, link: "wired", signal: 0, online: false,
+				policy: d.policy ?? "auto",
+			});
+	}
 }
 
 function device_view() {
@@ -218,7 +241,7 @@ let published = bus.publish("prism", api.methods({
 	series_interval: () => max(2, cfg.weave.interval),
 	now: monotonic,
 	kick: () => kick(DEBOUNCE_MS / 4),
-	reload: () => (cfg = config.load()),
+	reload: sync_lan_cfg,
 }));
 if (!published)
 	core.err("cannot publish ubus object: %s", ubus.error());

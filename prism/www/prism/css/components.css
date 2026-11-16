@@ -69,10 +69,22 @@ html.prism-cold .main-stage {
 .corner-rate-main {
   font-size: 24px;
   font-weight: 700;
+  min-width: 132px;
   color: #ffffff;
   letter-spacing: -0.02em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.96);
   transition: color 0.78s cubic-bezier(0.22, 1, 0.36, 1), text-shadow 0.78s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#ov-peak {
+  display: inline-block;
+  min-width: 66px;
+}
+
+#ov-charged {
+  display: inline-block;
+  min-width: 18px;
+  text-align: right;
 }
 
 .corner-rate-up {
@@ -1021,6 +1033,14 @@ html.prism-cold .main-stage {
   justify-content: flex-end;
 }
 
+#spec-active-tag {
+  display: inline-block;
+  min-width: 176px;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .heatmap-stage-wrap {
   flex: 1 1 0;
   min-height: 0;
@@ -1195,10 +1215,17 @@ html.prism-cold .main-stage {
 .heat-rate-down {
   font-size: 13.5px;
   font-weight: 700;
+  height: 18px;
+  display: inline-flex;
+  align-items: baseline;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   color: #ffffff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.90);
+}
+
+.spec-ribbon-scope .heat-rate-down {
+  min-width: 58px;
 }
 
 .heat-rate-down.idle {
@@ -1398,7 +1425,7 @@ html.prism-cold .main-stage {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  transition: box-shadow 0.72s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.72s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.30s ease;
+  transition: box-shadow 0.36s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.36s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.24s ease;
 }
 
 .dev-nav-item:hover {
@@ -1458,6 +1485,30 @@ html.prism-cold .main-stage {
   font-variant-numeric: tabular-nums;
 }
 
+.dev-flows-tag {
+  min-width: 44px;
+  text-align: right;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+#clients-online-cnt,
+#conn-cap,
+#weave-cap,
+#dev-all-rate,
+#dev-all-flows {
+  font-variant-numeric: tabular-nums;
+}
+
+#dev-all-rate,
+#dev-all-flows {
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 72px;
+}
+
 .dev-rename-btn {
   appearance: none;
   background: transparent;
@@ -1494,7 +1545,7 @@ html.prism-cold .main-stage {
   white-space: nowrap;
 }
 
-.dev-nav-sub .pill-bar {
+.dev-nav-sub .policy-pill-bar {
   flex-shrink: 0;
 }
 

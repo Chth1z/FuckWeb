@@ -30,7 +30,7 @@ function list_count(file) {
 }
 
 function controller(cfg, lan_ip, method, url, body) {
-	let cmd = sprintf("curl -4 --noproxy '*' -m 3 -sS -X %s -H %s", method,
+	let cmd = sprintf("curl -4 --noproxy '*' --connect-timeout 1 -m 2 -sS -X %s -H %s", method,
 		core.shq("Authorization: Bearer " + (core.read(core.ETC + "/controller.secret") ?? "")));
 	if (body)
 		cmd += " -H 'Content-Type: application/json' --data " + core.shq(body);
@@ -77,9 +77,14 @@ function direct_flows(snap) {
 		let p_src = index(line, " src=");
 		if (p_src < 12)
 			continue;
-		let head = split(trim(substr(line, 5, p_src - 5)), / +/);
-		let proto = head[1];
-		if (!proto)
+		let i = 5;
+		while (i < p_src && substr(line, i, 1) == " ") i++;
+		while (i < p_src && substr(line, i, 1) != " ") i++;
+		while (i < p_src && substr(line, i, 1) == " ") i++;
+		let ps = i;
+		while (i < p_src && substr(line, i, 1) != " ") i++;
+		let proto = substr(line, ps, i - ps);
+		if (!length(proto))
 			continue;
 		let rest = substr(line, p_src + 5);
 		let p = index(rest, " dst=");

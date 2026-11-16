@@ -3,8 +3,8 @@
  * ============================================================================ */
 
 import { S, UI_VERSION, fmtRate } from './state.js?v=5.6.6';
-import { $, $$, toast } from './dom.js?v=5.6.6';
-import { callBatch, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.6.6';
+import { $, $$, toast, setTxt, setCls } from './dom.js?v=5.6.6';
+import { callBatch, call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.6.6';
 import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.js?v=5.6.6';
 import { renderOverview } from './views/overview.js?v=5.6.6';
 import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.6.6';
@@ -16,14 +16,11 @@ let slowTimer = null;
 let fastSeq = 0;
 let fastInFlight = false;
 let slowInFlight = false;
+let connInFlight = false;
+let pendingFast = false;
+let pendingSlow = false;
+let connDeltaTimer = null;
 let lastFastTab = '';
-
-function setTxt(sel, val) {
-  const n = $(sel);
-  const s = String(val);
-  if (n && n.textContent !== s) n.textContent = s;
-  return n;
-}
 
 function renderChrome() {
   const st = S.status;
@@ -94,8 +91,9 @@ export function switchTab(tab, updateHash = true, refresh = true) {
 
   renderActiveTab();
   if (refresh) {
-    pollFast();
-    pollSlow();
+    pollFast(true);
+    if (tab === 'clients' && S.session) pollConnections(true);
+    pollSlow(tab === 'blueprint' || tab === 'spectrum');
   }
   if (tab === 'overview') {
     renderPrismNow();
@@ -146,28 +144,57 @@ function mergeSeriesDelta(delta) {
   }
 }
 
-async function pollFast() {
-  if (document.visibilityState === 'hidden' || fastInFlight) return;
+async function pollConnections(force = false) {
+  if (document.visibilityState === 'hidden' || S.tab !== 'clients' || !S.session) return;
+  if (connInFlight) {
+    if (force) setTimeout(() => pollConnections(false), 120);
+    return;
+  }
+  connInFlight = true;
+  const hadBaseline = !!S.flowSnapshotTs;
+  try {
+    const cn = await call('connections');
+    if (cn) {
+      S.connections = cn;
+      if (S.tab === 'clients') renderClients();
+      // First visit to Clients has dt=0; fire one rapid 460ms sample so per-flow rx/tx light up in <0.5s
+      if (!hadBaseline && !connDeltaTimer) {
+        connDeltaTimer = setTimeout(() => {
+          connDeltaTimer = null;
+          pollConnections(false);
+        }, 460);
+      }
+    }
+  } catch (_) {
+  } finally {
+    connInFlight = false;
+  }
+}
+
+async function pollFast(force = false) {
+  if (document.visibilityState === 'hidden') return;
+  if (fastInFlight) {
+    if (force) pendingFast = true;
+    return;
+  }
   fastInFlight = true;
   const seq = ++fastSeq;
   const tabChanged = (lastFastTab !== S.tab);
   lastFastTab = S.tab;
-  const runHeavy = tabChanged || (seq === 1 || seq % 2 === 0);
+  const runHeavy = tabChanged || force || (seq === 1 || seq % 2 === 0);
   try {
     const needFullSeries = S.tab === 'spectrum' && (!S.series?.ts || S.series.ts.length < 2);
     const jobs = [
       { method: 'status' },
       S.tab === 'overview' || S.tab === 'clients' ? { method: 'devices' } : null,
       S.tab === 'spectrum' ? { method: 'series', args: { limit: needFullSeries ? 720 : 8 } } : null,
-      runHeavy && S.tab === 'clients' && S.session ? { method: 'connections' } : null,
       runHeavy && S.tab === 'blueprint' ? { method: 'rules' } : null
     ];
 
-    const [st, dv, ser, cn, rl] = await callBatch(jobs);
+    const [st, dv, ser, rl] = await callBatch(jobs);
     if (st) S.status = st;
     if (dv) S.devices = dv;
     if (ser) mergeSeriesDelta(ser);
-    if (cn) S.connections = cn;
     if (rl) S.rules = rl;
     renderActiveTab();
     saveBootSnapshot();
@@ -175,11 +202,19 @@ async function pollFast() {
     // Keep last snapshot cleanly without UI glitch
   } finally {
     fastInFlight = false;
+    if (pendingFast) {
+      pendingFast = false;
+      pollFast(false);
+    }
   }
 }
 
-async function pollSlow() {
-  if (document.visibilityState === 'hidden' || slowInFlight) return;
+async function pollSlow(force = false) {
+  if (document.visibilityState === 'hidden') return;
+  if (slowInFlight) {
+    if (force) pendingSlow = true;
+    return;
+  }
   slowInFlight = true;
   try {
     const reqs = [
@@ -203,6 +238,10 @@ async function pollSlow() {
   } catch (_) {
   } finally {
     slowInFlight = false;
+    if (pendingSlow) {
+      pendingSlow = false;
+      pollSlow(false);
+    }
   }
 }
 
@@ -251,20 +290,24 @@ function bindGlobalEvents() {
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-      pollFast();
-      pollSlow();
+      pollFast(true);
+      if (S.tab === 'clients' && S.session) pollConnections(true);
+      pollSlow(true);
       if (S.tab === 'overview') markPrismDirty();
       if (S.tab === 'blueprint') startBlueprintAnim();
       if (S.tab === 'spectrum') startSpectrumAnim();
     } else {
+      clearTimeout(connDeltaTimer);
+      connDeltaTimer = null;
       stopBlueprintAnim();
       stopSpectrumAnim();
     }
   });
 
   setAuthCallback(() => {
-    pollFast();
-    pollSlow();
+    pollFast(true);
+    if (S.tab === 'clients' && S.session) pollConnections(true);
+    pollSlow(true);
   });
 }
 
@@ -361,13 +404,14 @@ async function init() {
     window.addEventListener('pagehide', () => saveBootSnapshot(true));
   }
 
+  if (S.tab === 'clients' && S.session) pollConnections(true);
+
   try {
-    const [st, dv, tun, ser, cn, rul, ev, doc, cfg] = await callBatch([
+    const [st, dv, tun, ser, rul, ev, doc, cfg] = await callBatch([
       { method: 'status' },
       { method: 'devices' },
       { method: 'tunnel' },
       S.tab === 'spectrum' ? { method: 'series', args: { limit: 720 } } : null,
-      S.tab === 'clients' && S.session ? { method: 'connections' } : null,
       { method: 'rules' },
       { method: 'events', args: { limit: 40 } },
       { method: 'doctor' },
@@ -377,7 +421,6 @@ async function init() {
     if (dv) S.devices = dv;
     if (tun) S.tunnel = tun;
     if (ser) mergeSeriesDelta(ser);
-    if (cn) S.connections = cn;
     if (rul) S.rules = rul;
     if (ev) S.events = ev;
     if (doc) S.doctor = doc;
@@ -404,8 +447,11 @@ async function init() {
     }, 240);
   }
 
-  fastTimer = setInterval(pollFast, 1000);
-  slowTimer = setInterval(pollSlow, 6000);
+  fastTimer = setInterval(() => {
+    pollFast();
+    if (S.tab === 'clients' && S.session) pollConnections();
+  }, 1000);
+  slowTimer = setInterval(() => pollSlow(), 6000);
 }
 
 init();
