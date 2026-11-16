@@ -42,9 +42,9 @@ const moduleHeat = {
   guard:   { id: '#bp-card-guard',   kind: 'mono', rgb: '170, 142, 240', cur: 0.14, target: 0.14 },
   pregate: { id: '#bp-card-pregate', kind: 'spectrum', cur: 0.16, target: 0.16 },
   ingress: { id: '#bp-card-ingress', kind: 'spectrum', cur: 0.18, target: 0.18 },
-  vip:     { id: '#bp-card-vip',     kind: 'mono', rgb: '100, 174, 245', cur: 0.04, target: 0.04 },
-  tun:     { id: '#bp-card-tun',     kind: 'mono', rgb: '170, 142, 240', cur: 0.08, target: 0.08 },
-  dom:     { id: '#bp-card-dom',     kind: 'mono', rgb: '87, 209, 146',  cur: 0.16, target: 0.16 },
+  vip:     { id: '#bp-card-vip',     kind: 'mono', rgb: '242, 90, 90',  cur: 0.04, target: 0.04 },
+  tun:     { id: '#bp-card-tun',     kind: 'mono', rgb: '87, 209, 146',  cur: 0.08, target: 0.08 },
+  dom:     { id: '#bp-card-dom',     kind: 'mono', rgb: '100, 174, 245', cur: 0.16, target: 0.16 },
   qos:     { id: '#bp-card-qos',     kind: 'spectrum', cur: 0.14, target: 0.14 },
   uplink:  { id: '#bp-card-uplink',  kind: 'spectrum', cur: 0.18, target: 0.18 }
 };
@@ -587,9 +587,9 @@ function drawCrystalPrism(ctx, g, mode) {
   const gSpec = waveState[4].glow;
   const avgG = Math.max(waveState[0].glow, waveState[1].glow, waveState[2].glow, gSpec);
   const raySts = [
-    { x: topX,   y: topY,   rgb: '100, 174, 245', g: waveState[0].glow },
-    { x: exitX,  y: cy,     rgb: '170, 142, 240', g: waveState[1].glow },
-    { x: cx,     y: leftY,  rgb: '87, 209, 146',  g: waveState[2].glow },
+    { x: topX,   y: topY,   rgb: '242, 90, 90',   g: waveState[0].glow },
+    { x: exitX,  y: cy,     rgb: '87, 209, 146',  g: waveState[1].glow },
+    { x: cx,     y: leftY,  rgb: '100, 174, 245', g: waveState[2].glow },
   ];
 
   ctx.fillStyle = '#04060a';
@@ -695,27 +695,27 @@ function drawDualPrismPipeline(ctx, W, H, ing, vip, tun, dom, qos, prismsQueue) 
     { clipFirst: (c) => clipHalfPlane(c, g1.topX, g1.topY, g1.leftX, g1.leftY, -1, W, H) }
   );
 
-  // Branch 0 (Blue @vip_lane): exits apex UP -> SINGLE 45-deg prism -> RIGHT (1 bend)
+  // Branch 0 (Red @vip_lane): exits apex UP -> SINGLE 45-deg prism -> RIGHT (1 bend)
   drawOrthoStepWithPrisms(
     ctx,
     [{ x: g1.cx, y: g1.topY + 2 }, { x: g1.cx, y: vip.cy }, { x: vip.x + 1, y: vip.cy }],
-    '100, 174, 245', waveState[0], 0.00, prismsQueue,
+    '242, 90, 90', waveState[0], 0.00, prismsQueue,
     { clipFirst: (c) => clipHalfRectY(c, g1.topY + 1, -1, W, H), prismRadius: 6.5 }
   );
 
-  // Branch 1 (Violet TW-HOME): exits right bevel STRAIGHT RIGHT (0 bends)
+  // Branch 1 (Green TW-HOME): exits right bevel STRAIGHT RIGHT (0 bends)
   drawOrthoStepWithPrisms(
     ctx,
     [{ x: g1.exitX - 12, y: y1 }, { x: tun.x + 1, y: y1 }],
-    '170, 142, 240', waveState[1], 0.16, prismsQueue,
+    '87, 209, 146', waveState[1], 0.16, prismsQueue,
     { clipFirst: (c) => clipHalfPlane(c, g1.topX, g1.topY, g1.rightX, g1.rightY, 1, W, H) }
   );
 
-  // Branch 2 (Green Burst-Harvest): exits flat base DOWN -> SINGLE 45-deg prism -> RIGHT (1 bend)
+  // Branch 2 (Blue Burst-Harvest): exits flat base DOWN -> SINGLE 45-deg prism -> RIGHT (1 bend)
   drawOrthoStepWithPrisms(
     ctx,
     [{ x: g1.cx, y: g1.leftY - 2 }, { x: g1.cx, y: dom.cy }, { x: dom.x + 1, y: dom.cy }],
-    '87, 209, 146', waveState[2], 0.32, prismsQueue,
+    '100, 174, 245', waveState[2], 0.32, prismsQueue,
     { clipFirst: (c) => clipHalfRectY(c, g1.leftY - 1, 1, W, H), prismRadius: 6.5 }
   );
 
@@ -724,27 +724,27 @@ function drawDualPrismPipeline(ctx, W, H, ing, vip, tun, dom, qos, prismsQueue) 
   // === GAP 2: Symmetric 3 -> 1 Recombination Merge Prism on Gap 2 Upper Axis ===
   const g2 = makePrismGeom(s2Right + gap2W * 0.50, y2, Math.max(26, Math.min(38, gap2W * 0.36)));
 
-  // Branch 0 (Blue @vip_lane): RIGHT -> SINGLE 45-deg prism -> straight DOWN into apex (1 bend)
+  // Branch 0 (Red @vip_lane): RIGHT -> SINGLE 45-deg prism -> straight DOWN into apex (1 bend)
   drawOrthoStepWithPrisms(
     ctx,
     [{ x: vip.right - 1, y: vip.cy }, { x: g2.cx, y: vip.cy }, { x: g2.cx, y: g2.topY + 2 }],
-    '100, 174, 245', waveState[0], 0.24, prismsQueue,
+    '242, 90, 90', waveState[0], 0.24, prismsQueue,
     { clipLast: (c) => clipHalfRectY(c, g2.topY + 1, -1, W, H), prismRadius: 6.5 }
   );
 
-  // Branch 1 (Violet TW-HOME): STRAIGHT RIGHT into left bevel (0 bends)
+  // Branch 1 (Green TW-HOME): STRAIGHT RIGHT into left bevel (0 bends)
   drawOrthoStepWithPrisms(
     ctx,
     [{ x: tun.right - 1, y: y2 }, { x: g2.entryX + 12, y: y2 }],
-    '170, 142, 240', waveState[1], 0.38, prismsQueue,
+    '87, 209, 146', waveState[1], 0.38, prismsQueue,
     { clipFirst: (c) => clipHalfPlane(c, g2.topX, g2.topY, g2.leftX, g2.leftY, -1, W, H) }
   );
 
-  // Branch 2 (Green Burst-Harvest): RIGHT -> SINGLE 45-deg prism -> straight UP into flat base (1 bend)
+  // Branch 2 (Blue Burst-Harvest): RIGHT -> SINGLE 45-deg prism -> straight UP into flat base (1 bend)
   drawOrthoStepWithPrisms(
     ctx,
     [{ x: dom.right - 1, y: dom.cy }, { x: g2.cx, y: dom.cy }, { x: g2.cx, y: g2.leftY - 2 }],
-    '87, 209, 146', waveState[2], 0.52, prismsQueue,
+    '100, 174, 245', waveState[2], 0.52, prismsQueue,
     { clipLast: (c) => clipHalfRectY(c, g2.leftY - 1, 1, W, H), prismRadius: 6.5 }
   );
 
@@ -989,17 +989,17 @@ function renderClassifyStrip() {
     const share = (pkts / tot) * 100;
     const fillPct = pkts > 0 ? Math.min(100, Math.max(6, Math.pow(share / 100, 0.58) * 100)) : 0;
 
-    let colorName = 'mint';
-    let colorRgb = '87, 209, 146';
-    let textCls = 'c-mint';
+    let colorName = 'blue';
+    let colorRgb = '100, 174, 245';
+    let textCls = 'c-blue';
     if (r.tag.includes('tunnel') || r.tag === 'rest-tunnel') {
-      colorName = 'violet';
-      colorRgb = '170, 142, 240';
-      textCls = 'c-violet';
+      colorName = 'mint';
+      colorRgb = '87, 209, 146';
+      textCls = 'c-mint';
     } else if (r.tag === 'device-game') {
-      colorName = 'blue';
-      colorRgb = '100, 174, 245';
-      textCls = 'c-blue';
+      colorName = 'red';
+      colorRgb = '242, 90, 90';
+      textCls = 'c-red';
     } else if (r.tag === 'quic') {
       colorName = 'amber';
       colorRgb = '235, 154, 94';
@@ -1152,7 +1152,7 @@ export function renderBlueprint() {
   const verdictEl = $('#adv-verdict');
   if (verdictEl) {
     verdictEl.textContent = st.ok ? 'zero-leak' : (st.fail?.[0] || 'check failed');
-    verdictEl.className = `bp-meter-val ${st.ok ? 'c-mint' : 'c-crimson'}`;
+    verdictEl.className = `bp-meter-val ${st.ok ? 'c-violet' : 'c-crimson'}`;
   }
 
   const failClosedEl = $('#adv-failclosed');
@@ -1167,7 +1167,7 @@ export function renderBlueprint() {
     dnsEl.textContent = st.dns?.smartdns
       ? `53→${st.dns.port || 6053} · ${st.settings?.['dns.ads'] ? 'ads' : 'raw'}`
       : 'offline';
-    dnsEl.className = `v ${st.dns?.smartdns ? 'c-mint' : 'c-crimson'}`;
+    dnsEl.className = `v ${st.dns?.smartdns ? 'c-violet' : 'c-crimson'}`;
   }
 
   $('#adv-canary').textContent = canaryMs > 0 ? `${canaryMs} ms (${canaryFails}f)` : (st.tunnel?.on ? 'active' : 'off');
@@ -1177,7 +1177,7 @@ export function renderBlueprint() {
   if (offEl) {
     const offOk = offCheck ? !!offCheck.ok : true;
     offEl.textContent = offOk ? 'per-pkt ok' : 'offload leak!';
-    offEl.className = `v ${offOk ? 'c-mint' : 'c-crimson'}`;
+    offEl.className = `v ${offOk ? 'c-violet' : 'c-crimson'}`;
   }
 
   const siteEl = $('#adv-site');
@@ -1196,9 +1196,9 @@ export function renderBlueprint() {
   const okChecks = checks.length ? checks.filter(c => c.ok).length : (st.ok ? totChecks : 0);
   if ($('#adv-inv-score')) {
     $('#adv-inv-score').textContent = `${okChecks}/${totChecks} ok`;
-    $('#adv-inv-score').className = `bp-live-rate ${okChecks === totChecks ? 'c-mint' : 'c-crimson'}`;
+    $('#adv-inv-score').className = `bp-live-rate ${okChecks === totChecks ? 'c-violet' : 'c-crimson'}`;
   }
-  renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, okChecks === totChecks ? 'mint' : 'crimson', false);
+  renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, okChecks === totChecks ? 'violet' : 'crimson', false);
 
   const invGrid = $('#adv-invariants-grid');
   if (invGrid && checks.length) {
@@ -1217,7 +1217,7 @@ export function renderBlueprint() {
       const allOk = matched.length === 0 || passed === matched.length;
       gFrag.appendChild(el('div', { class: `guard-inv-cell ${allOk ? 'ok' : 'bad'}` },
         el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: '0', overflow: 'hidden' } },
-          el('span', { class: `run-dot ${allOk ? 'mint' : 'crimson'}` }),
+          el('span', { class: `run-dot ${allOk ? 'violet' : 'crimson'}` }),
           el('span', { class: 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, grp.label)
         ),
         el('span', { class: allOk ? 'c-bright' : 'c-crimson', style: { fontWeight: '600', fontVariantNumeric: 'tabular-nums', flexShrink: '0' } }, matched.length ? `${passed}/${matched.length}` : 'n/a')
@@ -1236,15 +1236,19 @@ export function renderBlueprint() {
     $('#adv-classify-mode').textContent = `${rem} · ${q}`;
   }
   if ($('#adv-guard-dot')) {
-    $('#adv-guard-dot').className = `run-dot ${st.ok ? 'mint' : 'crimson'}`;
+    $('#adv-guard-dot').className = `run-dot ${st.ok ? 'violet' : 'crimson'}`;
   }
   if ($('#adv-reconcile')) {
     const recTs = st.reconciled || st.ts;
     $('#adv-reconcile').textContent = recTs ? `sync ${fmtClock(recTs)}` : 'live';
   }
-  $('#adv-doctor').textContent = st.ok
-    ? `all ${totChecks} invariants ok`
-    : `${st.fail?.length || 1} fail · ${st.warn?.length || 0} warn`;
+  const docEl = $('#adv-doctor');
+  if (docEl) {
+    docEl.textContent = st.ok
+      ? `all ${totChecks} invariants ok`
+      : `${st.fail?.length || 1} fail · ${st.warn?.length || 0} warn`;
+    docEl.className = st.ok ? 'c-violet' : 'c-crimson';
+  }
 
   const evList = S.events?.events || [];
   if ($('#log-count')) $('#log-count').textContent = `${evList.length} 條`;
@@ -1259,7 +1263,7 @@ export function renderBlueprint() {
   const dnsTagEl = $('#bp-dns-mode-tag');
   if (dnsTagEl) {
     dnsTagEl.textContent = quicMode === 'reject' ? 'QUIC reject' : 'QUIC pass';
-    dnsTagEl.className = `bp-head-sub ${quicMode === 'reject' ? 'c-amber' : 'c-mint'}`;
+    dnsTagEl.className = `bp-head-sub ${quicMode === 'reject' ? 'c-sec' : 'c-amber'}`;
   }
 
   const sz = S.rules?.sizes || {};
@@ -1276,7 +1280,7 @@ export function renderBlueprint() {
     const preEl = $('#bp-pregate-rules');
     preEl.innerHTML = '';
     preEl.appendChild(el('span', {}, 'IPv6 drop · DoT:853 drop'));
-    preEl.appendChild(el('span', { class: st.tunnel?.fail_open ? 'c-amber' : 'c-mint' }, st.tunnel?.fail_open ? 'fail-open' : 'fail-closed'));
+    preEl.appendChild(el('span', { class: st.tunnel?.fail_open ? 'c-amber' : 'c-spectrum' }, st.tunnel?.fail_open ? 'fail-open' : 'fail-closed'));
   }
 
   const chargedRatio = (w.charged_count || 0) / nH;
@@ -1331,7 +1335,7 @@ export function renderBlueprint() {
     $('#bp-vip-share').textContent = `${vShare}% 流佔比`;
   }
   const vipTok = vipS ? (vipS.tokens_pct ?? 100) / 100 : 0;
-  renderSegMeter($('#bp-vip-meter'), vipTok, 10, 'blue');
+  renderSegMeter($('#bp-vip-meter'), vipTok, 10, 'red');
   $('#bp-vip-pct').textContent = vipS ? `${Math.round(vipTok * 100)}%` : 'none';
   if ($('#bp-vip-iface')) $('#bp-vip-iface').textContent = vipS ? `${vipS.dev} (#${vipS.id})` : 'auto';
   if ($('#bp-vip-rtt')) $('#bp-vip-rtt').textContent = vipS ? `${vipS.ttfb_ms ?? '—'} ms · ${vipS.loss_pct ?? 0}%` : '— ms · 0%';
@@ -1345,7 +1349,7 @@ export function renderBlueprint() {
     $('#bp-vip-quota').textContent = vipS ? `${fmtRateCompact(vipS.peak || 0)} 峰 · ${vipS.slots ?? 0} 槽` : '<50MB 優先';
   }
   if ($('#bp-vip-dot')) {
-    $('#bp-vip-dot').className = `run-dot ${vipS && vipS.healthy ? (liveFlow.vipBps > 400 ? 'blue' : 'off') : 'off'}`;
+    $('#bp-vip-dot').className = `run-dot ${vipS && vipS.healthy ? (liveFlow.vipBps > 400 ? 'red' : 'off') : 'off'}`;
   }
   $('#bp-vip-st').textContent = vipS && vipS.healthy
     ? (liveFlow.vipBps > 32 ? 'vip active' : 'vip pinned (idle)')
@@ -1357,7 +1361,7 @@ export function renderBlueprint() {
   // Tier 2 · Branch 1: TW-HOME Mihomo + MPTCP + Zashboard
   const mihomoOk = !!st.tunnel?.running;
   $('#bp-tun-rate').textContent = mihomoOk ? fmtRate(liveFlow.tunBps).full : '0 bps';
-  renderSegMeter($('#bp-tun-meter'), mihomoOk ? Math.max(0.08, liveFlow.tunShare) : 0, 10, mihomoOk ? 'violet' : 'amber');
+  renderSegMeter($('#bp-tun-meter'), mihomoOk ? Math.max(0.08, liveFlow.tunShare) : 0, 10, mihomoOk ? 'mint' : 'amber');
   $('#bp-tun-pct').textContent = mihomoOk ? `${Math.round(liveFlow.tunShare * 100)}%` : '0%';
   $('#bp-tun-desc').textContent = tun?.tw_home || tun?.selected || 'TW-HOME';
   if ($('#bp-tun-bytes')) $('#bp-tun-bytes').textContent = fmtBytes(liveFlow.tunBytes);
@@ -1408,9 +1412,9 @@ export function renderBlueprint() {
       for (const r of picked) {
         const isAct = activeName && r.name === activeName;
         const d = r.delay || 0;
-        const latCls = d > 0 ? (d <= 120 ? 'c-mint' : (d <= 220 ? 'c-amber' : 'c-crimson')) : 'c-muted';
+        const latCls = d > 0 ? (d <= 220 ? 'c-mint' : (d <= 500 ? 'c-amber' : 'c-crimson')) : 'c-muted';
         rFrag.appendChild(el('div', { class: 'relay-mini-row' },
-          el('span', { class: isAct ? 'c-violet' : 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: '0' } },
+          el('span', { class: isAct ? 'c-mint' : 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: '0' } },
             isAct ? `▸ ${r.name}` : r.name
           ),
           el('span', { class: latCls, style: { flexShrink: '0', fontWeight: '600', fontVariantNumeric: 'tabular-nums' } },
@@ -1428,9 +1432,12 @@ export function renderBlueprint() {
     relayListEl.appendChild(rFrag);
   }
   if ($('#bp-tun-dot')) {
-    $('#bp-tun-dot').className = `run-dot ${mihomoOk ? 'violet' : 'amber'}`;
+    $('#bp-tun-dot').className = `run-dot ${mihomoOk ? 'mint' : 'amber'}`;
   }
-  $('#bp-tun-st').textContent = mihomoOk ? (canaryMs > 0 ? `canary ${canaryMs} ms ok` : 'cage encrypted') : 'offline / direct';
+  if ($('#bp-tun-st')) {
+    $('#bp-tun-st').textContent = mihomoOk ? (canaryMs > 0 ? `canary ${canaryMs} ms ok` : 'cage encrypted') : 'offline / direct';
+    $('#bp-tun-st').className = mihomoOk ? 'c-mint' : 'c-amber';
+  }
   const zBtn = $('#zashboard-link');
   if (zBtn) {
     zBtn.href = tun?.dashboard || `http://${st.lan_ip || location.hostname || '192.168.16.1'}:9090/ui/`;
@@ -1442,7 +1449,7 @@ export function renderBlueprint() {
   const directShare = Math.max(0, 1 - liveFlow.tunShare);
   const weaveRate = Math.max(liveFlow.domBps, Math.max(0, totalRate - liveFlow.vipBps));
   $('#bp-dom-rate').textContent = fmtRate(weaveRate).full;
-  renderSegMeter($('#bp-dom-meter'), chargedRatio, 10, 'mint');
+  renderSegMeter($('#bp-dom-meter'), chargedRatio, 10, 'blue');
   $('#bp-dom-pct').textContent = `${w.charged_count ?? 0}/${nH}`;
   if ($('#bp-dom-share')) $('#bp-dom-share').textContent = `${Math.round(directShare * 100)}% 流佔比`;
   renderMiniSpectrum(strands);
@@ -1496,9 +1503,9 @@ export function renderBlueprint() {
   if ($('#bp-qos-10-rate')) $('#bp-qos-10-rate').textContent = fmtRate(liveFlow.vipBps).full;
   if ($('#bp-qos-20-rate')) $('#bp-qos-20-rate').textContent = fmtRate(liveFlow.tunBps).full;
   if ($('#bp-qos-30-rate')) $('#bp-qos-30-rate').textContent = fmtRate(qosDomBps).full;
-  setSegMeter('#bp-qos-10-bar', shareRatio(liveFlow.vipBps), 14, 'blue',   false, liveFlow.vipBps > 400);
-  setSegMeter('#bp-qos-20-bar', shareRatio(liveFlow.tunBps), 14, 'violet', false, liveFlow.tunBps > 400);
-  setSegMeter('#bp-qos-30-bar', shareRatio(qosDomBps),       14, 'mint',   false, qosDomBps > 400);
+  setSegMeter('#bp-qos-10-bar', shareRatio(liveFlow.vipBps), 14, 'red',  false, liveFlow.vipBps > 400);
+  setSegMeter('#bp-qos-20-bar', shareRatio(liveFlow.tunBps), 14, 'mint', false, liveFlow.tunBps > 400);
+  setSegMeter('#bp-qos-30-bar', shareRatio(qosDomBps),       14, 'blue', false, qosDomBps > 400);
 
   const paintQosBandHeat = (sel, baseRgb, bps) => {
     const chip = $(sel);
@@ -1512,9 +1519,9 @@ export function renderBlueprint() {
     chip.style.setProperty('--qb-glow-blur', `${Math.round(4 + 14 * ratio)}px`);
     chip.style.setProperty('--qb-glow-a', (0.02 + 0.24 * ratio).toFixed(2));
   };
-  paintQosBandHeat('#bp-qos-10', '100, 174, 245', liveFlow.vipBps);
-  paintQosBandHeat('#bp-qos-20', '170, 142, 240', liveFlow.tunBps);
-  paintQosBandHeat('#bp-qos-30', '87, 209, 146',  qosDomBps);
+  paintQosBandHeat('#bp-qos-10', '242, 90, 90',   liveFlow.vipBps);
+  paintQosBandHeat('#bp-qos-20', '87, 209, 146',  liveFlow.tunBps);
+  paintQosBandHeat('#bp-qos-30', '100, 174, 245', qosDomBps);
 
   const ewmaDown = st.rate_ewma ?? st.rate ?? 0;
   const ewmaUp = st.rate_up_ewma ?? st.rate_up ?? 0;
@@ -1537,24 +1544,30 @@ export function renderBlueprint() {
 
   if ($('#bp-up-ct-txt')) $('#bp-up-ct-txt').textContent = `${ctCount.toLocaleString()} / ${ctMax.toLocaleString()}`;
   const ctRatio = ctCount > 0 ? Math.max(1 / 16, ctCount / ctMax) : 0;
-  setSegMeter('#bp-up-ct-bar', ctRatio, 16, 'blue', false, ctCount > 0);
+  setSegMeter('#bp-up-ct-bar', ctRatio, 16, ctRatio > 0.8 ? 'amber' : 'spectrum', false, ctCount > 0);
 
   const memMb = Math.round((st.sys?.mem_available_kb || 0) / 1024);
   const load1 = st.sys?.load1 ?? 0;
   if ($('#bp-up-mem-txt')) $('#bp-up-mem-txt').textContent = `${memMb} MB free · load ${load1}`;
-  setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / 256)), 16, 'gold', false, load1 > 0.5);
+  setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / 256)), 16, (load1 > 2.0 || memMb < 48) ? 'amber' : 'spectrum', false, load1 > 0.5);
 
   if ($('#bp-up-down')) $('#bp-up-down').textContent = fmtBytes(st.down_bytes || 0);
   if ($('#bp-up-up')) $('#bp-up-up').textContent = fmtBytes(st.up_bytes || 0);
-  if ($('#bp-up-health')) $('#bp-up-health').textContent = `${st.healthy_count ?? 0}/${nTotal} up · ${faultCnt} fault`;
+  if ($('#bp-up-health')) {
+    $('#bp-up-health').textContent = `${st.healthy_count ?? 0}/${nTotal} up · ${faultCnt} fault`;
+    $('#bp-up-health').className = faultCnt > 0 ? 'v c-crimson' : 'v';
+  }
   if ($('#bp-up-mptcp')) {
     $('#bp-up-mptcp').textContent = st.mptcp?.enabled
       ? `${st.mptcp.subflows} sub · ${eps.length} ep`
       : 'single-path';
   }
-  $('#bp-verify-summary').textContent = st.ok
-    ? `${nTotal}/${nTotal} kernel ok`
-    : `異常: ${(st.fail || []).join(', ')}`;
+  if ($('#bp-verify-summary')) {
+    $('#bp-verify-summary').textContent = st.ok
+      ? `${nTotal}/${nTotal} kernel ok`
+      : `異常: ${(st.fail || []).join(', ')}`;
+    $('#bp-verify-summary').className = st.ok ? 'v c-bright' : 'v c-crimson';
+  }
   if ($('#bp-up-ver')) $('#bp-up-ver').textContent = `PRISM ${st.version || UI_VERSION}`;
   if ($('#bp-up-sync')) {
     const recTs = st.reconciled || st.ts;

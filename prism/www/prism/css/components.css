@@ -224,6 +224,15 @@
     0 10px 28px rgba(0, 0, 0, 0.78);
 }
 
+.s-box.red {
+  border-color: rgba(var(--c-red-rgb), 0.74);
+  box-shadow:
+    0 0 16px rgba(var(--c-red-rgb), 0.24),
+    0 0 36px rgba(var(--c-red-rgb), 0.09),
+    inset 0 0 14px rgba(var(--c-red-rgb), 0.08),
+    0 10px 28px rgba(0, 0, 0, 0.78);
+}
+
 .panel-head {
   display: flex;
   align-items: center;
@@ -270,7 +279,7 @@
 }
 
 .guard-inv-cell.ok {
-  border-color: rgba(87, 209, 146, 0.28);
+  border-color: rgba(var(--c-violet-rgb), 0.30);
 }
 
 .guard-inv-cell.bad {
@@ -512,11 +521,19 @@
   box-shadow: 0 0 8px var(--c-blue), 0 0 16px rgba(var(--c-blue-rgb), 0.55);
   flex-shrink: 0;
 }
-.run-dot.mint    { background: var(--c-mint);    box-shadow: 0 0 8px var(--c-mint),    0 0 16px rgba(var(--c-mint-rgb), 0.55); }
-.run-dot.violet  { background: var(--c-violet);  box-shadow: 0 0 8px var(--c-violet),  0 0 16px rgba(var(--c-violet-rgb), 0.55); }
-.run-dot.amber   { background: var(--c-amber);   box-shadow: 0 0 8px var(--c-amber),   0 0 16px rgba(var(--c-amber-rgb), 0.55); }
-.run-dot.crimson { background: var(--c-crimson); box-shadow: 0 0 8px var(--c-crimson), 0 0 16px rgba(var(--c-crimson-rgb), 0.55); }
-.run-dot.off     { background: #3f4a5f; box-shadow: none; }
+.run-dot.red      { background: var(--c-red);     box-shadow: 0 0 8px var(--c-red),     0 0 16px rgba(var(--c-red-rgb), 0.55); }
+.run-dot.mint     { background: var(--c-mint);    box-shadow: 0 0 8px var(--c-mint),    0 0 16px rgba(var(--c-mint-rgb), 0.55); }
+.run-dot.violet   { background: var(--c-violet);  box-shadow: 0 0 8px var(--c-violet),  0 0 16px rgba(var(--c-violet-rgb), 0.55); }
+.run-dot.amber    { background: var(--c-amber);   box-shadow: 0 0 8px var(--c-amber),   0 0 16px rgba(var(--c-amber-rgb), 0.55); }
+.run-dot.crimson  { background: var(--c-crimson); box-shadow: 0 0 8px var(--c-crimson), 0 0 16px rgba(var(--c-crimson-rgb), 0.55); }
+.run-dot.spectrum {
+  background: var(--prism-spectrum);
+  box-shadow:
+    -2px 0 6px rgba(var(--c-red-rgb), 0.55),
+    0 0 6px rgba(var(--c-mint-rgb), 0.50),
+    2px 0 6px rgba(var(--c-blue-rgb), 0.55);
+}
+.run-dot.off      { background: #3f4a5f; box-shadow: none; }
 
 /* Unified Full-Width Segmented Block Meters with Soft Optical Bloom (圖1 + 圖4) */
 .seg-meter {
@@ -550,7 +567,8 @@
   border-radius: 0;
   background: rgba(255, 255, 255, 0.055);
 }
-.seg-cell.on.mint    { background: var(--c-mint-bar); box-shadow: 0 0 8px var(--c-mint-glow), 0 0 14px rgba(var(--c-mint-rgb), 0.25); }
+.seg-cell.on.red     { background: var(--c-red-bar);  box-shadow: 0 0 8px var(--c-red-glow),     0 0 14px rgba(var(--c-red-rgb), 0.25); }
+.seg-cell.on.mint    { background: var(--c-mint-bar); box-shadow: 0 0 8px var(--c-mint-glow),    0 0 14px rgba(var(--c-mint-rgb), 0.25); }
 .seg-cell.on.blue    { background: var(--c-blue-bar); box-shadow: 0 0 8px var(--c-blue-glow), 0 0 14px rgba(var(--c-blue-rgb), 0.25); }
 .seg-cell.on.amber   { background: var(--c-amber);    box-shadow: 0 0 8px var(--c-amber-glow), 0 0 14px rgba(var(--c-amber-rgb), 0.25); }
 .seg-cell.on.violet  { background: var(--c-violet);   box-shadow: 0 0 8px var(--c-violet-glow), 0 0 14px rgba(var(--c-violet-rgb), 0.25); }
@@ -792,7 +810,7 @@
   padding: 5px 8px;
   background: rgba(4, 6, 12, 0.88);
   border: 1px solid var(--line-window);
-  border-left: 1.5px solid rgba(var(--c-violet-rgb), 0.55);
+  border-left: 1.5px solid rgba(var(--c-mint-rgb), 0.55);
   font-size: 9.5px;
 }
 
@@ -1308,7 +1326,8 @@
   color: var(--text-bright);
   text-decoration: none;
 }
-.btn-cmd.primary {
+.btn-cmd.primary,
+.btn-cmd.mint {
   border-color: rgba(var(--c-mint-rgb), 0.72);
   color: var(--c-mint);
   box-shadow: 0 0 14px rgba(var(--c-mint-rgb), 0.22);
@@ -1345,6 +1364,11 @@
   color: var(--c-blue);
   font-weight: 700;
   box-shadow: inset 0 0 12px rgba(var(--c-blue-rgb), 0.26);
+}
+.s-box.spectrum .seg-btn.on {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-bright);
+  box-shadow: inset 0 -1.5px 0 rgba(255, 255, 255, 0.78), inset 0 0 10px rgba(255, 255, 255, 0.10);
 }
 
 .bp-input {
@@ -1496,6 +1520,7 @@
 }
 
 /* Utility */
+.c-red     { color: var(--c-red); }
 .c-amber   { color: var(--c-amber); }
 .c-mint    { color: var(--c-mint); }
 .c-blue    { color: var(--c-blue); }

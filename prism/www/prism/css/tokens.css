@@ -58,6 +58,12 @@
   --c-amber-dim:   rgba(235, 154, 94, 0.14);
   --c-amber-glow:  rgba(235, 154, 94, 0.42);
 
+  --c-red:         #f25a5a;
+  --c-red-rgb:     242, 90, 90;
+  --c-red-bar:     #f25a5a;
+  --c-red-dim:     rgba(242, 90, 90, 0.15);
+  --c-red-glow:    rgba(242, 90, 90, 0.46);
+
   --c-mint:        #57d192;
   --c-mint-rgb:    87, 209, 146;
   --c-mint-bar:    #57d192;
