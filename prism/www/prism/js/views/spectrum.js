@@ -315,12 +315,10 @@ function updateHeatmap(strands) {
 
     tile.style.setProperty('--sc-rgb', col.rgb);
     tile.style.setProperty('--lit-rgb', coreRgb);
+    const kAct = !s.healthy ? 0 : Math.max(0, (k - 0.14) / 0.86);
     tile.style.setProperty('--heat-fill', fillAlpha.toFixed(2));
-    tile.style.setProperty('--heat-halo', (0.04 + 0.24 * Math.pow(k, 1.15)).toFixed(3));
-    tile.style.setProperty('--heat-outer', (0.01 + 0.11 * Math.pow(k, 1.25)).toFixed(3));
-    tile.style.setProperty('--heat-crest', (0.02 + 0.07 * Math.pow(k, 1.10)).toFixed(3));
-    tile.style.setProperty('--heat-blur', `${Math.round(8 + 16 * k)}px`);
-    tile.style.setProperty('--heat-bloom', `${Math.round(18 + 22 * k)}px`);
+    tile.style.setProperty('--heat-halo', (kAct > 0 ? 0.04 + 0.24 * Math.pow(kAct, 1.05) : 0).toFixed(3));
+    tile.style.setProperty('--heat-blur', `${Math.round(6 + 10 * kAct)}px`);
     tile.style.setProperty('--heat-label-op', (!s.healthy ? 0.48 : (0.80 + k * 0.20)).toFixed(2));
 
     tile.title = `${s.dev} (λ=${col.lambda}nm) · ${s.ip || '無租約'} · ↓${fmtShortRate(downBps)} ↑${fmtShortRate(upBps)} · pk ${fmtShortRate(s.peak)} · τ=${s.ttfb_ms || '—'}ms · loss ${s.loss_pct ?? 0}% · tokens ${Math.round(pct)}% · slots ${s.slots ?? 0}`;
@@ -411,14 +409,14 @@ export function renderSpectrum() {
     const vLit = desatObsidianRgb(SPECTRUM_STOPS[6], ribSat);
     const sA = (0.03 + 0.16 * Math.pow(ribK, 1.12)).toFixed(3);
     const vA = (0.02 + 0.12 * Math.pow(ribK, 1.18)).toFixed(3);
-    const blur1 = Math.round(8 + 14 * ribK);
-    const blur2 = Math.round(18 + 20 * ribK);
+    const blur1 = Math.round(5 + 4 * ribK);
+    const blur2 = Math.round(8 + 4 * ribK);
     ribScope.style.setProperty('--ribbon-fill', ribFill);
     ribScope.style.setProperty('--ribbon-shadow',
-      `-6px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
+      `-4px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
       `0 0 ${blur1}px rgba(${gLit}, ${sA}), ` +
-      `6px 0 ${blur1}px rgba(${bLit}, ${sA}), ` +
-      `10px 0 ${blur2}px rgba(${vLit}, ${vA}), ` +
+      `4px 0 ${blur1}px rgba(${bLit}, ${sA}), ` +
+      `6px 0 ${blur2}px rgba(${vLit}, ${vA}), ` +
       `inset 0 0 0 0.5px rgba(0, 0, 0, 0.45)`
     );
   }

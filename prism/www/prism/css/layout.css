@@ -191,7 +191,7 @@
 .blueprint-left-col {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -300,7 +300,7 @@
 .clients-right-col {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   min-height: 0;
   height: 100%;

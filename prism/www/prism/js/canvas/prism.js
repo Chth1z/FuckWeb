@@ -417,8 +417,8 @@ function drawPrismFrame() {
   // Soft slope-aligned outer atmospheric glow along Red (top) & Violet (bottom) — zero sharp polygon seams
   const anyHover = S.hoverStrand !== null;
   if (!anyHover) {
-    const outerReach = Math.min(48, 26 + Math.sqrt(Math.max(0, totalMbps)) * 3.0);
-    const outerAlpha = Math.min(0.28, 0.14 + Math.sqrt(Math.max(0, totalMbps)) * 0.022);
+    const outerReach = Math.min(34, 20 + Math.sqrt(Math.max(0, totalMbps)) * 2.2);
+    const outerAlpha = Math.min(0.32, 0.18 + Math.sqrt(Math.max(0, totalMbps)) * 0.025);
     const colTop = spectralColor(0, nStrands);
     const colBot = spectralColor(nStrands - 1, nStrands);
 
@@ -610,8 +610,8 @@ function drawPrismFrame() {
     ctx.fill();
     ctx.restore();
   };
-  castInwardBevel(Math.max(12, side * 0.088), 'rgba(130, 192, 214, 0.34)');
-  castInwardBevel(Math.max(3, side * 0.018), 'rgba(196, 232, 240, 0.24)');
+  castInwardBevel(Math.max(10, side * 0.068), 'rgba(130, 192, 214, 0.38)');
+  castInwardBevel(Math.max(3, side * 0.016), 'rgba(196, 232, 240, 0.26)');
 
   const exitMidX = (exitTopX + exitBotX) * 0.5;
   const exitMidY = (exitTopY + exitBotY) * 0.5;

@@ -89,8 +89,8 @@ function paintModuleHeat(m, h) {
   const glowA = (0.02 + 0.28 * Math.pow(k, 1.15)).toFixed(3);
   const bloomA = (0.006 + 0.12 * Math.pow(k, 1.25)).toFixed(3);
   const insetA = (0.01 + 0.08 * Math.pow(k, 1.10)).toFixed(3);
-  const blur1 = Math.round(8 + 16 * k);
-  const blur2 = Math.round(18 + 26 * k);
+  const blur1 = Math.round(6 + 6 * k);
+  const blur2 = Math.round(10 + 4 * k);
 
   if (m.kind === 'spectrum') {
     const stops = SPECTRUM_STOPS.map((rgb, idx) => {
@@ -112,12 +112,12 @@ function paintModuleHeat(m, h) {
     );
     node.style.setProperty(
       '--bp-card-shadow',
-      `-6px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
+      `-3px 0 ${blur1}px rgba(${rLit}, ${sA}), ` +
       `0 0 ${blur1}px rgba(${gLit}, ${sA}), ` +
-      `6px 0 ${Math.round(blur1 * 1.05)}px rgba(${bLit}, ${sA}), ` +
-      `10px 0 ${blur2}px rgba(${vLit}, ${vA}), ` +
-      `inset 0 0 ${Math.round(8 + 8 * k)}px rgba(255, 255, 255, ${insetA}), ` +
-      `0 10px 26px rgba(0, 0, 0, 0.78)`
+      `3px 0 ${blur1}px rgba(${bLit}, ${sA}), ` +
+      `5px 0 ${blur2}px rgba(${vLit}, ${vA}), ` +
+      `inset 0 0 ${Math.round(8 + 6 * k)}px rgba(255, 255, 255, ${insetA}), ` +
+      `0 8px 20px rgba(0, 0, 0, 0.78)`
     );
   } else {
     const lit = desatObsidianRgb(m.rgb, sat);
@@ -130,8 +130,8 @@ function paintModuleHeat(m, h) {
       '--bp-card-shadow',
       `0 0 ${blur1}px rgba(${lit}, ${glowA}), ` +
       `0 0 ${blur2}px rgba(${lit}, ${bloomA}), ` +
-      `inset 0 0 ${Math.round(8 + 10 * k)}px rgba(${lit}, ${insetA}), ` +
-      `0 10px 26px rgba(0, 0, 0, 0.78)`
+      `inset 0 0 ${Math.round(8 + 8 * k)}px rgba(${lit}, ${insetA}), ` +
+      `0 8px 20px rgba(0, 0, 0, 0.78)`
     );
   }
 }
