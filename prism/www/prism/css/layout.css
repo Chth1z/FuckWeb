@@ -294,7 +294,7 @@
 
 .bp-col-ingress .bp-stage-bridge {
   flex: 1 1 auto;
-  min-height: 22px;
+  min-height: 14px;
 }
 
 .bp-col-engines .bp-stage-bridge {
