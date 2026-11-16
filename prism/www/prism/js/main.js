@@ -18,48 +18,58 @@ let fastInFlight = false;
 let slowInFlight = false;
 let lastFastTab = '';
 
+function setTxt(sel, val) {
+  const n = $(sel);
+  const s = String(val);
+  if (n && n.textContent !== s) n.textContent = s;
+  return n;
+}
+
 function renderChrome() {
   const st = S.status;
   if (!st) return;
 
   const ver = st.version || UI_VERSION;
-  $('#hdr-ip').textContent = st.lan_ip || location.hostname;
-  $('#hdr-ver').textContent = `v${ver}`;
-  if ($('#ov-ver')) $('#ov-ver').textContent = `PRISM v${ver} · DISPERSION FLUX`;
-  if ($('#modal-ver')) $('#modal-ver').textContent = `PRISM v${ver} · 系統管理認證`;
-  document.title = `PRISM v${ver} · Optical Spectrum & Privacy Router`;
+  setTxt('#hdr-ip', st.lan_ip || location.hostname);
+  setTxt('#hdr-ver', `v${ver}`);
+  setTxt('#ov-ver', `PRISM v${ver} · DISPERSION FLUX`);
+  setTxt('#modal-ver', `PRISM v${ver} · 系統管理認證`);
+  const nextTitle = `PRISM v${ver} · Optical Spectrum & Privacy Router`;
+  if (document.title !== nextTitle) document.title = nextTitle;
 
-  $('#n-strands').textContent = st.strand_count || (st.strands || []).length || 21;
+  setTxt('#n-strands', st.strand_count || (st.strands || []).length || 21);
   const devs = S.devices?.devices || [];
-  $('#n-devices').textContent = devs.filter(d => d.online).length;
+  setTxt('#n-devices', devs.filter(d => d.online).length);
 
-  $('#site-badge').textContent = st.site?.known
+  setTxt('#site-badge', st.site?.known
     ? `SITE · ${st.site.name}`
-    : (st.site?.aggregate ? 'SITE · AGGREGATE' : 'SITE · SINGLE');
+    : (st.site?.aggregate ? 'SITE · AGGREGATE' : 'SITE · SINGLE'));
 
   const pill = $('#health-pill');
   if (pill) {
     const ok = st.ok;
     const warn = (st.warn || []).length;
-    pill.textContent = ok
+    const nextPillTxt = ok
       ? (warn > 0 ? `DOCTOR · OK (${warn} WARN)` : 'DOCTOR · ALL OK')
       : `DOCTOR · ${st.fail?.length || 1} FAIL`;
-    pill.className = 'st-badge ' + (ok ? (warn > 0 ? 'draining' : 'charged') : 'depleted');
+    const nextPillCls = 'st-badge ' + (ok ? (warn > 0 ? 'draining' : 'charged') : 'depleted');
+    if (pill.textContent !== nextPillTxt) pill.textContent = nextPillTxt;
+    if (pill.className !== nextPillCls) pill.className = nextPillCls;
   }
 
   // Persistent CLI Footer
   const w = st.weave || {};
   const tun = S.tunnel;
   const vipS = (st.strands || []).find(s => s.vip);
-  $('#cli-policy').textContent = w.policy || 'harvest';
-  $('#cli-cage').textContent = (tun?.tw_home || tun?.selected || 'tw-home').slice(0, 22);
-  $('#cli-vip').textContent = w.vip_dev || 'auto';
+  setTxt('#cli-policy', w.policy || 'harvest');
+  setTxt('#cli-cage', (tun?.tw_home || tun?.selected || 'tw-home').slice(0, 22));
+  setTxt('#cli-vip', w.vip_dev || 'auto');
 
-  $('#ft-strands').textContent = `[${st.healthy_count ?? 0}/${st.strand_count ?? 21}]`;
-  $('#ft-vip').textContent = vipS ? `[${vipS.dev} · ${vipS.ttfb_ms}ms]` : '[—]';
-  $('#ft-tunnel').textContent = `[${st.tunnel?.on ? 'tw-home' : 'direct'}]`;
-  $('#ft-guard').textContent = st.tunnel?.fail_open ? '[fail_open]' : '[fail_closed]';
-  $('#ft-down').textContent = fmtRate(st.rate).full;
+  setTxt('#ft-strands', `[${st.healthy_count ?? 0}/${st.strand_count ?? 21}]`);
+  setTxt('#ft-vip', vipS ? `[${vipS.dev} · ${vipS.ttfb_ms}ms]` : '[—]');
+  setTxt('#ft-tunnel', `[${st.tunnel?.on ? 'tw-home' : 'direct'}]`);
+  setTxt('#ft-guard', st.tunnel?.fail_open ? '[fail_open]' : '[fail_closed]');
+  setTxt('#ft-down', fmtRate(st.rate).full);
 }
 
 function renderActiveTab() {
@@ -177,15 +187,17 @@ async function pollSlow() {
       S.tab === 'blueprint' ? { method: 'events', args: { limit: 40 } } : null,
       S.tab === 'blueprint' ? { method: 'doctor' } : null,
       S.tab === 'spectrum' && (!S.series?.ts || S.series.ts.length < 2) ? { method: 'series', args: { limit: 720 } } : null,
-      S.tab === 'blueprint' && S.session ? { method: 'config' } : null
+      S.tab === 'blueprint' && S.session ? { method: 'config' } : null,
+      S.tab !== 'overview' && S.tab !== 'clients' ? { method: 'devices' } : null
     ];
 
-    const [tun, ev, doc, ser, cfg] = await callBatch(reqs);
+    const [tun, ev, doc, ser, cfg, dv] = await callBatch(reqs);
     if (tun) S.tunnel = tun;
     if (ev) S.events = ev;
     if (doc) S.doctor = doc;
     if (ser) mergeSeriesDelta(ser);
     if (cfg) S.config = cfg;
+    if (dv) S.devices = dv;
     renderActiveTab();
     saveBootSnapshot();
   } catch (_) {

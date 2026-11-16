@@ -84,6 +84,45 @@
         <button id="btn-auth" type="button" class="btn-cmd">管理登入</button>
       </div>
     </header>
+    <script>
+    (function(){
+      var t = document.documentElement.dataset.bootTab || 'overview';
+      var tabs = document.querySelectorAll('.nav-tab');
+      for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === t);
+      try {
+        if (localStorage.getItem('prism_session')) {
+          var ab = document.getElementById('btn-auth');
+          if (ab) {
+            ab.textContent = (localStorage.getItem('prism_user') || 'root') + ' · 登出';
+            ab.style.borderColor = 'var(--c-mint)';
+            ab.style.color = 'var(--c-mint)';
+          }
+        }
+        var raw = sessionStorage.getItem('prism_snap_v1');
+        if (raw) {
+          var snap = JSON.parse(raw);
+          var st = snap && snap.status;
+          if (st && (Date.now() - (snap.savedAt || 0)) < 180000) {
+            var ip = document.getElementById('hdr-ip');
+            if (ip && st.lan_ip) ip.textContent = st.lan_ip;
+            var ns = document.getElementById('n-strands');
+            if (ns) ns.textContent = st.strand_count || (st.strands && st.strands.length) || 21;
+            var devs = (snap.devices && snap.devices.devices) || [];
+            var nd = document.getElementById('n-devices');
+            if (nd) nd.textContent = devs.filter(function(d){ return d && d.online; }).length;
+            var sb = document.getElementById('site-badge');
+            if (sb) sb.textContent = (st.site && st.site.known) ? ('SITE · ' + st.site.name) : ((st.site && st.site.aggregate) ? 'SITE · AGGREGATE' : 'SITE · SINGLE');
+            var hp = document.getElementById('health-pill');
+            if (hp) {
+              var warn = (st.warn || []).length;
+              hp.textContent = st.ok ? (warn > 0 ? ('DOCTOR · OK (' + warn + ' WARN)') : 'DOCTOR · ALL OK') : ('DOCTOR · ' + ((st.fail && st.fail.length) || 1) + ' FAIL');
+              hp.className = 'st-badge ' + (st.ok ? (warn > 0 ? 'draining' : 'charged') : 'depleted');
+            }
+          }
+        }
+      } catch (_) {}
+    })();
+    </script>
 
     <!-- Main Edge-to-Edge Content Workspace (Zero Page Vertical Scroll) -->
     <main class="main-stage">
