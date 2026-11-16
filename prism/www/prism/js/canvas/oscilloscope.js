@@ -44,21 +44,14 @@ function downsampleWindow(ts, down, up, focus, maxPts = 140) {
   return { ts: oTs, down: oDown, up: oUp, focus: oFocus };
 }
 
-function buildSmoothPath(series, n, toX, toY, minY, maxY) {
+function buildPolylinePath(series, n, toX, toY, minY, maxY) {
   if (n < 2) return '';
   const clampY = (y) => Math.max(minY, Math.min(maxY, y));
-  let d = `M${toX(0).toFixed(1)},${clampY(toY(series[0] || 0)).toFixed(1)}`;
-  for (let i = 0; i < n - 1; i++) {
-    const y0 = clampY(toY(series[Math.max(0, i - 1)] || 0));
-    const y1 = clampY(toY(series[i] || 0));
-    const y2 = clampY(toY(series[i + 1] || 0));
-    const y3 = clampY(toY(series[Math.min(n - 1, i + 2)] || 0));
-    const x1 = toX(i);
-    const x2 = toX(i + 1);
-    const dx = (x2 - x1) / 3;
-    const cp1y = clampY(y1 + (y2 - y0) / 6);
-    const cp2y = clampY(y2 - (y3 - y1) / 6);
-    d += ` C${(x1 + dx).toFixed(1)},${cp1y.toFixed(1)} ${(x2 - dx).toFixed(1)},${cp2y.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const x = toX(i).toFixed(1);
+    const y = clampY(toY(series[i] || 0)).toFixed(1);
+    d += `${i === 0 ? 'M' : ' L'}${x},${y}`;
   }
   return d;
 }
@@ -160,35 +153,32 @@ export function renderOscilloscope(activeStrand = lastFocus) {
     }
   }
 
-  const dDown = buildSmoothPath(down, n, toX, toY, padT, baseY);
-  const dUp = buildSmoothPath(up, n, toX, toY, padT, baseY);
+  const dDown = buildPolylinePath(down, n, toX, toY, padT, baseY);
+  const dUp = buildPolylinePath(up, n, toX, toY, padT, baseY);
   const hasFocus = !!(focus && focus.length >= 2 && lastFocus);
   const aggOp = hasFocus ? '0.38' : '0.94';
 
   const dArea = `${dDown} L${toX(n - 1).toFixed(1)},${baseY.toFixed(1)} L${padL},${baseY.toFixed(1)} Z`;
   svg.appendChild(svgEl('path', { d: dArea, fill: 'url(#scopeWhiteG)', opacity: hasFocus ? '0.35' : '1' }));
 
-  // Clean continuous translucent ice-white upload line (no solid dark shadow under dashes)
+  // Clean continuous translucent ice-white upload polyline
   svg.appendChild(svgEl('path', {
-    d: dUp, fill: 'none', stroke: 'rgba(218, 236, 255, 0.62)', 'stroke-width': '1.25', opacity: aggOp
+    d: dUp, fill: 'none', stroke: 'rgba(218, 236, 255, 0.62)', 'stroke-width': '1.25', 'stroke-linejoin': 'bevel', opacity: aggOp
   }));
 
-  // Crisp single-stroke white download line (zero outer sleeve)
+  // Crisp single-stroke white download polyline (zero outer sleeve)
   svg.appendChild(svgEl('path', {
-    d: dDown, fill: 'none', stroke: 'rgba(255, 255, 255, 0.96)', 'stroke-width': '1.85', opacity: aggOp
+    d: dDown, fill: 'none', stroke: 'rgba(255, 255, 255, 0.96)', 'stroke-width': '1.85', 'stroke-linejoin': 'bevel', opacity: aggOp
   }));
 
-  // Focused strand clean overlay trace + terminal dot (zero outer halo/sleeve)
+  // Focused strand clean overlay polyline (zero outer sleeve or terminal dot)
   const tipX = toX(n - 1);
-  const tipY = hasFocus ? toY(focus[n - 1] || 0) : toY(down[n - 1] || 0);
   if (hasFocus) {
-    const dFocus = buildSmoothPath(focus, n, toX, toY, padT, baseY);
+    const dFocus = buildPolylinePath(focus, n, toX, toY, padT, baseY);
     const dFocusArea = `${dFocus} L${tipX.toFixed(1)},${baseY.toFixed(1)} L${padL},${baseY.toFixed(1)} Z`;
     svg.appendChild(svgEl('path', { d: dFocusArea, fill: 'url(#scopeFocusG)' }));
-    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: '#ffffff', 'stroke-width': '2.0' }));
+    svg.appendChild(svgEl('path', { d: dFocus, fill: 'none', stroke: '#ffffff', 'stroke-width': '2.0', 'stroke-linejoin': 'bevel' }));
   }
-
-  svg.appendChild(svgEl('circle', { cx: tipX.toFixed(1), cy: tipY.toFixed(1), r: '2.1', fill: '#ffffff' }));
 
   const cursorLine = svgEl('line', {
     x1: -10, y1: padT, x2: -10, y2: baseY,
