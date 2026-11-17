@@ -59,12 +59,13 @@ function renderChrome() {
   const tun = S.tunnel;
   const vipS = (st.strands || []).find(s => s.vip);
   setTxt('#cli-policy', w.policy || 'harvest');
-  setTxt('#cli-cage', (tun?.tw_home || tun?.selected || 'tw-home').slice(0, 22));
+  setTxt('#cli-cage', (tun?.selected || tun?.tw_home || (st.tunnel?.on ? '活躍' : '直連')).slice(0, 22));
   setTxt('#cli-vip', w.vip_dev || 'auto');
 
   setTxt('#ft-strands', `[${st.healthy_count ?? 0}/${st.strand_count ?? 21}]`);
   setTxt('#ft-vip', vipS ? `[${vipS.dev} · ${vipS.ttfb_ms}ms]` : '[—]');
-  setTxt('#ft-tunnel', `[${st.tunnel?.on ? 'tw-home' : 'direct'}]`);
+  const ftTunTxt = !st.tunnel?.on ? 'direct' : (!st.tunnel?.running ? 'down!' : (tun?.selected || tun?.tw_home || 'cage').slice(0, 18));
+  setTxt('#ft-tunnel', `[${ftTunTxt}]`);
   setTxt('#ft-guard', st.tunnel?.fail_open ? '[fail_open]' : '[fail_closed]');
   setTxt('#ft-down', `↓ ${fmtRate(st.rate).full}`);
 }

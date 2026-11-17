@@ -207,7 +207,7 @@
             <div class="corner-sub">
               <span>峰值 <strong id="ov-peak" class="c-bright">0 Mbps</strong></span>
               <span>·</span>
-              <span>活躍流 <strong id="ov-conntrack" class="c-bright">0</strong></span>
+              <span>連接表 <strong id="ov-conntrack" class="c-bright">0</strong></span>
             </div>
           </div>
 
@@ -436,7 +436,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title"><span class="c-spectrum">NFTABLES CLASSIFY</span></div>
-                    <div id="bp-classify-sub" class="bp-card-sub">mangle · @dev_policy · 餘量歸籠</div>
+                    <div id="bp-classify-sub" class="bp-card-sub">prerouting · 進站請求判別 (僅上行/首包)</div>
                   </div>
                   <div class="bp-head-kpi">
                     <div id="bp-ingress-rate" class="bp-live-rate c-bright">0 Mbps</div>
@@ -535,7 +535,7 @@
                 <div class="bp-node-head">
                   <div>
                     <div class="bp-card-title c-blue">Burst-Harvest 2.0 · 脈衝收割池</div>
-                    <div class="bp-card-sub">@domestic4 &amp; weave_out · 126槽 ISWRR</div>
+                    <div class="bp-card-sub">@domestic4 &amp; @strands · 直連雙向收割</div>
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-dom-rate" class="bp-live-rate c-blue">0 bps</span>
@@ -597,7 +597,7 @@
 
                   <div id="bp-qos-20" class="qos-band-chip" style="--qb-rgb:87,209,146">
                     <div class="qos-band-head">
-                      <span class="c-mint" style="font-weight:700;font-size:10.5px">1:20 · Prio1 (&lt;8MB)</span>
+                      <span class="c-mint" style="font-weight:700;font-size:10.5px">1:20 · Prio1 (&lt;64MB)</span>
                       <span id="bp-qos-20-rate" class="c-mint" style="font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums">0 bps</span>
                     </div>
                     <span id="bp-qos-20-bar" class="seg-meter"></span>
@@ -609,12 +609,12 @@
 
                   <div id="bp-qos-30" class="qos-band-chip" style="--qb-rgb:100,174,245">
                     <div class="qos-band-head">
-                      <span class="c-blue" style="font-weight:700;font-size:10.5px">1:30 · Prio2 (≥8MB)</span>
+                      <span class="c-blue" style="font-weight:700;font-size:10.5px">1:30 · Prio2 (≥64MB)</span>
                       <span id="bp-qos-30-rate" class="c-blue" style="font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums">0 bps</span>
                     </div>
                     <span id="bp-qos-30-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
-                      <span class="c-sec">直連收割 / ct≥8MB 大流降階</span>
+                      <span class="c-sec">直連收割 / ct≥64MB 大流降階</span>
                       <span id="bp-qos-30-sub" class="c-muted">21-strand bulk</span>
                     </div>
                   </div>
@@ -622,7 +622,7 @@
 
                 <div class="bp-kv-strip cols-2">
                   <div class="bp-kv-cell"><span class="k">整形演算法</span><span class="v c-bright">htb + fq_codel</span></div>
-                  <div class="bp-kv-cell"><span class="k">小包/大流</span><span class="v">≤256B / ≥8MB</span></div>
+                  <div class="bp-kv-cell"><span class="k">小包/大流</span><span class="v">≤256B / ≥64MB</span></div>
                   <div class="bp-kv-cell"><span class="k">ICMP/DNS</span><span class="v c-red">→ 1:10 優先</span></div>
                   <div class="bp-kv-cell"><span class="k">SYN鉗制</span><span id="bp-qos-mss-kv" class="v">MSS 1440</span></div>
                 </div>
@@ -637,7 +637,7 @@
 
                 <div class="bp-node-foot bp-node-foot-rule">
                   <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0"><span class="run-dot spectrum"></span><span id="bp-qos-st" class="c-bright">3-band active</span></span>
-                  <span id="bp-qos-foot" class="c-sec">SYN MSS clamp · 8MB 相變界</span>
+                  <span id="bp-qos-foot" class="c-sec">SYN MSS clamp · 64MB 相變界</span>
                 </div>
               </div>
 
@@ -835,13 +835,14 @@
         var w = st.weave || {}, tun = snap.tunnel, strands = st.strands || [];
         var setT = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
         setT('cli-policy', w.policy || 'harvest');
-        setT('cli-cage', String((tun && (tun.tw_home || tun.selected)) || 'tw-home').slice(0, 22));
+        setT('cli-cage', String((tun && (tun.selected || tun.tw_home)) || '—').slice(0, 22));
         setT('cli-vip', w.vip_dev || 'auto');
         setT('ft-strands', '[' + (st.healthy_count != null ? st.healthy_count : 0) + '/' + (st.strand_count != null ? st.strand_count : 21) + ']');
         var vipS = null;
         for (var i = 0; i < strands.length; i++) { if (strands[i] && strands[i].vip) { vipS = strands[i]; break; } }
         setT('ft-vip', vipS ? ('[' + vipS.dev + ' · ' + vipS.ttfb_ms + 'ms]') : '[—]');
-        setT('ft-tunnel', '[' + (st.tunnel && st.tunnel.on ? 'tw-home' : 'direct') + ']');
+        var ftTun = !(st.tunnel && st.tunnel.on) ? 'direct' : (!(st.tunnel && st.tunnel.running) ? 'down!' : String((tun && (tun.selected || tun.tw_home)) || 'cage').slice(0, 18));
+        setT('ft-tunnel', '[' + ftTun + ']');
         setT('ft-guard', (st.tunnel && st.tunnel.fail_open) ? '[fail_open]' : '[fail_closed]');
         var bps = Math.max(0, (st.rate || 0) * 8);
         var f = bps < 1000 ? (bps.toFixed(0) + ' bps')

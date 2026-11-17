@@ -108,7 +108,7 @@ function ensureOscScaffold(svg, tip) {
   });
   const hit = svgEl('rect', { x: 8, y: 0, width: 1156, height: 112, fill: 'transparent', style: 'cursor:crosshair' });
 
-  const state = { W: 1200, H: 112, padL: 8, padT: 26, plotW: 1156, baseY: 106, n: 0, ts: [], down: [], up: [], focus: null, hasFocus: false, focusMeta: null };
+  const state = { W: 1200, H: 112, padL: 8, padT: 26, plotW: 1156, baseY: 106, n: 0, bucketSec: 2, isPeak: false, ts: [], down: [], up: [], focus: null, hasFocus: false, focusMeta: null };
   hit.addEventListener('mousemove', (e) => {
     const st = state;
     if (st.n < 2) return;
@@ -139,7 +139,7 @@ function ensureOscScaffold(svg, tip) {
         ? `<span class="tt-k" style="color:${fm.css}">${fm.dev}</span><span class="tt-v">${fmtRate(fVal).full}</span>`
         : '';
       tip.innerHTML = `
-        <div class="tt-head"><span>${fmtClock(st.ts[idx])}</span><span class="c-muted">2s window</span></div>
+        <div class="tt-head"><span>${fmtClock(st.ts[idx])}</span><span class="c-muted">${st.bucketSec}s ${st.isPeak ? '峰值窗' : '採樣窗'}</span></div>
         <div class="tt-grid">
           <span class="tt-k c-bright">總下行</span><span class="tt-v">${fmtRate(st.down[idx]).full}</span>
           <span class="tt-k c-sec">總上行</span><span class="tt-v">${fmtRate(st.up[idx] || 0).full}</span>
@@ -291,5 +291,6 @@ export function renderOscilloscope(activeStrand = lastFocus) {
   sc.hit.setAttribute('x', padL);
   sc.hit.setAttribute('width', plotW);
   sc.hit.setAttribute('height', H);
-  Object.assign(sc.state, { W, H, padL, padT, plotW, baseY, n, ts, down, up, focus, hasFocus, focusMeta: lastFocus });
+  const bucketSec = Math.max(1, Math.round((ser.interval || 2) * (rawTs.length / Math.max(1, n))));
+  Object.assign(sc.state, { W, H, padL, padT, plotW, baseY, n, bucketSec, isPeak: rawTs.length > n, ts, down, up, focus, hasFocus, focusMeta: lastFocus });
 }

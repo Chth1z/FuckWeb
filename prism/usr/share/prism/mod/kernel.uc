@@ -123,14 +123,14 @@ function build(ctx) {
 			if (!length(macs))
 				continue;
 			push(divert, sprintf(
-				'ether saddr { %s } meta l4proto { tcp, udp } tproxy ip to %s:%d meta mark set %s ct mark set %s accept comment "dev:%s"',
+				'ether saddr { %s } meta l4proto { tcp, udp } tproxy ip to %s:%d meta mark set %s ct mark set %s counter name "tun_up" accept comment "dev:%s"',
 				join(", ", macs), cfg.tunnel.listen_addr, p.port, hex(MARK_DIVERTED), hex(MARK_DIVERTED), p.uid));
 		}
 		push(divert, 'counter drop comment "unmapped-divert-drop"');
 	}
 	else {
 		push(divert, sprintf(
-			"meta l4proto { tcp, udp } tproxy ip to %s:%d meta mark set %s ct mark set %s accept",
+			'meta l4proto { tcp, udp } tproxy ip to %s:%d meta mark set %s ct mark set %s counter name "tun_up" accept',
 			cfg.tunnel.listen_addr, cfg.tunnel.tproxy_port, hex(MARK_DIVERTED), hex(MARK_DIVERTED)));
 	}
 

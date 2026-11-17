@@ -57,6 +57,60 @@ export function counters(set) {
 	return out;
 };
 
+let last_nc_err = 0;
+
+// Named counter objects in table inet prism -> { name: { packets, bytes } }.
+export function named_counters() {
+	let r = core.sh("nft -j list counters table " + NFT);
+	if (r.code != 0) {
+		let now = time();
+		if (now - last_nc_err >= 30) {
+			last_nc_err = now;
+			core.err("named_counters rc=%d out=%s", r.code, substr(trim(r.out), 0, 180));
+		}
+		return null;
+	}
+	let out = {};
+	try {
+		for (let item in json(r.out).nftables)
+			if (item.counter?.name)
+				out[item.counter.name] = {
+					packets: item.counter.packets ?? 0,
+					bytes: item.counter.bytes ?? 0,
+				};
+	}
+	catch (e) {
+		let now = time();
+		if (now - last_nc_err >= 30) {
+			last_nc_err = now;
+			core.err("named_counters parse err=%s out=%s", "" + e, substr(trim(r.out), 0, 180));
+		}
+		return null;
+	}
+	return out;
+};
+
+// Live per-rule counters from chain classify -> [ { tag, packets, bytes } ].
+export function classify_counters() {
+	let r = core.sh("nft -j list chain " + NFT + " classify");
+	if (r.code != 0)
+		return [];
+	let out = [];
+	try {
+		for (let item in json(r.out).nftables) {
+			let c = null;
+			for (let e in item.rule?.expr ?? [])
+				c ??= e.counter;
+			if (item.rule?.comment)
+				push(out, { tag: item.rule.comment, packets: c?.packets ?? 0, bytes: c?.bytes ?? 0 });
+		}
+	}
+	catch (e) {
+		return [];
+	}
+	return out;
+};
+
 // Count recently-active ESTABLISHED kernel flows per strand ID from nf_conntrack,
 // ignoring long-lived idle TCP keepalives (>90s silent) so zombie sockets never
 // penalize an idle 100% charged strand.

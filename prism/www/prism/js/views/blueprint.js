@@ -10,21 +10,38 @@ let drawerOpen = false;
 let rafId = null;
 let lastFrameTs = 0;
 
-let prevRuleSample = null;
 let lastHeatPaintTs = 0;
 const liveFlow = {
   totPkts: 0,
   totBytes: 0,
   quicPkts: 0,
   quicBytes: 0,
+  classifyBps: 0,
   vipBps: 0,
+  vipDownBytes: 0,
+  vipUpBytes: 0,
+  vipBytes: 0,
   tunBps: 0,
-  domBps: 0,
-  tunPkts: 0,
-  domPkts: 0,
+  tunDownBps: 0,
+  tunUpBps: 0,
+  tunDownBytes: 0,
+  tunUpBytes: 0,
   tunBytes: 0,
+  tunPkts: 0,
+  tunConns: 0,
+  domBps: 0,
+  domDownBps: 0,
+  domUpBps: 0,
+  domDownBytes: 0,
+  domUpBytes: 0,
   domBytes: 0,
-  tunShare: 0
+  domPkts: 0,
+  vipShare: 0,
+  tunShare: 0,
+  domShare: 0,
+  vipPct: 0,
+  tunPct: 0,
+  domPct: 0
 };
 
 // Dynamic optical saturation & glow state per pipeline card (0 = obsidian standby -> 1 = active hotspot)
@@ -872,14 +889,23 @@ export function closeSysModal() {
   $('#sys-modal-scrim')?.classList.remove('open');
 }
 
+function apportionPct3(a, b, c) {
+  const sum = a + b + c;
+  if (sum <= 0) return [0, 0, 0];
+  const raw = [(a / sum) * 100, (b / sum) * 100, (c / sum) * 100];
+  const flr = raw.map(v => Math.floor(v));
+  const rem = 100 - (flr[0] + flr[1] + flr[2]);
+  const order = [0, 1, 2].sort((i, j) => (raw[j] - flr[j]) - (raw[i] - flr[i]));
+  for (let k = 0; k < rem; k++) flr[order[k]]++;
+  return flr;
+}
+
 function updateFlowPhysics(st) {
   const totalRate = (st.rate || 0) + (st.rate_up || 0);
   const vipS = (st.strands || []).find(s => s.vip);
-  const vipBps = vipS ? ((vipS.now ?? vipS.rate ?? 0) + (vipS.up_now ?? vipS.up ?? 0)) : 0;
 
   const rules = S.rules?.rules || [];
   let totPkts = 0, totBytes = 0, quicPkts = 0, quicBytes = 0, dropPkts = 0;
-  let tunPkts = 0, domPkts = 0, tunBytes = 0, domBytes = 0;
   for (const r of rules) {
     const p = r.packets || 0;
     const b = r.bytes || 0;
@@ -892,54 +918,79 @@ function updateFlowPhysics(st) {
     } else if (r.tag === 'device-block' || r.tag === 'unverified-drop') {
       dropPkts += p;
     }
-    if (r.tag.includes('tunnel') || r.tag === 'rest-tunnel') {
-      tunPkts += p;
-      tunBytes += b;
-    } else if (r.tag === 'domestic' || r.tag === 'domestic-domain' || r.tag === 'device-direct' || r.tag === 'rest-direct' || r.tag === 'relay') {
-      domPkts += p;
-      domBytes += b;
-    }
   }
 
-  const nowMs = performance.now();
-  if (rules.length > 0) {
-    if (prevRuleSample && (nowMs - prevRuleSample.ts) >= 400 && tunBytes >= prevRuleSample.tunBytes) {
-      const dtSec = (nowMs - prevRuleSample.ts) / 1000;
-      liveFlow.tunBps = (tunBytes - prevRuleSample.tunBytes) / dtSec;
-      liveFlow.domBps = Math.max(0, (domBytes - prevRuleSample.domBytes) / dtSec);
-    } else if (!prevRuleSample && totPkts > 0) {
-      const share = tunPkts / totPkts;
-      liveFlow.tunBps = Math.max(0, totalRate - vipBps) * share;
-      liveFlow.domBps = Math.max(0, totalRate - vipBps) * (1 - share);
-    }
-    if (!prevRuleSample || (nowMs - prevRuleSample.ts) >= 400 || tunBytes < prevRuleSample.tunBytes) {
-      prevRuleSample = { ts: nowMs, tunBytes, domBytes };
-    }
-  }
+  const tel = st.telemetry || {};
+  const br = tel.branches || {};
+  const bv = br.vip || {};
+  const bt = br.tunnel || {};
+  const bd = br.direct || {};
+  const tunRunning = !!st.tunnel?.running;
 
-  liveFlow.vipBps = vipBps;
+  const vipBps = bv.bps ?? 0;
+  const tunBps = tunRunning ? (bt.bps ?? 0) : 0;
+  const domBps = bd.bps ?? 0;
+  const classifyBps = tel.classify?.bps ?? 0;
+
+  const vipBytes = bv.bytes ?? 0;
+  const tunKernelBytes = bt.k_bytes ?? 0;
+  const domBytes = bd.bytes ?? 0;
+
+  const activeSum = vipBps + tunBps + domBps;
+  const [s0, s1, s2] = activeSum > 0
+    ? [vipBps, tunBps, domBps]
+    : [vipBytes, tunRunning ? tunKernelBytes : 0, domBytes];
+  const shareSum = s0 + s1 + s2;
+  const [vipPct, tunPct, domPct] = apportionPct3(s0, s1, s2);
+
   liveFlow.totPkts = totPkts;
   liveFlow.totBytes = totBytes;
   liveFlow.quicPkts = quicPkts;
   liveFlow.dropPkts = dropPkts;
   liveFlow.quicBytes = quicBytes;
-  liveFlow.tunPkts = tunPkts;
-  liveFlow.domPkts = domPkts;
-  liveFlow.tunBytes = tunBytes;
-  liveFlow.domBytes = domBytes;
-  liveFlow.tunShare = totPkts > 0 ? tunPkts / totPkts : 0;
+  liveFlow.classifyBps = classifyBps;
 
-  const directResidual = Math.max(0, totalRate - vipBps - liveFlow.tunBps);
-  const weaveBps = prevRuleSample ? liveFlow.domBps : Math.max(liveFlow.domBps, directResidual);
+  liveFlow.vipBps = vipBps;
+  liveFlow.vipDownBytes = bv.down_bytes ?? 0;
+  liveFlow.vipUpBytes = bv.up_bytes ?? 0;
+  liveFlow.vipBytes = vipBytes;
+
+  liveFlow.tunBps = tunBps;
+  liveFlow.tunDownBps = tunRunning ? (bt.down_bps ?? 0) : 0;
+  liveFlow.tunUpBps = tunRunning ? (bt.up_bps ?? 0) : 0;
+  liveFlow.tunDownBytes = bt.down_bytes ?? 0;
+  liveFlow.tunUpBytes = bt.up_bytes ?? 0;
+  liveFlow.tunBytes = bt.bytes ?? 0;
+  liveFlow.tunPkts = bt.k_packets ?? 0;
+  liveFlow.tunConns = bt.conns ?? 0;
+
+  liveFlow.domBps = domBps;
+  liveFlow.domDownBps = bd.down_bps ?? 0;
+  liveFlow.domUpBps = bd.up_bps ?? 0;
+  liveFlow.domDownBytes = bd.down_bytes ?? 0;
+  liveFlow.domUpBytes = bd.up_bytes ?? 0;
+  liveFlow.domBytes = domBytes;
+  liveFlow.domPkts = bd.packets ?? 0;
+
+  liveFlow.vipShare = shareSum > 0 ? s0 / shareSum : 0;
+  liveFlow.tunShare = shareSum > 0 ? s1 / shareSum : 0;
+  liveFlow.domShare = shareSum > 0 ? s2 / shareSum : 0;
+  liveFlow.vipPct = vipPct;
+  liveFlow.tunPct = tunPct;
+  liveFlow.domPct = domPct;
+
+  const qBands = tel.qos?.bands || {};
+  const qosSumBps = (qBands['1:10']?.bps || 0) + (qBands['1:20']?.bps || 0) + (qBands['1:30']?.bps || 0);
+
   const rates = [
     vipS && vipS.healthy ? vipBps : -1,
-    st.tunnel?.on && st.tunnel?.running ? liveFlow.tunBps : -1,
-    st.healthy_count > 0 ? weaveBps : -1,
-    st.tunnel?.on && st.tunnel?.running ? liveFlow.tunBps : -1,
+    st.tunnel?.on && tunRunning ? tunBps : -1,
+    st.healthy_count > 0 ? domBps : -1,
+    st.tunnel?.on && tunRunning ? tunBps : -1,
     totalRate
   ];
 
-  const maxBps = Math.max(2048, vipBps, liveFlow.tunBps, weaveBps, totalRate);
+  const maxBps = Math.max(2048, vipBps, tunBps, domBps, totalRate);
   for (let k = 0; k < waveState.length; k++) {
     const bps = rates[k];
     const b = waveState[k];
@@ -969,13 +1020,13 @@ function updateFlowPhysics(st) {
   };
 
   moduleHeat.guard.rgb      = !st.ok ? '230, 108, 120' : (st.tunnel?.fail_open ? '235, 154, 94' : '170, 142, 240');
-  moduleHeat.guard.target   = !st.ok ? 0.92 : (st.tunnel?.fail_open ? 0.72 : heatOf(liveFlow.tunBps + totalRate * 0.35, 0.10));
+  moduleHeat.guard.target   = !st.ok ? 0.92 : (st.tunnel?.fail_open ? 0.72 : heatOf(tunBps + totalRate * 0.35, 0.10));
   moduleHeat.pregate.target = st.dns?.smartdns ? heatOf(totalRate * 0.65, 0.10) : 0.04;
-  moduleHeat.ingress.target = heatOf(totalRate, 0.12);
+  moduleHeat.ingress.target = heatOf(classifyBps, 0.10);
   moduleHeat.vip.target     = vipS && vipS.healthy ? heatOf(vipBps, 0.03) : 0.02;
-  moduleHeat.tun.target     = st.tunnel?.running ? heatOf(liveFlow.tunBps, 0.06) : 0.03;
-  moduleHeat.dom.target     = st.healthy_count > 0 ? heatOf(weaveBps, 0.08) : 0.03;
-  moduleHeat.qos.target     = heatOf(totalRate, 0.10);
+  moduleHeat.tun.target     = tunRunning ? heatOf(tunBps, 0.06) : 0.03;
+  moduleHeat.dom.target     = st.healthy_count > 0 ? heatOf(domBps, 0.08) : 0.03;
+  moduleHeat.qos.target     = heatOf(qosSumBps || totalRate, 0.10);
   moduleHeat.uplink.target  = Math.min(1, heatOf(totalRate, 0.10) * 0.92 + Math.min(0.12, (st.sys?.load1 || 0) * 0.06));
 }
 
@@ -1081,7 +1132,7 @@ function renderClassifyStrip() {
       const segEl = el('span', { class: `seg-meter${pkts > 0 ? ' active' : ''}` });
       const card = el('div', {
         class: `classify-bar-card ${pkts > 0 ? 'active' : ''}`,
-        title: `${label} · ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt})`,
+        title: `${label} · 進站請求 ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt} 封包命中)`,
         style: {
           '--cb-rgb': heatRgb,
           '--cb-fill': fillA,
@@ -1094,7 +1145,7 @@ function renderClassifyStrip() {
       rowsByTag.set(r.tag, rec);
     } else {
       setCls(rec.card, `classify-bar-card ${pkts > 0 ? 'active' : ''}`);
-      setTitle(rec.card, `${label} · ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt})`);
+      setTitle(rec.card, `${label} · 進站請求 ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt} 封包命中)`);
       setVar(rec.card, '--cb-rgb', heatRgb);
       setVar(rec.card, '--cb-fill', fillA);
       setVar(rec.card, '--cb-bdr-a', bdrA);
@@ -1287,13 +1338,13 @@ export function renderBlueprint() {
   setTxt('#adv-strands', `${st.healthy_count ?? 0}/${st.strand_count ?? 21} (${st.role === 'primary' ? '主' : (st.role || '主')})`);
 
   // Subsystem Invariants Grid inside PRISM_GUARD (exact disjoint partition of doctor checks)
-  const totChecks = checks.length || 41;
-  const okChecks = checks.length ? checks.filter(c => c.ok).length : (st.ok ? totChecks : 0);
+  const totChecks = checks.length;
+  const okChecks = totChecks ? checks.filter(c => c.ok).length : 0;
   if ($('#adv-inv-score')) {
-    setTxt('#adv-inv-score', `${okChecks}/${totChecks} ok`);
-    setCls('#adv-inv-score', `bp-live-rate ${okChecks === totChecks ? 'c-violet' : 'c-crimson'}`);
+    setTxt('#adv-inv-score', totChecks > 0 ? `${okChecks}/${totChecks} ok` : '—/— ok');
+    setCls('#adv-inv-score', `bp-live-rate ${(!totChecks || okChecks === totChecks) ? 'c-violet' : 'c-crimson'}`);
   }
-  renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, okChecks === totChecks ? 'violet' : 'crimson', false);
+  renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, (!totChecks || okChecks === totChecks) ? 'violet' : 'crimson', false);
 
   const invGrid = $('#adv-invariants-grid');
   if (invGrid) {
@@ -1327,7 +1378,9 @@ export function renderBlueprint() {
     }
   }
 
-  setTxt('#adv-relays', `:${st.tunnel?.mixed_port || 61235}·${st.tunnel?.relays ?? 0}r·${st.mptcp?.endpoints?.length ?? 0}ep`);
+  const tpPort = st.tunnel?.tproxy_port || 61235;
+  setTxt('#adv-relays', `:${tpPort}·${st.tunnel?.relays ?? 0}r·${st.mptcp?.endpoints?.length ?? 0}ep`);
+  setTitle('#adv-relays', `TProxy :${tpPort} (每設備 :61236+) · Mixed :${st.tunnel?.mixed_port || 7890} · ${st.tunnel?.relays ?? 0} relays · ${st.mptcp?.endpoints?.length ?? 0} MPTCP ep`);
   const rem = st.settings?.['classify.remainder'] || 'tunnel';
   const q = st.settings?.['classify.quic'] === 'reject' ? 'quic✕' : 'quic✓';
   setTxt('#adv-classify-mode', `${rem} · ${q}`);
@@ -1337,7 +1390,7 @@ export function renderBlueprint() {
   const docEl = $('#adv-doctor');
   if (docEl) {
     setTxt(docEl, st.ok
-      ? `all ${totChecks} invariants ok`
+      ? (totChecks > 0 ? `all ${totChecks} invariants ok` : 'all invariants ok')
       : `${st.fail?.length || 1} fail · ${st.warn?.length || 0} warn`);
     setCls(docEl, st.ok ? 'c-violet' : 'c-crimson');
   }
@@ -1405,21 +1458,22 @@ export function renderBlueprint() {
 
   // Tier 1B: Nftables Classify Engine
   const remMode = st.settings?.['classify.remainder'] === 'direct' ? '直連' : '歸籠';
-  setTxt('#bp-classify-sub', `mangle · @dev_policy · 餘量${remMode}`);
-  setTxt('#bp-ingress-rate', fmtRate(totalRate).full);
+  setTxt('#bp-classify-sub', `prerouting · @dev_policy · 餘量${remMode} (上行/首包)`);
+  setTxt('#bp-ingress-rate', fmtRate(liveFlow.classifyBps).full);
+  setTitle('#bp-ingress-rate', `LAN 出站請求分類速率 · 21線雙向總速 ${fmtRate(totalRate).full}`);
   setTxt('#bp-ingress-pkts', liveFlow.totPkts >= 1e6
     ? `${(liveFlow.totPkts / 1e6).toFixed(2)}M pkts`
     : `${(liveFlow.totPkts / 1000).toFixed(1)}k pkts`);
   renderClassifyStrip();
   setTxt('#bp-classify-foot', `prerouting · ${(S.rules?.rules || []).length} rules`);
-  setTxt('#bp-classify-bytes', `累計 ${fmtBytes(liveFlow.totBytes)}`);
+  setTxt('#bp-classify-bytes', `上行累計 ${fmtBytes(liveFlow.totBytes)}`);
 
   // Tier 2 · Branch 0: @vip_lane
   const vipS = strands.find(s => s.vip);
   const vipRateTxt = vipS ? fmtRate(liveFlow.vipBps).full : '0 bps';
-  const vShareReal = (vipS && totalRate > 0) ? Math.min(1, liveFlow.vipBps / totalRate) : 0;
-  const vShareRatio = (vipS && liveFlow.vipBps > 400) ? Math.max(0.08, vShareReal) : vShareReal;
-  const vSharePct = Math.round(vShareReal * 100);
+  const vShareReal = liveFlow.vipShare;
+  const vShareRatio = (vipS && liveFlow.vipBps > 32) ? Math.max(0.08, vShareReal) : vShareReal;
+  const vSharePct = liveFlow.vipPct;
   const vipTokPct = vipS ? Math.round(vipS.tokens_pct ?? 100) : 0;
   setTxt('#bp-vip-rate', vipRateTxt);
   setTxt('#bp-vip-share', vipS ? `蓄能 ${vipTokPct}%` : '蓄能 —');
@@ -1427,8 +1481,14 @@ export function renderBlueprint() {
   setTxt('#bp-vip-pct', `${vSharePct}% 流佔比`);
   if ($('#bp-vip-iface')) setTxt('#bp-vip-iface', vipS ? `${vipS.dev} (#${vipS.id})` : 'auto');
   if ($('#bp-vip-rtt')) setTxt('#bp-vip-rtt', vipS ? `${vipS.ttfb_ms ?? '—'} ms · ${vipS.loss_pct ?? 0}%` : '— ms · 0%');
-  if ($('#bp-vip-down')) setTxt('#bp-vip-down', vipS ? fmtBytes(vipS.down_bytes || 0) : '0 B');
-  if ($('#bp-vip-up')) setTxt('#bp-vip-up', vipS ? fmtBytes(vipS.up_bytes || 0) : '0 B');
+  if ($('#bp-vip-down')) {
+    setTxt('#bp-vip-down', fmtBytes(liveFlow.vipDownBytes));
+    setTitle('#bp-vip-down', vipS ? `VIP實流 ↓${fmtBytes(liveFlow.vipDownBytes)} · ${vipS.dev}總下行 ↓${fmtBytes(vipS.down_bytes || 0)}` : '');
+  }
+  if ($('#bp-vip-up')) {
+    setTxt('#bp-vip-up', fmtBytes(liveFlow.vipUpBytes));
+    setTitle('#bp-vip-up', vipS ? `VIP實流 ↑${fmtBytes(liveFlow.vipUpBytes)} · ${vipS.dev}總上行 ↑${fmtBytes(vipS.up_bytes || 0)}` : '');
+  }
   if ($('#bp-vip-ports')) {
     const ports = S.rules?.ports || [];
     const portsFull = ports.length ? ports.join(',') : '123,3478,5349';
@@ -1439,7 +1499,7 @@ export function renderBlueprint() {
     setTxt('#bp-vip-quota', vipS ? `${fmtRateCompact(vipS.peak || 0)}峰·${vipS.slots ?? 0}槽` : '<50MB 優先');
   }
   if ($('#bp-vip-dot')) {
-    setCls('#bp-vip-dot', `run-dot ${vipS && vipS.healthy ? (liveFlow.vipBps > 400 ? 'red' : 'off') : 'off'}`);
+    setCls('#bp-vip-dot', `run-dot ${vipS && vipS.healthy ? (liveFlow.vipBps > 32 ? 'red' : 'off') : 'off'}`);
   }
   setTxt('#bp-vip-st', vipS && vipS.healthy
     ? (liveFlow.vipBps > 32 ? 'vip active' : 'vip pinned (idle)')
@@ -1451,13 +1511,15 @@ export function renderBlueprint() {
   // Tier 2 · Branch 1: TW-HOME Mihomo + MPTCP + Zashboard
   const mihomoOk = !!st.tunnel?.running;
   const tunShareReal = mihomoOk ? liveFlow.tunShare : 0;
-  const tunShareBar = (mihomoOk && liveFlow.tunPkts > 0) ? Math.max(0.08, tunShareReal) : 0;
-  const tunSharePct = Math.round(tunShareReal * 100);
+  const tunShareBar = (mihomoOk && (liveFlow.tunBps > 32 || liveFlow.tunBytes > 0)) ? Math.max(0.08, tunShareReal) : 0;
+  const tunSharePct = mihomoOk ? liveFlow.tunPct : 0;
   setTxt('#bp-tun-rate', mihomoOk ? fmtRate(liveFlow.tunBps).full : '0 bps');
+  setTitle('#bp-tun-rate', `Mihomo 雙向 ↓ ${fmtRate(liveFlow.tunDownBps).full} · ↑ ${fmtRate(liveFlow.tunUpBps).full}`);
   renderSegMeter($('#bp-tun-meter'), tunShareBar, 10, mihomoOk ? 'mint' : 'amber');
   setTxt('#bp-tun-pct', `${tunSharePct}% 流佔比`);
   setTxt('#bp-tun-desc', tun?.tw_home || tun?.selected || 'TW-HOME');
   setTxt('#bp-tun-bytes', fmtBytes(liveFlow.tunBytes));
+  setTitle('#bp-tun-bytes', `Mihomo 累計 ↓ ${fmtBytes(liveFlow.tunDownBytes)} · ↑ ${fmtBytes(liveFlow.tunUpBytes)} · 活躍 ${liveFlow.tunConns} 條`);
   setTxt('#bp-tun-pkts', liveFlow.tunPkts >= 1e6
     ? `${(liveFlow.tunPkts / 1e6).toFixed(2)}M pkts`
     : (liveFlow.tunPkts >= 1000 ? `${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts` : `${liveFlow.tunPkts} pkts`));
@@ -1496,11 +1558,22 @@ export function renderBlueprint() {
   const relayListEl = $('#bp-tun-relay-list');
   if (relayListEl) {
     const relays = Array.isArray(tun?.relays) ? tun.relays : [];
-    const activeName = tun?.tw_home || tun?.selected || '';
+    const activeSet = new Set();
+    if (tun?.tw_home) activeSet.add(tun.tw_home);
+    if (tun?.selected) activeSet.add(tun.selected);
+    for (const g of devGroups) {
+      const resolved = (g.now === 'TW-HOME' && tun?.tw_home) ? tun.tw_home : g.now;
+      if (resolved) activeSet.add(resolved);
+    }
+    const activeName = tun?.selected || tun?.tw_home || '';
     const valid = relays.filter(r => r && r.name && (r.delay || 0) > 0).sort((a, b) => a.delay - b.delay);
     const picked = [];
-    const activeItem = relays.find(r => r && r.name === activeName);
-    if (activeItem) picked.push(activeItem);
+    const primaryItem = relays.find(r => r && r.name === activeName);
+    if (primaryItem) picked.push(primaryItem);
+    for (const r of relays) {
+      if (picked.length >= 3) break;
+      if (r && r.name && activeSet.has(r.name) && !picked.some(x => x.name === r.name)) picked.push(r);
+    }
     for (const r of valid) {
       if (picked.length >= 3) break;
       if (!picked.some(x => x.name === r.name)) picked.push(r);
@@ -1508,15 +1581,16 @@ export function renderBlueprint() {
     if (!picked.length) {
       for (const r of relays.slice(0, 3)) if (r && r.name) picked.push(r);
     }
+    const activeSig = Array.from(activeSet).sort().join(',');
     const relaySig = picked.length
-      ? `${activeName}|` + picked.map(r => `${r.name}:${r.delay || 0}:${r.type || ''}`).join(';')
+      ? `${activeSig}|` + picked.map(r => `${r.name}:${r.delay || 0}:${r.type || ''}`).join(';')
       : `empty:${mihomoOk ? 1 : 0}`;
     if (relayListEl.dataset.sig !== relaySig) {
       relayListEl.dataset.sig = relaySig;
       const rFrag = document.createDocumentFragment();
       if (picked.length) {
         for (const r of picked) {
-          const isAct = activeName && r.name === activeName;
+          const isAct = activeSet.has(r.name);
           const d = r.delay || 0;
           const latCls = d > 0 ? (d <= 220 ? 'c-mint' : (d <= 500 ? 'c-amber' : 'c-crimson')) : 'c-muted';
           rFrag.appendChild(el('div', { class: 'relay-mini-row' },
@@ -1559,10 +1633,11 @@ export function renderBlueprint() {
   // Tier 2 · Branch 2: Domestic Direct + Burst-Harvest
   const nTotal = Math.max(1, st.strand_count || 21);
   const faultCnt = strands.length ? strands.filter(s => !s.healthy).length : Math.max(0, nTotal - (st.healthy_count ?? 0));
-  const directShare = Math.max(0, 1 - tunShareReal - vShareReal);
-  const directPct = Math.max(0, 100 - tunSharePct - vSharePct);
-  const weaveRate = Math.max(liveFlow.domBps, Math.max(0, totalRate - liveFlow.vipBps));
+  const directShare = liveFlow.domShare;
+  const directPct = liveFlow.domPct;
+  const weaveRate = liveFlow.domBps;
   setTxt('#bp-dom-rate', fmtRate(weaveRate).full);
+  setTitle('#bp-dom-rate', `直連雙向 ↓ ${fmtRate(liveFlow.domDownBps).full} · ↑ ${fmtRate(liveFlow.domUpBps).full}`);
   renderSegMeter($('#bp-dom-meter'), directShare, 10, 'blue');
   setTxt('#bp-dom-pct', `${w.charged_count ?? 0}/${nH} 滿桶`);
   setTxt('#bp-dom-share', `${directPct}% 流佔比`);
@@ -1571,6 +1646,7 @@ export function renderBlueprint() {
   const domByteCompact = fmtBytes(liveFlow.domBytes).replace(/\s+/g, '');
   const domPktCompact = liveFlow.domPkts >= 1e6 ? `${(liveFlow.domPkts / 1e6).toFixed(1)}M` : `${Math.round(liveFlow.domPkts / 1000)}k`;
   setTxt('#bp-dom-direct', `${domByteCompact}·${domPktCompact}`);
+  setTitle('#bp-dom-direct', `直連雙向累計 ↓ ${fmtBytes(liveFlow.domDownBytes)} · ↑ ${fmtBytes(liveFlow.domUpBytes)}`);
   setTxt('#bp-dom-probe', `${w.interval ?? 2}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`);
   setTxt('#bp-dom-buckets', `${w.charged_count ?? 0}滿/${w.depleted_count ?? 0}耗/${w.cooling_count ?? 0}冷`);
   setTxt('#bp-dom-vip', w.vip_dev ? `${w.vip_dev} (#${w.vip_id ?? '—'})` : 'auto');
@@ -1604,18 +1680,14 @@ export function renderBlueprint() {
   };
 
   setTxt('#bp-qos-meta', `MSS ${st.settings?.['main.mss'] ?? 1440}`);
-  const qosDomBps = Math.max(liveFlow.domBps, Math.max(0, totalRate - liveFlow.vipBps - liveFlow.tunBps));
-  const qosSumBps = liveFlow.vipBps + liveFlow.tunBps + qosDomBps;
+  const qos = st.telemetry?.qos || {};
+  const qBands = qos.bands || {};
+  const q10 = qBands['1:10'] || {}, q20 = qBands['1:20'] || {}, q30 = qBands['1:30'] || {};
+  const qosSumBps = (q10.bps || 0) + (q20.bps || 0) + (q30.bps || 0);
   const qosTotBps = Math.max(1, qosSumBps);
   const shareRatio = (bps) => (bps > 0 ? Math.max(1 / 14, bps / qosTotBps) : 0);
 
   setTxt('#bp-qos-rate', fmtRate(qosSumBps).full);
-  setTxt('#bp-qos-10-rate', fmtRate(liveFlow.vipBps).full);
-  setTxt('#bp-qos-20-rate', fmtRate(liveFlow.tunBps).full);
-  setTxt('#bp-qos-30-rate', fmtRate(qosDomBps).full);
-  setSegMeter('#bp-qos-10-bar', shareRatio(liveFlow.vipBps), 14, 'red',  false, liveFlow.vipBps > 400);
-  setSegMeter('#bp-qos-20-bar', shareRatio(liveFlow.tunBps), 14, 'mint', false, liveFlow.tunBps > 400);
-  setSegMeter('#bp-qos-30-bar', shareRatio(qosDomBps),       14, 'blue', false, qosDomBps > 400);
 
   const paintQosBandHeat = (sel, baseRgb, bps) => {
     const chip = $(sel);
@@ -1634,9 +1706,23 @@ export function renderBlueprint() {
     setVar(chip, '--qb-glow-blur', `${Math.round(4 + 14 * ratio)}px`);
     setVar(chip, '--qb-glow-a', (0.03 + 0.24 * ratio).toFixed(2));
   };
-  paintQosBandHeat('#bp-qos-10', '242, 90, 90',   liveFlow.vipBps);
-  paintQosBandHeat('#bp-qos-20', '87, 209, 146',  liveFlow.tunBps);
-  paintQosBandHeat('#bp-qos-30', '100, 174, 245', qosDomBps);
+
+  let totalQosDrops = 0;
+  for (const [chipSel, rateSel, barSel, key, rgb, color] of [
+    ['#bp-qos-10', '#bp-qos-10-rate', '#bp-qos-10-bar', '1:10', '242, 90, 90',   'red'],
+    ['#bp-qos-20', '#bp-qos-20-rate', '#bp-qos-20-bar', '1:20', '87, 209, 146',  'mint'],
+    ['#bp-qos-30', '#bp-qos-30-rate', '#bp-qos-30-bar', '1:30', '100, 174, 245', 'blue']
+  ]) {
+    const b = qBands[key] || {};
+    const bps = b.bps || 0;
+    totalQosDrops += b.drops || 0;
+    setTxt(rateSel, fmtRate(bps).full);
+    setTitle(chipSel, qos.mode === 'htb'
+      ? `${key} · ↓${fmtRate(b.down_bps || 0).full} · ↑${fmtRate(b.up_bps || 0).full} · 累計 ${fmtBytes(b.bytes || 0)} · overlimit ${b.overlimits || 0} · drop ${b.drops || 0}`
+      : `${key} · fq_codel 旁路計數 · 累計 ${fmtBytes(b.bytes || 0)}`);
+    setSegMeter(barSel, shareRatio(bps), 14, color, false, bps > 400);
+    paintQosBandHeat(chipSel, rgb, bps);
+  }
 
   const ewmaDown = st.rate_ewma ?? st.rate ?? 0;
   const ewmaUp = st.rate_up_ewma ?? st.rate_up ?? 0;
@@ -1645,8 +1731,11 @@ export function renderBlueprint() {
   const ewmaRatio = ewmaMbps > 0 ? Math.min(1, Math.max(1 / 18, Math.log10(1 + ewmaMbps * 3.5) * 0.44)) : 0;
   setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', false, ewmaMbps > 0.02);
   setTxt('#bp-qos-mss-kv', `SYN MSS ${st.settings?.['main.mss'] ?? 1440}`);
-  setTxt('#bp-qos-st', `${liveFlow.vipBps > 400 ? '1:10+20+30' : '1:20+30'} shaping`);
-  setTxt('#bp-qos-foot', `MSS ${st.settings?.['main.mss'] ?? 1440} · 8MB 相變界`);
+  const qosStTxt = qos.mode === 'htb'
+    ? `HTB ${qos.down_cap_mbps || 0}↓/${qos.up_cap_mbps || 0}M↑${totalQosDrops > 0 ? ` · ${totalQosDrops}丟` : ''}`
+    : 'fq_codel (>100M 旁路)';
+  setTxt('#bp-qos-st', qosStTxt);
+  setTxt('#bp-qos-foot', `MSS ${st.settings?.['main.mss'] ?? 1440} · 64MB 相變界`);
 
   setTxt('#bp-up-rate', fmtRate(totalRate).full);
   const upSec = st.sys?.uptime || 0;
@@ -1678,9 +1767,11 @@ export function renderBlueprint() {
     : 'single-path');
   const vEl = $('#bp-verify-summary');
   if (vEl) {
-    const vText = st.ok ? `${nTotal}/${nTotal} ok` : `異常:${(st.fail || []).join(',')}`;
+    const vText = st.ok
+      ? (totChecks > 0 ? `${okChecks}/${totChecks} ok` : 'kernel ok')
+      : `異常:${(st.fail || []).join(',')}`;
     setTxt(vEl, vText);
-    setTitle(vEl, st.ok ? `${nTotal}/${nTotal} kernel ok` : vText);
+    setTitle(vEl, st.ok ? `${totChecks || nTotal} kernel invariants ok · ${nTotal}/${nTotal} strands` : vText);
     setCls(vEl, st.ok ? 'v c-bright' : 'v c-crimson');
   }
   setTxt('#bp-up-ver', `PRISM ${st.version || UI_VERSION}`);

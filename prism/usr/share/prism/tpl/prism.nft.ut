@@ -37,6 +37,17 @@ table inet prism {
 {% endif %}
 	}
 
+	# Bidirectional branch & QoS priority accounting (zero overlap).
+	counter vip_up {}
+	counter vip_down {}
+	counter dom_up {}
+	counter dom_down {}
+	counter tun_up {}
+	counter tun_down {}
+	counter qos_10 {}
+	counter qos_20 {}
+	counter qos_30 {}
+
 	set local4 {
 		type ipv4_addr
 		flags interval
@@ -155,6 +166,8 @@ table inet prism {
 		meta mark set meta mark & 0xdfffffff
 		jump classify
 		jump weave
+		ct mark & 0x100 != 0 counter name "vip_up"
+		ct mark & 0x100 == 0 counter name "dom_up"
 	}
 
 	chain output {
@@ -190,8 +203,23 @@ table inet prism {
 {% if (mss > 0): %}
 		oifname @strands_up tcp flags syn tcp option maxseg size > {{ mss }} tcp option maxseg size set {{ mss }}
 {% endif %}
-		oifname @lan ip saddr != @local4 update @dev_down { ip daddr }
+		oifname @lan ip saddr != @local4 jump acct_lan_down
+		oifname @strands_up jump acct_qos
 		oifname @strands_up return
+	}
+
+	chain acct_lan_down {
+		update @dev_down { ip daddr }
+		ct mark & 0x4000 != 0 counter name "tun_down"
+		ct mark & 0x4000 == 0 ct mark & 0x100 != 0 counter name "vip_down"
+		ct mark & 0x4000 == 0 ct mark & 0x100 == 0 counter name "dom_down"
+		jump acct_qos
+	}
+
+	chain acct_qos {
+		meta priority 1:10 counter name "qos_10"
+		meta priority 1:20 counter name "qos_20"
+		meta priority 1:30 counter name "qos_30"
 	}
 
 	chain divert {
@@ -201,6 +229,8 @@ table inet prism {
 		# Stamp after weave overwrites the packet mark. This permission never
 		# enters conntrack, so even existing direct flows close on service stop.
 		jump weave
+		ct mark & 0x100 != 0 counter name "vip_up"
+		ct mark & 0x100 == 0 counter name "dom_up"
 		meta mark set meta mark | 0x20000000 accept
 	}
 

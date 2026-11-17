@@ -183,7 +183,8 @@ function handlePrismHover(rect) {
   } else {
     const st = S.status || {};
     const devs = S.devices?.devices || [];
-    const tKey = `beam:${devs.length}:${st.rate}:${st.rate_up}:${st.healthy_count}:${st.weave?.vip_dev || ''}:${st.weave?.charged_count}`;
+    const onlineCnt = devs.filter(d => d.online).length;
+    const tKey = `beam:${onlineCnt}/${devs.length}:${st.rate}:${st.rate_up}:${st.healthy_count}:${st.weave?.vip_dev || ''}:${st.weave?.charged_count}`;
     if (tip._lastHoverKey !== tKey) {
       tip._lastHoverKey = tKey;
       tip.classList.add('spectrum');
@@ -193,7 +194,7 @@ function handlePrismHover(rect) {
       tip.innerHTML = `
       <div class="tt-head">
         <span class="c-bright">INCIDENT BEAM · 原初聚合白光</span>
-        <span class="c-spectrum">${devs.length} 終端</span>
+        <span class="c-spectrum">${onlineCnt} 在線 / ${devs.length} 終端</span>
       </div>
       <div class="tt-grid">
         <span class="tt-k">總下行吞吐</span><span class="tt-v">${fmtRate(st.rate).full}</span>

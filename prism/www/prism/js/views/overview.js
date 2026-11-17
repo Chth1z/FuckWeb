@@ -86,15 +86,11 @@ export function renderOverview() {
   const downF = fmtRate(st.rate);
   const upF = fmtRate(st.rate_up);
   const strands = st.strands || [];
-  let peakBps = 0;
-  for (const x of strands) {
-    if ((x.peak || 0) > peakBps) peakBps = x.peak;
-  }
   const rateScale = (bps) => opticalLoad(bps, 6, 0.10);
   const downK = rateScale(st.rate || 0);
   const upK = rateScale(st.rate_up || 0);
   const loadK = rateScale((st.rate || 0) + (st.rate_up || 0));
-  const peakRate = Math.max(st.rate || 0, peakBps);
+  const peakRate = Math.max(st.rate || 0, st.rate_peak || 0);
   const peakK = rateScale(peakRate);
   const ctCount = st.sys?.conntrack?.count ?? 0;
 
@@ -122,15 +118,20 @@ export function renderOverview() {
   setTxt('#ov-vip', st.weave?.vip_dev
     ? `${st.weave.vip_dev} (${vipStrand?.ttfb_ms || '—'}ms)`
     : '—');
-  const vipBps = vipStrand ? ((vipStrand.now ?? vipStrand.rate ?? 0) + (vipStrand.up_now ?? vipStrand.up ?? 0)) : 0;
+  const vipBps = st.telemetry?.branches?.vip?.bps ?? 0;
   paintOpticalText('#ov-vip', '100, 174, 245', rateScale(vipBps), 0.12);
 
   const guardEl = $('#ov-guard');
   if (guardEl) {
+    const isOk = st.ok !== false;
     const isStrict = !st.tunnel?.fail_open;
-    setTxt(guardEl, isStrict ? 'FAIL-CLOSED 0x20000000' : 'FAIL-OPEN WARN');
-    setCls(guardEl, isStrict ? 'c-violet' : 'c-amber');
-    paintOpticalText(guardEl, isStrict ? '170, 142, 240' : '235, 154, 94', isStrict ? Math.max(0.24, 0.20 + loadK * 0.55) : 0.82, 0.10);
+    const txt = !isOk ? 'GUARD FAIL' : (isStrict ? 'FAIL-CLOSED 0x20000000' : 'FAIL-OPEN WARN');
+    const cls = !isOk ? 'c-crimson' : (isStrict ? 'c-violet' : 'c-amber');
+    const rgb = !isOk ? '230, 108, 120' : (isStrict ? '170, 142, 240' : '235, 154, 94');
+    const k = !isOk ? 0.90 : (isStrict ? Math.max(0.24, 0.20 + loadK * 0.55) : 0.82);
+    setTxt(guardEl, txt);
+    setCls(guardEl, cls);
+    paintOpticalText(guardEl, rgb, k, 0.10);
   }
 
   const devs = S.devices?.devices || [];
@@ -148,15 +149,18 @@ export function renderOverview() {
   paintOpticalText('#ov-total-up', '140, 190, 242', Math.max(0.14, upK * 0.72), 0.24);
 
   const tun = S.tunnel;
-  const relayName = tun?.tw_home || tun?.selected || 'TW-HOME';
+  const relayName = tun?.selected || tun?.tw_home || (st.tunnel?.on ? '活躍中' : '旁路直連');
   setTxt('#ov-relay', relayName);
   const canaryEl = $('#ov-canary');
   const ms = st.tunnel?.canary_ms ?? 0;
-  setTxt(canaryEl, ms > 0 ? `${ms} ms` : (st.tunnel?.on ? '活躍' : '離線'));
-  setCls(canaryEl, ms > 0 ? 'c-mint' : (st.tunnel?.on ? 'c-amber' : 'c-crimson'));
-  const tunK = ms > 0 ? Math.max(0.22, 0.20 + loadK * 0.62) : 0.55;
+  const tunStatusTxt = !st.tunnel?.on ? '直連' : (!st.tunnel?.running ? '未運行' : (ms > 0 ? `${ms} ms` : '探測中'));
+  const tunCls = !st.tunnel?.on ? 'c-sec' : (!st.tunnel?.running ? 'c-crimson' : (ms > 0 ? 'c-mint' : 'c-amber'));
+  const tunRgb = !st.tunnel?.on ? '148, 160, 182' : (!st.tunnel?.running ? '230, 108, 120' : (ms > 0 ? '87, 209, 146' : '235, 154, 94'));
+  setTxt(canaryEl, tunStatusTxt);
+  setCls(canaryEl, tunCls);
+  const tunK = (st.tunnel?.running && ms > 0) ? Math.max(0.22, 0.20 + loadK * 0.62) : 0.55;
   paintOpticalText('#ov-relay', '196, 218, 250', tunK, 0.38);
-  paintOpticalText(canaryEl, ms > 0 ? '87, 209, 146' : (st.tunnel?.on ? '235, 154, 94' : '230, 108, 120'), tunK, 0.12);
+  paintOpticalText(canaryEl, tunRgb, tunK, 0.12);
 
   setTxt('#ov-slots', st.weave?.slots ?? 126);
 

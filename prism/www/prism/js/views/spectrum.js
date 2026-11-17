@@ -565,7 +565,7 @@ export function renderSpectrum() {
   if (!S.series || !S.series.ts || S.series.ts.length < 2) {
     setTxt('#ribbon-rate-sub', `↑${fmtShortRate(upNow)}`);
   }
-  setTxt('#ribbon-slots-meta', `${w.slots || pat.length || 126} slots`);
+  setTxt('#ribbon-slots-meta', `${w.slots ?? pat.length ?? 0} slots`);
   setTxt('#ribbon-health-meta', `${st.healthy_count ?? strands.length}/${strands.length || 21} UP · ${w.charged_count ?? 0} 滿桶`);
 
   // 4. Full-Width 126-Slot Kernel Timeline Ribbon with shared obsidian desaturation

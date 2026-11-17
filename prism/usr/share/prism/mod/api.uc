@@ -148,26 +148,14 @@ function tunnel_flows(cfg, lan_ip) {
 			start: c.start ?? "",
 		});
 	}
+	out = sort(out, (a, b) => (b.down + b.up) - (a.down + a.up));
 	return slice(out, 0, MAX_FLOWS);
 }
 
 // What each classify rule means, by its nft comment. Order here is not the
 // order of evaluation: that is whatever the kernel returns.
 function rules() {
-	let r = core.sh("nft -j list chain inet prism classify"), out = [];
-	try {
-		for (let item in json(r.out).nftables) {
-			let c = null;
-			for (let e in item.rule?.expr ?? [])
-				c ??= e.counter;
-			if (item.rule?.comment)
-				push(out, { tag: item.rule.comment, packets: c?.packets ?? 0, bytes: c?.bytes ?? 0 });
-		}
-	}
-	catch (e) {
-		return [];
-	}
-	return out;
+	return weave.classify_counters();
 }
 
 function set_size(name) {
@@ -262,6 +250,13 @@ export function methods(d) {
 					rate_up_ewma: int(total_up_ewma),
 					down_bytes: total_bytes,
 					up_bytes: total_up_bytes,
+					rate_peak: d.rate_peak ? d.rate_peak() : int(total),
+					tunnel: {
+						...(snap.tunnel ?? {}),
+						tproxy_port: cfg.tunnel.tproxy_port,
+						controller_port: cfg.tunnel.controller_port,
+					},
+					telemetry: d.telemetry ? d.telemetry() : null,
 					strands,
 					weave: {
 						...(snap.weave ?? {}),
@@ -319,17 +314,30 @@ export function methods(d) {
 					push(relays, { name: spec.name, type: all[spec.name]?.type ?? spec.type ?? "", delay: delay(all[spec.name]) });
 				}
 				let profiles = identity.load_store()?.profiles ?? [];
-				let groups = map(profiles, (p) => ({
-					uid: p.uid,
-					group_name: p.group_name,
-					anchor_mac: p.anchor_mac,
-					port: p.port,
-					now: all[p.group_name]?.now ?? "",
-				}));
 				let tw_now = all["TW-HOME"]?.now ?? "";
+				let counts = {}, groups = map(profiles, (p) => {
+					let sel = all[p.group_name]?.now ?? "";
+					let eff = (sel == "TW-HOME" && length(tw_now)) ? tw_now : sel;
+					if (length(eff))
+						counts[eff] = (counts[eff] ?? 0) + 1;
+					return {
+						uid: p.uid,
+						group_name: p.group_name,
+						anchor_mac: p.anchor_mac,
+						port: p.port,
+						now: sel,
+					};
+				});
+				let majority = "", best_cnt = 0;
+				for (let name, cnt in counts) {
+					if (cnt > best_cnt) {
+						best_cnt = cnt;
+						majority = name;
+					}
+				}
 				return {
 					reachable: true,
-					selected: tw_now || groups[0]?.now || relays[0]?.name || "TW-HOME",
+					selected: majority || tw_now || relays[0]?.name || "TW-HOME",
 					tw_home: tw_now,
 					auto: tw_now,
 					relays,

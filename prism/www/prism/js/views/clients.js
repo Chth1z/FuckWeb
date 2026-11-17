@@ -391,7 +391,7 @@ function syncDeviceCard(card, d, dr, isSelected) {
     : relayTag;
   const ipRateTxt = `${d.ip || d.mac.slice(-8)}${rateStr}`;
   const editing = editingMac === d.mac;
-  const sig = `${d.online ? 1 : 0}|${isSelected ? 1 : 0}|${policy}|${editing ? '' : label}|${linkTxt}|${flowTxt}|${ipRateTxt}|${d.group_name || ''}|${macCnt}|${Math.round(opticalLoad(totalBps, 6, 0.10) * 160)}`;
+  const sig = `${d.online ? 1 : 0}|${isSelected ? 1 : 0}|${policy}|${editing ? '' : label}|${linkTxt}|${flowTxt}|${ipRateTxt}|${d.group_name || ''}|${d.down_bytes || 0}|${d.up_bytes || 0}|${macCnt}|${Math.round(opticalLoad(totalBps, 6, 0.10) * 160)}`;
   if (card._renderSig === sig) return;
   card._renderSig = sig;
 
@@ -416,6 +416,7 @@ function syncDeviceCard(card, d, dr, isSelected) {
   setCls(r.flowsEl, hasFlows ? 'c-blue dev-meta-strong dev-flows-tag' : (d.online ? 'c-mint dev-meta-strong dev-flows-tag' : 'c-muted dev-flows-tag'));
 
   setTxt(r.ipRateEl, ipRateTxt);
+  setTitle(r.ipRateEl, `${d.ip || d.mac} · 出口 ${d.relay || 'TW-HOME'} · 累計 ↓${fmtBytes(d.down_bytes || 0)} ↑${fmtBytes(d.up_bytes || 0)}`);
   setCls(r.ipRateEl, rateStr ? 'c-mint dev-meta-strong' : (d.online ? 'dev-meta-txt' : 'c-muted'));
 
   for (const p of POLICIES) {
@@ -443,7 +444,7 @@ function renderDeviceMenu(devs, quarantine, byIp, totalFlows) {
   }
   const totDown = Math.max(kernDown, flowDown);
   const totUp = Math.max(kernUp, flowUp);
-  setTxt('#dev-all-rate', fmtRate(totDown).full);
+  setTxt('#dev-all-rate', `↓${fmtRate(totDown).full} · ↑${fmtRateCompact(totUp)}`);
   setTxt('#dev-all-flows', S.session ? `${totalFlows} 條活躍流` : `${onlineCnt} 台在線`);
 
   const navAll = $('#dev-nav-all');
@@ -644,7 +645,7 @@ function renderConnections(devs, selectedDev, rows) {
     seenKeys.add(key);
 
     let badgeClass = f.route === 'tunnel' ? 'cooling' : 'charged';
-    let routeText = f.route === 'tunnel' ? `隧道 · ${f.via || 'proxy'}` : `直連 · ${f.via || 'wan'}`;
+    let routeText = f.route === 'tunnel' ? `隧道 · ${f.via || 'proxy'}` : (f.via ? `直連 · ${f.via}` : '直連 · route');
     if (f.vip) {
       badgeClass = 'vip';
       routeText = `光道 · ${f.via || 'vip'}`;
