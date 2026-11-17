@@ -75,13 +75,24 @@ html.prism-cold .main-stage {
 
 #ov-peak {
   display: inline-block;
-  min-width: 66px;
+  min-width: 9.5ch;
+}
+
+#ov-healthy {
+  display: inline-block;
+  min-width: 7ch;
+  text-align: right;
 }
 
 #ov-charged {
   display: inline-block;
-  min-width: 18px;
+  min-width: 2.2ch;
   text-align: right;
+}
+
+#ov-total-down {
+  display: inline-block;
+  min-width: 8.5ch;
 }
 
 .corner-rate-up {
@@ -113,21 +124,9 @@ html.prism-cold .main-stage {
   color: rgba(255, 255, 255, 0.56);
 }
 
-.ov-spectrum-mini {
-  display: grid;
-  grid-template-columns: repeat(21, minmax(0, 1fr));
-  gap: 2.5px;
+.seg-meter--ov {
   width: 218px;
-  padding: 0;
   margin: 2px 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.ov-sp-cell {
-  height: 4.5px;
-  background: rgba(255, 255, 255, 0.08);
-  transition: opacity 0.72s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.72s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.72s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .corner-math {
@@ -427,7 +426,7 @@ html.prism-cold .main-stage {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 2.5px;
+  gap: 2px;
   margin: 0 -8px;
   padding: 4px 8px 2px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -447,7 +446,7 @@ html.prism-cold .main-stage {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 1.5px;
+  gap: 2px;
   flex: 0 0 auto;
   transition: box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -583,26 +582,6 @@ html.prism-cold .main-stage {
   justify-content: space-between;
 }
 
-.mini-spectrum-bar {
-  display: flex;
-  align-items: stretch;
-  gap: 2px;
-  min-height: 14px;
-  margin: 0;
-  padding: 2px;
-  background: var(--tray-bg);
-  border: none;
-  box-shadow: var(--tray-inset);
-}
-
-.mini-sp-cell {
-  flex: 1 1 0%;
-  min-width: 0;
-  height: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  transition: opacity 0.72s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.72s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.72s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
 .run-dot {
   display: inline-block;
   width: 6px;
@@ -626,29 +605,32 @@ html.prism-cold .main-stage {
 }
 .run-dot.off      { background: #3f4a5f; box-shadow: none; }
 
-/* Unified Full-Width Segmented Block Meters with Soft Contained Optical Bloom */
+/* Unified Optical Segmented Block Meters Across All Views (Single Source of Truth) */
 .seg-meter {
   display: flex;
   align-items: stretch;
-  gap: 2px;
+  gap: var(--meter-gap, 2px);
   width: 100%;
   min-width: 0;
-  height: 15px;
+  height: var(--meter-h, 16px);
   flex-shrink: 0;
-  padding: 2px;
-  background: var(--tray-bg);
+  padding: var(--meter-pad, 2px);
+  border-radius: 0;
+  background: var(--tray-bg, rgba(4, 6, 12, 0.56));
   border: none;
-  box-shadow: var(--tray-inset);
+  box-shadow: var(--tray-inset, inset 0 0 0 0.5px rgba(0, 0, 0, 0.50));
 }
 
-.seg-meter.compact {
-  gap: 2px;
-  height: 12px;
-  padding: 1.5px 2px;
+.seg-meter--ov {
+  width: 218px;
+  margin: 2px 0;
 }
 
-.seg-meter.active {
-  box-shadow: var(--tray-inset);
+.seg-meter--slots {
+  display: grid;
+  grid-template-columns: repeat(var(--slot-cols, 6), minmax(0, 1fr));
+  width: auto;
+  flex: 1 1 auto;
 }
 
 .seg-cell {
@@ -656,8 +638,14 @@ html.prism-cold .main-stage {
   min-width: 0;
   height: 100%;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.065);
+  background: var(--meter-empty, rgba(255, 255, 255, 0.065));
 }
+
+.seg-meter--spectrum > .seg-cell {
+  transition: opacity 0.72s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.72s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.72s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.seg-cell.slot-on    { background: rgb(var(--sc-rgb, 100, 174, 245)); box-shadow: 0 0 5px rgba(var(--sc-rgb, 100, 174, 245), 0.50); }
 .seg-cell.on.red     { background: var(--c-red-bar);  box-shadow: 0 0 5px rgba(var(--c-red-rgb), 0.50); }
 .seg-cell.on.mint    { background: var(--c-mint-bar); box-shadow: 0 0 5px rgba(var(--c-mint-rgb), 0.46); }
 .seg-cell.on.blue    { background: var(--c-blue-bar); box-shadow: 0 0 5px rgba(var(--c-blue-rgb), 0.50); }
@@ -680,7 +668,13 @@ html.prism-cold .main-stage {
   min-width: 0;
 }
 
+/* Fixed-Width Tabular Slots Prevent Dynamic Numbers From Shifting Adjacent Labels */
 .bp-meter-val {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.45ch;
+  width: 11.5ch;
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
@@ -688,6 +682,37 @@ html.prism-cold .main-stage {
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
 }
+
+.bp-meter-val .meter-k {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.bp-meter-val .meter-n {
+  display: inline-block;
+  width: 4ch;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.bp-head-kpi-num,
+.bp-inline-nums {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.4ch;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.slot-2ch   { display: inline-block; min-width: 2ch;   text-align: right; }
+.slot-4ch   { display: inline-block; min-width: 4ch;   text-align: right; }
+.slot-pct   { display: inline-block; width:     4ch;   text-align: right; }
+.slot-ratio { display: inline-block; min-width: 5ch;   text-align: right; }
+.slot-slot  { display: inline-block; min-width: 5.5ch; text-align: right; }
+.slot-rate  { display: inline-block; min-width: 5.5ch; text-align: right; }
+.slot-bytes { display: inline-block; min-width: 8ch;   text-align: right; }
 
 .math-formula {
   font-family: var(--font-math);
@@ -707,8 +732,8 @@ html.prism-cold .main-stage {
 #bp-card-uplink {
   display: flex;
   flex-direction: column;
-  padding: 9.5px 11px;
-  gap: 7px;
+  padding: 8px 11px;
+  gap: 6px;
   min-height: 0;
   background-color: rgba(6, 8, 15, 0.94);
   background-image:
@@ -732,8 +757,8 @@ html.prism-cold .main-stage {
   flex-direction: column;
   flex: 1 1 0;
   min-height: 112px;
-  padding: 9.5px 12px;
-  gap: 7px;
+  padding: 10px 12px;
+  gap: 6px;
   background-color: rgba(6, 8, 15, 0.94);
   background-image:
     linear-gradient(rgba(82, 92, 124, 0.08), rgba(82, 92, 124, 0.08));
@@ -773,7 +798,7 @@ html.prism-cold .main-stage {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 7px;
+  gap: 6px;
   flex: 0 0 auto;
   min-height: 0;
 }
@@ -992,8 +1017,8 @@ html.prism-cold .main-stage {
     overflow: visible;
   }
   .classify-bar-card {
-    padding: 1.5px 7px;
-    gap: 1px;
+    padding: 2px 7px;
+    gap: 2px;
   }
   .guard-invariants-grid {
     min-height: 80px;
@@ -1264,6 +1289,12 @@ html.prism-cold .main-stage {
 }
 
 .heat-br {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.35ch;
+  min-width: 11ch;
+  text-align: right;
   font-size: 9.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1271,27 +1302,6 @@ html.prism-cold .main-stage {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
   white-space: nowrap;
   flex-shrink: 0;
-}
-
-.heat-slots-bar {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(var(--slot-cols, 6), minmax(0, 1fr));
-  gap: 2px;
-  height: 10px;
-  padding: 1.5px;
-  background: rgba(4, 6, 12, 0.56);
-}
-
-.heat-slot-cell {
-  height: 100%;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.heat-slot-cell.on {
-  background: rgb(var(--sc-rgb, 100, 174, 245));
-  box-shadow: 0 0 4px rgba(var(--sc-rgb, 100, 174, 245), 0.52);
 }
 
 .spec-ribbon-row {
@@ -1902,7 +1912,7 @@ html.prism-cold .main-stage {
   .corner-hud.bl { bottom: 12px; left: 12px; }
   .corner-hud.br { bottom: 12px; right: 12px; }
   .corner-rate-main { font-size: 17px; }
-  .ov-spectrum-mini { width: 136px; }
+  .seg-meter--ov { width: 136px; }
   .bp-split-2 { grid-template-columns: 1fr; }
   .heatmap-stage-wrap { container-type: normal; }
   .heatmap-grid { width: 100%; height: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: none; }

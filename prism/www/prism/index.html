@@ -214,11 +214,11 @@
           <div id="ov-hud-tr" class="corner-hud tr">
             <div class="corner-tag">SPECTRUM · @vip_lane</div>
             <div class="corner-sub">
-              <span>光脈在線 <strong id="ov-healthy" class="c-mint">0 / 21</strong></span>
+              <span>光脈在線 <strong id="ov-healthy" class="c-mint slot-ratio">0 / 21</strong></span>
               <span>·</span>
               <span>滿桶蓄能 <strong id="ov-charged" class="c-mint">0</strong></span>
             </div>
-            <div id="ov-mini-spectrum" class="ov-mini-spectrum" aria-hidden="true"></div>
+            <div id="ov-mini-spectrum" class="seg-meter seg-meter--spectrum seg-meter--ov" aria-hidden="true"></div>
             <div class="corner-sub">
               <span>極速光道 <strong id="ov-vip" class="c-blue">—</strong></span>
               <span>·</span>
@@ -234,7 +234,7 @@
               <span id="ov-site-name" class="c-spectrum">—</span>
             </div>
             <div class="corner-sub ov-sub-muted">
-              <span>累計 ↓ <span id="ov-total-down" class="c-bright">0 B</span></span>
+              <span>累計 ↓ <span id="ov-total-down" class="c-bright slot-bytes">0 B</span></span>
               <span>·</span>
               <span>↑ <span id="ov-total-up" class="c-bright">0 B</span></span>
             </div>
@@ -405,7 +405,7 @@
                 <div class="bp-card-body">
                   <div class="bp-meter-row">
                     <span id="bp-harvest-meter" class="seg-meter"></span>
-                    <span id="bp-harvest-txt" class="bp-meter-val c-spectrum">harvest</span>
+                    <span id="bp-harvest-txt" class="bp-meter-val c-spectrum"><span id="bp-harvest-mode" class="meter-k">harvest</span><span id="bp-harvest-pct" class="meter-n">—</span></span>
                   </div>
                   <div class="bp-kv-strip cols-2">
                     <div class="bp-kv-cell"><span class="k">DNS劫持</span><span id="bp-dns-port" class="v">:6053 · ads</span></div>
@@ -449,7 +449,7 @@
                     <span class="run-dot spectrum"></span>
                     <span id="bp-classify-foot" class="c-sec" style="overflow:hidden;text-overflow:ellipsis">prerouting · 11 rules</span>
                   </span>
-                  <span id="bp-classify-bytes" class="c-bright" style="font-variant-numeric:tabular-nums;flex-shrink:0">累計 —</span>
+                  <span id="bp-classify-bytes-wrap" class="c-sec bp-inline-nums"><span>上行累計</span><span id="bp-classify-bytes" class="c-bright slot-bytes">—</span></span>
                 </div>
               </div>
             </div>
@@ -464,13 +464,13 @@
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-vip-rate" class="bp-live-rate c-red">0 bps</span>
-                    <span id="bp-vip-share" class="bp-head-sub c-sec">蓄能 100%</span>
+                    <span class="bp-head-sub c-sec bp-head-kpi-num"><span>蓄能</span><span id="bp-vip-share" class="slot-pct">100%</span></span>
                   </div>
                 </div>
                 <div class="bp-card-body">
                   <div class="bp-meter-row">
                     <span id="bp-vip-meter" class="seg-meter"></span>
-                    <strong id="bp-vip-pct" class="bp-meter-val c-bright">0% 流佔比</strong>
+                    <strong id="bp-vip-pct" class="bp-meter-val c-bright"><span id="bp-vip-pct-num" class="meter-n">0%</span><span>流佔比</span></strong>
                   </div>
                   <div class="bp-kv-strip cols-2">
                     <div class="bp-kv-cell"><span class="k">錨定光脈</span><span id="bp-vip-iface" class="v c-red">—</span></div>
@@ -503,7 +503,7 @@
                 <div class="bp-card-body">
                   <div class="bp-meter-row">
                     <span id="bp-tun-meter" class="seg-meter"></span>
-                    <strong id="bp-tun-pct" class="bp-meter-val c-bright">0% 流佔比</strong>
+                    <strong id="bp-tun-pct" class="bp-meter-val c-bright"><span id="bp-tun-pct-num" class="meter-n">0%</span><span>流佔比</span></strong>
                   </div>
                   <div class="bp-tun-node-row">
                     <span class="c-muted" style="flex-shrink:0">TW-HOME</span>
@@ -545,9 +545,9 @@
                 <div class="bp-card-body">
                   <div class="bp-meter-row">
                     <span id="bp-dom-meter" class="seg-meter"></span>
-                    <strong id="bp-dom-share" class="bp-meter-val c-bright">0% 流佔比</strong>
+                    <strong id="bp-dom-share" class="bp-meter-val c-bright"><span id="bp-dom-share-num" class="meter-n">0%</span><span>流佔比</span></strong>
                   </div>
-                  <div id="bp-mini-spectrum" class="mini-spectrum-bar" title="21-Wavelength Real-Time Charge"></div>
+                  <div id="bp-mini-spectrum" class="seg-meter seg-meter--spectrum" title="21-Wavelength Real-Time Charge"></div>
                   <div class="bp-kv-strip cols-2">
                     <div class="bp-kv-cell"><span class="k">槽位調度</span><span id="bp-dom-slots" class="v c-blue">126 (flow)</span></div>
                     <div class="bp-kv-cell"><span class="k">直連累計</span><span id="bp-dom-direct" class="v">0 B</span></div>
@@ -630,7 +630,7 @@
                 <div class="uplink-foot-row">
                   <div class="uplink-meter-head">
                     <span class="c-sec">EWMA 上/下行速率</span>
-                    <span id="bp-qos-tx-txt" class="c-bright" style="font-variant-numeric:tabular-nums">—</span>
+                    <span id="bp-qos-tx-txt" class="c-bright bp-inline-nums">↑ <span id="bp-qos-tx-up" class="slot-rate">—</span> · ↓ <span id="bp-qos-tx-down" class="slot-rate">—</span></span>
                   </div>
                   <span id="bp-qos-tx-bar" class="seg-meter"></span>
                 </div>
@@ -659,7 +659,7 @@
                   <div class="uplink-meter-row">
                     <div class="uplink-meter-head">
                       <span class="c-sec">21 光譜鏈路滿桶健康度</span>
-                      <span id="bp-up-pool-txt" class="c-spectrum" style="font-weight:600;font-variant-numeric:tabular-nums">21/21</span>
+                      <span id="bp-up-pool-txt" class="c-spectrum bp-inline-nums" style="font-weight:600"><span id="bp-up-pool-charged" class="slot-ratio">21/21</span> <span>charged ·</span> <span id="bp-up-pool-up" class="slot-2ch">21</span> <span>up</span></span>
                     </div>
                     <span id="bp-up-pool-bar" class="seg-meter"></span>
                   </div>

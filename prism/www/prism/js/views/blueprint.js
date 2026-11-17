@@ -3,7 +3,7 @@
  * ============================================================================ */
 
 import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.7.0';
-import { $, $$, el, renderSegMeter, renderSessionLog, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.7.0';
+import { $, $$, el, renderSegMeter, renderStrandSpectrumBar, renderSessionLog, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.7.0';
 import { write, call } from '../api.js?v=5.7.0';
 
 let drawerOpen = false;
@@ -1057,7 +1057,7 @@ function renderClassifyStrip() {
     for (const tag of coreTags) {
       const label = RULE_LABELS[tag] || tag;
       const segEl = el('span', { class: 'seg-meter' });
-      renderSegMeter(segEl, 0, 16, 'blue', false);
+      renderSegMeter(segEl, 0, 16, 'blue');
       frag.appendChild(el('div', {
         class: 'classify-bar-card',
         style: { '--cb-rgb': '52, 58, 72', '--cb-fill': '0', '--cb-bdr-a': '0.16', '--cb-glow-blur': '0px', '--cb-glow-a': '0' }
@@ -1158,7 +1158,7 @@ function renderClassifyStrip() {
       setTxt(rec.statEl, statTxt);
       setCls(rec.segEl, `seg-meter${pkts > 0 ? ' active' : ''}`);
     }
-    renderSegMeter(rec.segEl, fillPct / 100, 16, colorName, false);
+    renderSegMeter(rec.segEl, fillPct / 100, 16, colorName);
     if (frag) frag.appendChild(rec.card);
   }
 
@@ -1167,43 +1167,6 @@ function renderClassifyStrip() {
     grid._rowsByTag = rowsByTag;
     grid.innerHTML = '';
     grid.appendChild(frag);
-  }
-}
-
-function renderMiniSpectrum(strands) {
-  const bar = $('#bp-mini-spectrum');
-  if (!bar || !strands.length) return;
-  if (bar.children.length !== strands.length) {
-    bar.innerHTML = '';
-    strands.forEach((s, idx) => {
-      const col = spectralColor(idx, strands.length);
-      bar.appendChild(el('span', {
-        class: 'mini-sp-cell',
-        style: { backgroundColor: col.css }
-      }));
-    });
-  }
-  for (let i = 0; i < strands.length; i++) {
-    const s = strands[i];
-    const cell = bar.children[i];
-    if (!cell) continue;
-    const col = spectralColor(i, strands.length);
-    const pct = (s.tokens_pct ?? 100) / 100;
-    const active = (s.now ?? s.rate ?? 0) > 2000;
-    const rateTxt = fmtRateCompact((s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0));
-    const sig = `${s.healthy ? 1 : 0}:${Math.round(pct * 50)}:${active ? 1 : 0}:${rateTxt}:${s.ttfb_ms ?? ''}`;
-    if (cell._spSig === sig) continue;
-    cell._spSig = sig;
-    setTitle(cell, `${s.dev} (#${s.id}) · ${s.healthy ? `${rateTxt} · τ=${s.ttfb_ms ?? '—'}ms · ${s.tokens_pct ?? 100}%` : 'fault'}`);
-    if (!s.healthy) {
-      cell.style.backgroundColor = 'rgba(230, 108, 120, 0.35)';
-      cell.style.boxShadow = 'none';
-      cell.style.opacity = '0.45';
-    } else {
-      cell.style.backgroundColor = col.css;
-      cell.style.opacity = String(0.36 + pct * 0.64);
-      cell.style.boxShadow = active ? `0 0 8px ${col.css}` : 'none';
-    }
   }
 }
 
@@ -1345,7 +1308,7 @@ export function renderBlueprint() {
     setTxt('#adv-inv-score', totChecks > 0 ? `${okChecks}/${totChecks} ok` : '—/— ok');
     setCls('#adv-inv-score', `bp-live-rate ${(!totChecks || okChecks === totChecks) ? 'c-violet' : 'c-crimson'}`);
   }
-  renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, (!totChecks || okChecks === totChecks) ? 'violet' : 'crimson', false);
+  renderSegMeter($('#adv-invariants-meter'), totChecks > 0 ? okChecks / totChecks : 0, 14, (!totChecks || okChecks === totChecks) ? 'violet' : 'crimson');
 
   const invGrid = $('#adv-invariants-grid');
   if (invGrid) {
@@ -1442,7 +1405,8 @@ export function renderBlueprint() {
 
   const chargedRatio = (w.charged_count || 0) / nH;
   renderSegMeter($('#bp-harvest-meter'), chargedRatio, 10, 'spectrum');
-  setTxt('#bp-harvest-txt', `${w.policy || 'harvest'} ${Math.round(chargedRatio * 100)}%`);
+  setTxt('#bp-harvest-mode', w.policy || 'harvest');
+  setTxt('#bp-harvest-pct', `${Math.round(chargedRatio * 100)}%`);
 
   $$('#site-mode-seg .seg-btn').forEach(b => {
     const want = b.dataset.mode === curMode;
@@ -1467,7 +1431,7 @@ export function renderBlueprint() {
     : `${(liveFlow.totPkts / 1000).toFixed(1)}k pkts`);
   renderClassifyStrip();
   setTxt('#bp-classify-foot', `prerouting · ${(S.rules?.rules || []).length} rules`);
-  setTxt('#bp-classify-bytes', `上行累計 ${fmtBytes(liveFlow.totBytes)}`);
+  setTxt('#bp-classify-bytes', fmtBytes(liveFlow.totBytes));
 
   // Tier 2 · Branch 0: @vip_lane
   const vipS = strands.find(s => s.vip);
@@ -1477,9 +1441,9 @@ export function renderBlueprint() {
   const vSharePct = liveFlow.vipPct;
   const vipTokPct = vipS ? Math.round(vipS.tokens_pct ?? 100) : 0;
   setTxt('#bp-vip-rate', vipRateTxt);
-  setTxt('#bp-vip-share', vipS ? `蓄能 ${vipTokPct}%` : '蓄能 —');
+  setTxt('#bp-vip-share', vipS ? `${vipTokPct}%` : '—');
   renderSegMeter($('#bp-vip-meter'), vShareRatio, 10, 'red');
-  setTxt('#bp-vip-pct', `${vSharePct}% 流佔比`);
+  setTxt('#bp-vip-pct-num', `${vSharePct}%`);
   if ($('#bp-vip-iface')) setTxt('#bp-vip-iface', vipS ? `${vipS.dev} (#${vipS.id})` : 'auto');
   if ($('#bp-vip-rtt')) setTxt('#bp-vip-rtt', vipS ? `${vipS.ttfb_ms ?? '—'} ms · ${vipS.loss_pct ?? 0}%` : '— ms · 0%');
   if ($('#bp-vip-down')) {
@@ -1517,7 +1481,7 @@ export function renderBlueprint() {
   setTxt('#bp-tun-rate', mihomoOk ? fmtRate(liveFlow.tunBps).full : '0 bps');
   setTitle('#bp-tun-rate', `Mihomo 雙向 ↓ ${fmtRate(liveFlow.tunDownBps).full} · ↑ ${fmtRate(liveFlow.tunUpBps).full}`);
   renderSegMeter($('#bp-tun-meter'), tunShareBar, 10, mihomoOk ? 'mint' : 'amber');
-  setTxt('#bp-tun-pct', `${tunSharePct}% 流佔比`);
+  setTxt('#bp-tun-pct-num', `${tunSharePct}%`);
   setTxt('#bp-tun-desc', tun?.tw_home || tun?.selected || 'TW-HOME');
   setTxt('#bp-tun-bytes', fmtBytes(liveFlow.tunBytes));
   setTitle('#bp-tun-bytes', `Mihomo 累計 ↓ ${fmtBytes(liveFlow.tunDownBytes)} · ↑ ${fmtBytes(liveFlow.tunUpBytes)} · 活躍 ${liveFlow.tunConns} 條`);
@@ -1635,14 +1599,15 @@ export function renderBlueprint() {
   const nTotal = Math.max(1, st.strand_count || 21);
   const faultCnt = strands.length ? strands.filter(s => !s.healthy).length : Math.max(0, nTotal - (st.healthy_count ?? 0));
   const directShare = liveFlow.domShare;
+  const domShareBar = liveFlow.domBps > 32 ? Math.max(0.08, directShare) : directShare;
   const directPct = liveFlow.domPct;
   const weaveRate = liveFlow.domBps;
   setTxt('#bp-dom-rate', fmtRate(weaveRate).full);
   setTitle('#bp-dom-rate', `直連雙向 ↓ ${fmtRate(liveFlow.domDownBps).full} · ↑ ${fmtRate(liveFlow.domUpBps).full}`);
-  renderSegMeter($('#bp-dom-meter'), directShare, 10, 'blue');
+  renderSegMeter($('#bp-dom-meter'), domShareBar, 10, 'blue');
   setTxt('#bp-dom-pct', `${w.charged_count ?? 0}/${nH} 滿桶`);
-  setTxt('#bp-dom-share', `${directPct}% 流佔比`);
-  renderMiniSpectrum(strands);
+  setTxt('#bp-dom-share-num', `${directPct}%`);
+  renderStrandSpectrumBar($('#bp-mini-spectrum'), strands, { tooltip: true, fmtRate: fmtRateCompact });
   setTxt('#bp-dom-slots', `${w.slots ?? 126} (${w.affinity || 'flow'})`);
   const domByteCompact = fmtBytes(liveFlow.domBytes).replace(/\s+/g, '');
   const domPktCompact = liveFlow.domPkts >= 1e6 ? `${(liveFlow.domPkts / 1e6).toFixed(1)}M` : `${Math.round(liveFlow.domPkts / 1000)}k`;
@@ -1672,10 +1637,10 @@ export function renderBlueprint() {
   setTxt('#bp-dom-desc', `直連 ${domByteCompact} · 均${meanRtt != null ? `${meanRtt}ms` : '—'}`);
 
   // Tier 3: Stage 3 Full-Height HTB QoS + 21-Uplink Egress Unified Segmented Meters
-  const setSegMeter = (sel, ratio, count, colorName, compact = false, active = false) => {
+  const setSegMeter = (sel, ratio, count, colorName, active = false) => {
     const node = $(sel);
     if (!node) return;
-    renderSegMeter(node, ratio, count, colorName, compact);
+    renderSegMeter(node, ratio, count, colorName);
     const want = !!active;
     if (node.classList.contains('active') !== want) node.classList.toggle('active', want);
   };
@@ -1721,16 +1686,17 @@ export function renderBlueprint() {
     setTitle(chipSel, qos.mode === 'htb'
       ? `${key} · ↓${fmtRate(b.down_bps || 0).full} · ↑${fmtRate(b.up_bps || 0).full} · 累計 ${fmtBytes(b.bytes || 0)} · overlimit ${b.overlimits || 0} · drop ${b.drops || 0}`
       : `${key} · fq_codel 旁路計數 · 累計 ${fmtBytes(b.bytes || 0)}`);
-    setSegMeter(barSel, shareRatio(bps), 14, color, false, bps > 400);
+    setSegMeter(barSel, shareRatio(bps), 14, color, bps > 400);
     paintQosBandHeat(chipSel, rgb, bps);
   }
 
   const ewmaDown = st.rate_ewma ?? st.rate ?? 0;
   const ewmaUp = st.rate_up_ewma ?? st.rate_up ?? 0;
   const ewmaMbps = ((ewmaDown + ewmaUp) * 8) / 1e6;
-  setTxt('#bp-qos-tx-txt', `↑ ${fmtRateCompact(ewmaUp)} · ↓ ${fmtRateCompact(ewmaDown)}`);
+  setTxt('#bp-qos-tx-up', fmtRateCompact(ewmaUp));
+  setTxt('#bp-qos-tx-down', fmtRateCompact(ewmaDown));
   const ewmaRatio = ewmaMbps > 0 ? Math.min(1, Math.max(1 / 18, Math.log10(1 + ewmaMbps * 3.5) * 0.44)) : 0;
-  setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', false, ewmaMbps > 0.02);
+  setSegMeter('#bp-qos-tx-bar', ewmaRatio, 18, 'spectrum', ewmaMbps > 0.02);
   setTxt('#bp-qos-mss-kv', `SYN MSS ${st.settings?.['main.mss'] ?? 1440}`);
   const qosStTxt = qos.mode === 'htb'
     ? `HTB ${qos.down_cap_mbps || 0}↓/${qos.up_cap_mbps || 0}M↑${totalQosDrops > 0 ? ` · ${totalQosDrops}丟` : ''}`
@@ -1744,17 +1710,18 @@ export function renderBlueprint() {
   const upHours = Math.floor((upSec % 86400) / 3600);
   setTxt('#bp-up-uptime', upSec > 0 ? `up ${upDays}d ${upHours}h` : 'up —');
 
-  setTxt('#bp-up-pool-txt', `${w.charged_count ?? 0}/${nTotal} charged · ${st.healthy_count ?? 0} up`);
-  setSegMeter('#bp-up-pool-bar', (w.charged_count ?? 0) / nTotal, 16, 'spectrum', false, (w.charged_count ?? 0) > 0 && totalRate > 2000);
+  setTxt('#bp-up-pool-charged', `${w.charged_count ?? 0}/${nTotal}`);
+  setTxt('#bp-up-pool-up', `${st.healthy_count ?? 0}`);
+  setSegMeter('#bp-up-pool-bar', (w.charged_count ?? 0) / nTotal, 16, 'spectrum', (w.charged_count ?? 0) > 0 && totalRate > 2000);
 
   setTxt('#bp-up-ct-txt', `${ctCount.toLocaleString()} / ${ctMax.toLocaleString()}`);
   const ctRatio = ctCount > 0 ? Math.max(1 / 16, ctCount / ctMax) : 0;
-  setSegMeter('#bp-up-ct-bar', ctRatio, 16, ctRatio > 0.8 ? 'amber' : 'spectrum', false, ctCount > 0);
+  setSegMeter('#bp-up-ct-bar', ctRatio, 16, ctRatio > 0.8 ? 'amber' : 'spectrum', ctCount > 0);
 
   const memMb = Math.round((st.sys?.mem_available_kb || 0) / 1024);
   const load1 = st.sys?.load1 ?? 0;
   setTxt('#bp-up-mem-txt', `${memMb} MB free · load ${load1}`);
-  setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / 256)), 16, (load1 > 2.0 || memMb < 48) ? 'amber' : 'spectrum', false, load1 > 0.5);
+  setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / 256)), 16, (load1 > 2.0 || memMb < 48) ? 'amber' : 'spectrum', load1 > 0.5);
 
   setTxt('#bp-up-down', fmtBytes(st.down_bytes || 0));
   setTxt('#bp-up-up', fmtBytes(st.up_bytes || 0));

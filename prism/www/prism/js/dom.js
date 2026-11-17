@@ -2,7 +2,7 @@
  * PRISM 5.0 — DOM Builders, Segmented Block Meters & Log Renderers
  * ============================================================================ */
 
-import { fmtClock, spectralColor } from './state.js?v=5.7.0';
+import { fmtClock, spectralColor, desatObsidianRgb, opticalLoad } from './state.js?v=5.7.0';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -79,21 +79,30 @@ export function svgEl(tag, attrs = {}, ...children) {
   return node;
 }
 
-export function renderSegMeter(container, ratio, count = 12, colorClass = 'mint', compact = false) {
-  if (!container) return;
-  const active = Math.round(Math.max(0, Math.min(1, ratio)) * count);
-  const sig = `${active}/${count}/${colorClass}/${compact ? 1 : 0}`;
-  if (container.dataset.sig === sig) return;
-  container.dataset.sig = sig;
-  setVar(container, '--seg-count', String(count));
-  const isCompact = !!compact;
-  if (container.classList.contains('compact') !== isCompact) container.classList.toggle('compact', isCompact);
-
-  const rebuild = container.children.length !== count;
-  if (rebuild) {
+export function ensureSegCells(container, count) {
+  if (!container) return 0;
+  if (!container.classList.contains('seg-meter')) container.classList.add('seg-meter');
+  if (container.children.length !== count) {
     container.innerHTML = '';
     for (let i = 0; i < count; i++) container.appendChild(el('span', { class: 'seg-cell' }));
   }
+  return count;
+}
+
+export function spectralCellGlow(rgb, active = true) {
+  return active
+    ? `0 0 7px rgba(${rgb}, 0.62)`
+    : `0 0 5px rgba(${rgb}, 0.36)`;
+}
+
+export function renderSegMeter(container, ratio, count = 16, colorClass = 'mint') {
+  if (!container) return;
+  const active = Math.round(Math.max(0, Math.min(1, ratio)) * count);
+  const sig = `${active}/${count}/${colorClass}`;
+  if (container.dataset.sig === sig) return;
+  container.dataset.sig = sig;
+  setVar(container, '--seg-count', String(count));
+  ensureSegCells(container, count);
 
   const isSpec = colorClass === 'spectrum';
   for (let i = 0; i < count; i++) {
@@ -103,12 +112,73 @@ export function renderSegMeter(container, ratio, count = 12, colorClass = 'mint'
       const col = spectralColor(i, count);
       setCls(cell, 'seg-cell on');
       setStyleProp(cell, 'background', col.css);
-      setStyleProp(cell, 'boxShadow', `0 0 8px rgba(${col.rgb}, 0.65), 0 0 14px rgba(${col.rgb}, 0.25)`);
+      setStyleProp(cell, 'boxShadow', spectralCellGlow(col.rgb, true));
     } else {
       setCls(cell, `seg-cell ${isOn ? 'on ' + colorClass : ''}`);
       if (cell.style.background) setStyleProp(cell, 'background', '');
       if (cell.style.boxShadow) setStyleProp(cell, 'boxShadow', '');
     }
+  }
+}
+
+export function renderStrandSpectrumBar(container, strands, opts = {}) {
+  if (!container) return;
+  const desat = !!opts.desat;
+  const list = (strands && strands.length)
+    ? strands
+    : (opts.fallbackCount ? Array.from({ length: opts.fallbackCount }, (_, i) => ({ id: i + 1, healthy: true, tokens_pct: 100 })) : []);
+  if (!list.length) return;
+  ensureSegCells(container, list.length);
+
+  const n = list.length;
+  for (let i = 0; i < n; i++) {
+    const s = list[i];
+    const cell = container.children[i];
+    if (!cell) continue;
+    const col = spectralColor(i, n);
+    if (!s.healthy) {
+      if (cell._spSig === 'down') continue;
+      cell._spSig = 'down';
+      setCls(cell, 'seg-cell on');
+      setStyleProp(cell, 'backgroundColor', 'rgba(230, 108, 120, 0.35)');
+      setStyleProp(cell, 'boxShadow', 'none');
+      setStyleProp(cell, 'opacity', '0.45');
+      if (opts.tooltip) setTitle(cell, `${s.dev} (#${s.id}) · fault`);
+      continue;
+    }
+
+    const downUp = (s.now ?? s.rate ?? 0) + (s.up_now ?? s.up ?? 0);
+    const active = (desat ? downUp : (s.now ?? s.rate ?? 0)) > 2000;
+    const pct = (s.tokens_pct ?? 100) / 100;
+    const rateTxt = opts.tooltip ? opts.fmtRate(downUp) : '';
+    const loadK = desat ? opticalLoad(downUp, 6, 0.18) : 1;
+    const litRgb = desat ? desatObsidianRgb(col.rgb, 0.34 + 0.66 * Math.pow(loadK, 0.78)) : col.rgb;
+    const sig = `${Math.round(loadK * 100)}:${Math.round(pct * 50)}:${active ? 1 : 0}:${rateTxt}:${s.ttfb_ms ?? ''}`;
+    if (cell._spSig === sig) continue;
+    cell._spSig = sig;
+    if (opts.tooltip) {
+      setTitle(cell, `${s.dev} (#${s.id}) · ${rateTxt} · τ=${s.ttfb_ms ?? '—'}ms · ${s.tokens_pct ?? 100}%`);
+    }
+    setCls(cell, 'seg-cell on');
+    setStyleProp(cell, 'backgroundColor', `rgb(${litRgb})`);
+    setStyleProp(cell, 'opacity', (0.38 + pct * 0.62).toFixed(2));
+    setStyleProp(cell, 'boxShadow', spectralCellGlow(litRgb, active));
+  }
+}
+
+export function renderSlotMeter(container, slotsCount, slotCols, maxSlots, healthy) {
+  if (!container) return;
+  const lit = !healthy ? 0
+    : (maxSlots > slotCols
+      ? Math.min(slotCols, Math.round((slotsCount / maxSlots) * slotCols))
+      : Math.min(slotCols, Math.max(0, slotsCount)));
+  const sig = `${slotCols}:${lit}`;
+  if (container.dataset.sig === sig) return;
+  container.dataset.sig = sig;
+  setVar(container, '--slot-cols', String(slotCols));
+  ensureSegCells(container, slotCols);
+  for (let i = 0; i < slotCols; i++) {
+    setCls(container.children[i], i < lit ? 'seg-cell on slot-on' : 'seg-cell');
   }
 }
 

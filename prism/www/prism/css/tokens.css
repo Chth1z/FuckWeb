@@ -60,6 +60,11 @@
   --ink-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.94);
   --tray-bg:       rgba(4, 6, 12, 0.56);
   --tray-inset:    inset 0 0 0 0.5px rgba(0, 0, 0, 0.50);
+  /* Unified Segmented Meter Tokens (16px outer / 12px inner cell = exact integer px across 1x/1.25x/1.5x/2x DPI) */
+  --meter-h:       16px;
+  --meter-pad:     2px;
+  --meter-gap:     2px;
+  --meter-empty:   rgba(255, 255, 255, 0.065);
   --c-amber-dim:   rgba(235, 154, 94, 0.14);
   --c-amber-glow:  rgba(235, 154, 94, 0.42);
 

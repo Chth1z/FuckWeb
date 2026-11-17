@@ -3,7 +3,7 @@
  * ============================================================================ */
 
 import { S, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRateCompact } from '../state.js?v=5.7.0';
-import { $, $$, el, svgEl, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.7.0';
+import { $, $$, el, svgEl, setTxt, setCls, setTitle, setVar, setStyleProp, renderSlotMeter } from '../dom.js?v=5.7.0';
 import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.7.0';
 
 let hoverStrandId = null;
@@ -123,25 +123,6 @@ function renderTileSpark(tile, dev) {
   }
 }
 
-function renderSlotBar(barEl, slotsCount, slotCols, maxSlots, healthy) {
-  if (!barEl) return;
-  const lit = !healthy ? 0
-    : (maxSlots > slotCols
-      ? Math.min(slotCols, Math.round((slotsCount / maxSlots) * slotCols))
-      : Math.min(slotCols, Math.max(0, slotsCount)));
-  const sig = `${slotCols}:${lit}`;
-  if (barEl.dataset.sig === sig) return;
-  barEl.dataset.sig = sig;
-  barEl.style.setProperty('--slot-cols', String(slotCols));
-
-  const frag = document.createDocumentFragment();
-  for (let i = 0; i < slotCols; i++) {
-    frag.appendChild(el('span', { class: i < lit ? 'heat-slot-cell on' : 'heat-slot-cell' }));
-  }
-  barEl.innerHTML = '';
-  barEl.appendChild(frag);
-}
-
 let lastHighlightKey = '';
 
 function syncStrandHighlight(force = false) {
@@ -240,8 +221,10 @@ function buildHeatmapTiles(grid, strands) {
     const rttEl = el('span', { class: 'heat-rtt' }, '—');
     const downEl = el('span', { class: 'heat-rate-down idle' }, 'idle');
     const subEl = el('span', { class: 'heat-rate-sub' }, '');
-    const brEl = el('span', { class: 'heat-br' }, '100% · 0槽');
-    const slotsBarEl = el('div', { class: 'heat-slots-bar', 'aria-label': '分配槽位條' });
+    const tokBrEl = el('span', { class: 'slot-4ch' }, '100%');
+    const slotBrEl = el('span', { class: 'slot-slot' }, '0槽');
+    const brEl = el('span', { class: 'heat-br' }, tokBrEl, el('span', {}, '·'), slotBrEl);
+    const slotsBarEl = el('div', { class: 'seg-meter seg-meter--slots', 'aria-label': '分配槽位條' });
 
     const tile = el('div', {
       class: 'heat-tile',
@@ -276,7 +259,7 @@ function buildHeatmapTiles(grid, strands) {
       )
     );
 
-    tile._ui = { spark, rttEl, flagEl, downEl, subEl, brEl, slotsBarEl };
+    tile._ui = { spark, rttEl, flagEl, downEl, subEl, tokBrEl, slotBrEl, slotsBarEl };
     frag.appendChild(tile);
   });
   grid.innerHTML = '';
@@ -505,13 +488,14 @@ function updateHeatmap(strands) {
     setCls(ui.downEl, `heat-rate-down${hasDown ? '' : ' idle'}`);
     setTxt(ui.subEl, hasUp ? `↑${fmtShortRate(upBps)}·pk${fmtShortRate(s.peak)}` : `pk${fmtShortRate(s.peak)}`);
 
-    // Bottom-right corner: token % + slots count
+    // Bottom-right corner: token % + slots count (fixed tabular sub-slots so bar width stays steady)
     const tokLabel = `${Math.round(pct)}%`;
     const slotLabel = s.vip ? ((s.slots || 0) > 0 ? `VIP·${s.slots}槽` : 'VIP') : `${s.slots ?? 0}槽`;
-    setTxt(ui.brEl, `${tokLabel} · ${slotLabel}`);
+    setTxt(ui.tokBrEl, tokLabel);
+    setTxt(ui.slotBrEl, slotLabel);
 
     // Bottom edge: slot bar in matching wavelength color & exact slot count
-    renderSlotBar(ui.slotsBarEl, s.slots || 0, slotCols, maxSlots, s.healthy);
+    renderSlotMeter(ui.slotsBarEl, s.slots || 0, slotCols, maxSlots, s.healthy);
   }
 }
 
