@@ -41,6 +41,7 @@ const moduleHeat = {
 
 const RULE_LABELS = {
   'device-block': '設備禁網',
+  'unverified-drop': 'Mode A 攔截',
   'relay': '中繼直連',
   'quic': 'QUIC 阻斷',
   'device-direct': '設備直連',
@@ -877,7 +878,7 @@ function updateFlowPhysics(st) {
   const vipBps = vipS ? ((vipS.now ?? vipS.rate ?? 0) + (vipS.up_now ?? vipS.up ?? 0)) : 0;
 
   const rules = S.rules?.rules || [];
-  let totPkts = 0, totBytes = 0, quicPkts = 0, quicBytes = 0;
+  let totPkts = 0, totBytes = 0, quicPkts = 0, quicBytes = 0, dropPkts = 0;
   let tunPkts = 0, domPkts = 0, tunBytes = 0, domBytes = 0;
   for (const r of rules) {
     const p = r.packets || 0;
@@ -887,6 +888,9 @@ function updateFlowPhysics(st) {
     if (r.tag === 'quic') {
       quicPkts += p;
       quicBytes += b;
+      dropPkts += p;
+    } else if (r.tag === 'device-block' || r.tag === 'unverified-drop') {
+      dropPkts += p;
     }
     if (r.tag.includes('tunnel') || r.tag === 'rest-tunnel') {
       tunPkts += p;
@@ -917,6 +921,7 @@ function updateFlowPhysics(st) {
   liveFlow.totPkts = totPkts;
   liveFlow.totBytes = totBytes;
   liveFlow.quicPkts = quicPkts;
+  liveFlow.dropPkts = dropPkts;
   liveFlow.quicBytes = quicBytes;
   liveFlow.tunPkts = tunPkts;
   liveFlow.domPkts = domPkts;
@@ -1041,7 +1046,7 @@ function renderClassifyStrip() {
       colorName = 'amber';
       colorRgb = '235, 154, 94';
       textCls = 'c-amber';
-    } else if (r.tag === 'device-block') {
+    } else if (r.tag === 'device-block' || r.tag === 'unverified-drop') {
       colorName = 'crimson';
       colorRgb = '230, 108, 120';
       textCls = 'c-crimson';
@@ -1399,7 +1404,7 @@ export function renderBlueprint() {
   const mixTot = Math.max(1, liveFlow.totPkts);
   const domShare = Math.round((liveFlow.domPkts / mixTot) * 100);
   const tunShare = Math.round((liveFlow.tunPkts / mixTot) * 100);
-  const dropShare = Math.max(0, ((liveFlow.quicPkts / mixTot) * 100)).toFixed(1);
+  const dropShare = Math.max(0, (((liveFlow.dropPkts ?? liveFlow.quicPkts) / mixTot) * 100)).toFixed(1);
   setTxt('#bp-classify-mix', `直連 ${domShare}% · 歸籠 ${tunShare}% · 阻斷 ${dropShare}%`);
   setTxt('#bp-classify-foot', `prerouting · ${(S.rules?.rules || []).length} rules`);
   setTxt('#bp-classify-bytes', `累計 ${fmtBytes(liveFlow.totBytes)}`);

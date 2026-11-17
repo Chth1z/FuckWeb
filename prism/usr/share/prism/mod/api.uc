@@ -427,7 +427,7 @@ export function methods(d) {
 		},
 
 		claim: {
-			args: { mac: "", action: "new", target_uid: "", alias: "", policy: "auto", relay: "" },
+			args: { mac: "", action: "new", target_uid: "", alias: "", policy: "", relay: "" },
 			call: function(req) {
 				let a = req.args ?? {};
 				return d.claim ? d.claim(a) : identity.claim(a, d.cfg());
@@ -484,16 +484,24 @@ export function methods(d) {
 			args: { name: "", group: "" },
 			call: function(req) {
 				let name = req.args?.name ?? "", grp_in = req.args?.group ?? "";
-				let profiles = identity.load_store()?.profiles ?? [];
-				let prof = null;
-				for (let p in profiles) {
-					if (p.uid == grp_in || p.group_name == grp_in || (!length(grp_in) && !prof))
-						prof = p;
+				let grp = "TW-HOME", save_key = "_tw_home";
+				if (length(grp_in) && grp_in != "TW-HOME") {
+					let profiles = identity.load_store()?.profiles ?? [];
+					let prof = null;
+					for (let p in profiles) {
+						if (p.uid == grp_in || p.group_name == grp_in) {
+							prof = p;
+							break;
+						}
+					}
+					if (!prof)
+						return { ok: false, error: "unknown group" };
+					grp = prof.group_name;
+					save_key = prof.uid;
 				}
-				let grp = prof ? prof.group_name : (length(grp_in) ? grp_in : "TW-HOME");
 				let res = controller(d.cfg(), lan_ip(), "PUT", "/proxies/" + tunnel.urlenc(grp), sprintf("%J", { name }));
 				if (res != null) {
-					tunnel.save_selected(prof ? prof.uid : "_tw_home", name);
+					tunnel.save_selected(save_key, name);
 					core.event("TUNNEL relay selected: %s -> %s", grp, name);
 				}
 				return { ok: res != null };

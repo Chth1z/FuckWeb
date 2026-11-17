@@ -24,14 +24,18 @@ NOW=$(date +%s)
 
 [ -n "$MAC" ] || exit 0
 
-DIR="/tmp/prism/dhcp_obs"
-mkdir -p "$DIR" 2>/dev/null
-SLUG=$(printf '%s' "$MAC" | tr -d ':')
 PAYLOAD=$(printf '{"action":"%s","mac":"%s","ip":"%s","host":"%s","opt55":"%s","vendor":"%s","cid":"%s","iface":"%s","ts":%s}' \
 	"$ACT" "$MAC" "$IP" "$HOST" "$OPT55" "$VENDOR" "$CID" "$IFACE" "$NOW")
 
-TMP="$DIR/${SLUG}.tmp.$$"
-printf '%s\n' "$PAYLOAD" > "$TMP" 2>/dev/null && mv -f "$TMP" "$DIR/${SLUG}.json" 2>/dev/null
-
-# Notify running prismd asynchronously so dnsmasq never stalls.
-( /bin/ubus -t 1 call prism dhcp_event "$PAYLOAD" >/dev/null 2>&1 ) &
+# Notify prismd synchronously over local Unix ubus socket (~1ms) so on_dhcp_event
+# updates dhcp_obs atomically without double-write races; only fall back to
+# direct file write at early boot before prismd starts.
+if ! /bin/ubus -t 1 call prism dhcp_event "$PAYLOAD" >/dev/null 2>&1; then
+	DIR="/tmp/prism/dhcp_obs"
+	mkdir -p "$DIR" 2>/dev/null
+	SLUG=$(printf '%s' "$MAC" | tr -d ':')
+	if [ "$ACT" = "add" ] || [ ! -s "$DIR/${SLUG}.json" ]; then
+		TMP="$DIR/${SLUG}.tmp.$$"
+		printf '%s\n' "$PAYLOAD" > "$TMP" 2>/dev/null && mv -f "$TMP" "$DIR/${SLUG}.json" 2>/dev/null
+	fi
+fi

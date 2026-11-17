@@ -85,6 +85,7 @@ function snapshot(ctx, report, led_color) {
 		tunnel: {
 			enabled: ctx.tunnel.enabled, running: ctx.tunnel.running, on: ctx.tunnel.on,
 			restored: !!ctx.tunnel.restored, pid: ctx.tunnel.pid ?? "",
+			mixed_port: ctx.cfg.tunnel.mixed_port,
 			relays: ctx.tunnel.relays, fail_open: !!st.tunnel?.open,
 			canary_ms: st.tunnel?.delay ?? 0, canary_fails: st.tunnel?.fails ?? 0,
 		},
@@ -111,6 +112,7 @@ function reconcile(ctx) {
 	ctx.strands = strands.discover(ctx);
 	kernel.plumb(ctx);
 	ctx.health = strands.check(ctx);
+	ctx.cfg = config.load();
 	ctx.identity = identity.reconcile(ctx);
 	ctx.tunnel = tunnel.observe(ctx);
 	ctx.weave = weave.plan(ctx);
@@ -273,7 +275,7 @@ const COMMANDS = {
 			let ctx = context({});
 			fs.writefile(STOPPED, "");
 			if (ctx.cfg.tunnel.enabled && core.pidof("mihomo"))
-				tunnel.sync_selected(ctx.cfg, ctx.facts.lan_ip, identity.load_store()?.profiles ?? []);
+				tunnel.sync_selected(ctx.cfg, ctx.facts.lan_ip);
 			ctx.strands = [];
 			kernel.teardown(ctx);
 			dns.teardown(ctx);

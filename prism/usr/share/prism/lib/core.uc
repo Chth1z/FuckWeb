@@ -130,14 +130,28 @@ export function lines(path) {
 };
 
 export function write_atomic(path, data, mode) {
-	let tmp = path + ".tmp";
+	let c = clock(true);
+	let tmp = sprintf("%s.tmp.%d.%d", path, c[0], c[1]);
 	if (fs.writefile(tmp, data) == null) {
 		err("cannot write %s: %s", tmp, fs.error());
 		return false;
 	}
 	if (mode != null)
 		fs.chmod(tmp, mode);
-	return fs.rename(tmp, path) == true;
+	if (fs.rename(tmp, path) != true) {
+		fs.unlink(tmp);
+		return false;
+	}
+	return true;
+};
+
+export function utf8_trunc(s, max_bytes) {
+	if (length(s ?? "") <= max_bytes)
+		return s ?? "";
+	let n = max_bytes;
+	while (n > 0 && (ord(s, n) & 0xC0) == 0x80)
+		n--;
+	return substr(s, 0, n);
 };
 
 // Returns true when the file content changed.
@@ -198,4 +212,18 @@ export function init_dirs() {
 	fs.mkdir(RUN);
 	if (!dry)
 		fs.mkdir(STATE_DIR);
+};
+
+export function with_lock(name, wait_s, fn) {
+	init_dirs();
+	let h = lock(name);
+	for (let i = 0; !h && i < (wait_s ?? 0) * 10; i++) {
+		sleep(100);
+		h = lock(name);
+	}
+	if (!h)
+		return fn(false);
+	let res = fn(true);
+	h.close();
+	return res;
 };

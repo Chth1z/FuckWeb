@@ -49,11 +49,16 @@ export function scan(cfg) {
 		known[d.mac] = d;
 
 	let add = (mac, ip, online) => {
-		if (seen[mac])
+		if (seen[mac]) {
+			let cur = seen[mac];
+			if (online && !cur.online)
+				cur.online = true;
+			if (length(ip ?? "") && (online || !length(cur.ip)))
+				cur.ip = ip;
 			return;
-		seen[mac] = true;
+		}
 		let k = known[mac], l = lease[mac], r = radio[mac];
-		push(list, {
+		let item = {
 			mac,
 			ip: ip ?? l?.ip ?? "",
 			host: l?.host ?? "",
@@ -63,7 +68,9 @@ export function scan(cfg) {
 			signal: r?.signal ?? 0,
 			online: !!r || online,
 			policy: k?.policy ?? "auto",
-		});
+		};
+		seen[mac] = item;
+		push(list, item);
 	};
 
 	for (let lan in cfg.main.lan_dev)

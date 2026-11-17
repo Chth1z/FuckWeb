@@ -361,12 +361,14 @@ function parse_json_obj(s) {
 export function save_selected(uid_or_group, name) {
 	if (!length(name ?? ""))
 		return;
-	let relays = identity.load_relays_state();
-	let key = length(uid_or_group) ? uid_or_group : "_tw_home";
-	if (relays[key] != name) {
-		relays[key] = name;
-		identity.save_relays_state(relays);
-	}
+	identity.with_identity_lock(() => {
+		let relays = identity.load_relays_state();
+		let key = length(uid_or_group) ? uid_or_group : "_tw_home";
+		if (relays[key] != name) {
+			relays[key] = name;
+			identity.save_relays_state(relays);
+		}
+	});
 };
 
 export function restore_selected(cfg, lan_ip, profiles) {
@@ -380,13 +382,17 @@ export function restore_selected(cfg, lan_ip, profiles) {
 	}
 	if (!live)
 		return false;
+	let all_ok = true;
 	let tw_g = live["TW-HOME"];
 	if (tw_g) {
 		let want_tw = relays._tw_home ?? "";
 		if (!(want_tw in (tw_g.all ?? [])))
 			want_tw = tw_g.all?.[0] ?? "";
-		if (length(want_tw) && tw_g.now != want_tw)
-			api(cfg, lan_ip, "PUT", "/proxies/TW-HOME", sprintf("%J", { name: want_tw }));
+		if (length(want_tw) && tw_g.now != want_tw) {
+			let pr = api(cfg, lan_ip, "PUT", "/proxies/TW-HOME", sprintf("%J", { name: want_tw }));
+			if (pr.status != 200 && pr.status != 204)
+				all_ok = false;
+		}
 	}
 	for (let p in profiles) {
 		let g = live[p.group_name];
@@ -395,43 +401,61 @@ export function restore_selected(cfg, lan_ip, profiles) {
 		let want = relays[p.uid] ?? "TW-HOME";
 		if (!(want in (g.all ?? [])))
 			want = ("TW-HOME" in (g.all ?? [])) ? "TW-HOME" : (g.all?.[0] ?? "");
-		if (length(want) && g.now != want)
-			api(cfg, lan_ip, "PUT", "/proxies/" + urlenc(p.group_name), sprintf("%J", { name: want }));
+		if (length(want) && g.now != want) {
+			let pr = api(cfg, lan_ip, "PUT", "/proxies/" + urlenc(p.group_name), sprintf("%J", { name: want }));
+			if (pr.status != 200 && pr.status != 204)
+				all_ok = false;
+		}
 	}
-	return true;
+	return all_ok;
 };
 
 // Poll live Zashboard selections from Mihomo RAM and persist only when modified.
 export function sync_selected(cfg, lan_ip, profiles) {
-	profiles ??= identity.load_store()?.profiles ?? [];
 	let res = api(cfg, lan_ip, "GET", "/proxies");
 	let live = parse_json_obj(res.body)?.proxies;
 	if (!live)
 		return false;
-	let saved = identity.load_relays_state();
-	let next = { ...saved }, changed = false;
-	if (live["TW-HOME"]?.now && next._tw_home != live["TW-HOME"].now) {
-		next._tw_home = live["TW-HOME"].now;
-		changed = true;
-	}
-	for (let p in profiles) {
-		let now_sel = live[p.group_name]?.now;
-		if (length(now_sel) && next[p.uid] != now_sel) {
-			next[p.uid] = now_sel;
+	return identity.with_identity_lock(() => {
+		// Re-read authoritative store inside identity.lock so concurrent claim/forget
+		// cannot have deleted UIDs resurrected by a stale pre-HTTP snapshot.
+		let store = identity.load_store();
+		let cur_profiles = store?.profiles ?? profiles ?? [];
+		let saved = identity.load_relays_state();
+		let next = { ...saved }, changed = false;
+		let valid_uids = {};
+		if (live["TW-HOME"]?.now && next._tw_home != live["TW-HOME"].now) {
+			next._tw_home = live["TW-HOME"].now;
 			changed = true;
 		}
-	}
-	if (changed)
-		identity.save_relays_state(next);
-	return changed;
+		for (let p in cur_profiles) {
+			valid_uids[p.uid] = true;
+			let now_sel = live[p.group_name]?.now;
+			if (length(now_sel) && next[p.uid] != now_sel) {
+				next[p.uid] = now_sel;
+				changed = true;
+			}
+		}
+		if (store) {
+			for (let k in keys(next)) {
+				if (k != "_tw_home" && !valid_uids[k]) {
+					delete next[k];
+					changed = true;
+				}
+			}
+		}
+		if (changed)
+			identity.save_relays_state(next);
+		return changed;
+	});
 };
 
 export function reload(cfg, lan_ip, profiles) {
 	let r = api(cfg, lan_ip, "PUT", "/configs?force=true", sprintf("%J", { path: core.RUN + "/mihomo.yaml" }));
 	let ok = r.status == 204 || r.status == 200;
 	if (ok)
-		restore_selected(cfg, lan_ip, profiles);
-	core.event("TUNNEL reload http=%d", r.status);
+		ok = restore_selected(cfg, lan_ip, profiles);
+	core.event("TUNNEL reload http=%d restored=%d", r.status, ok ? 1 : 0);
 	return ok;
 };
 
@@ -539,9 +563,9 @@ export function observe(ctx) {
 	plan.relay_ips = addr.ips;
 	plan.relay_host_ips = addr.by_host;
 
-	// Wait briefly until Mihomo binds mixed-in and expected per-device TProxy ports.
+	// Wait briefly until Mihomo binds mixed-in (and existing profile ports when config unchanged).
 	let ready = listening_ports();
-	let min_check = (p) => p["" + c.mixed_port] && (!length(prep.expected_ports) || p["" + prep.expected_ports[0]]);
+	let min_check = (p) => p["" + c.mixed_port] && (prep.changed || !length(prep.expected_ports) || p["" + prep.expected_ports[0]]);
 	for (let i = 0; i < 20 && core.pidof("mihomo") && !min_check(ready); i++) {
 		sleep(500);
 		ready = listening_ports();
@@ -563,6 +587,8 @@ export function observe(ctx) {
 	let pid = trim(core.sh("pidof mihomo").out);
 	plan.pid = pid;
 	if (prep.changed && !core.is_dry()) {
+		if (st.since && st.pid == pid)
+			sync_selected(cfg, ctx.facts.lan_ip);
 		let ok = reload(cfg, ctx.facts.lan_ip, profiles);
 		plan.restored = ok;
 		if (ok) {
@@ -601,8 +627,20 @@ export function observe(ctx) {
 		plan.restored = true;
 	}
 	plan.ready_ports = ready;
-	if (!all_expected_ready(ready, c.mixed_port, prep.expected_ports))
+	if (!all_expected_ready(ready, c.mixed_port, prep.expected_ports)) {
 		ctx.want_rescan = true;
+		st.port_fails = (st.port_fails ?? 0) + 1;
+		if (st.port_fails >= 2 && core.pidof("mihomo") && now - (st.restarted ?? 0) >= 60) {
+			st.port_fails = 0;
+			st.restarted = now;
+			core.event("TUNNEL device listener port missing after reload, restarting mihomo");
+			core.act("ubus call service signal '{\"name\":\"prism\",\"instance\":\"mihomo\",\"signal\":15}'");
+			ctx.want_service_sync = true;
+		}
+	}
+	else {
+		st.port_fails = 0;
+	}
 
 	if (st.open || st.fails > 0 || now - st.checked >= c.canary_interval) {
 		st.checked = now;

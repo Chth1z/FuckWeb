@@ -195,9 +195,9 @@ export function store(changes) {
 	return { ok: true };
 };
 
-// A display name: no quotes, backslashes or control characters, 48 at most.
+// A display name: no quotes, backslashes or control characters, <= 48 UTF-8 bytes.
 function clean(s) {
-	return substr(replace(s ?? "", /[[:cntrl:]'"\\]/g, ""), 0, 48);
+	return core.utf8_trunc(replace(s ?? "", /[[:cntrl:]'"\\]/g, ""), 48);
 }
 
 function find(uci, stype, test) {

@@ -174,8 +174,11 @@ local function read_cache()
 	local raw = f:read("*a")
 	f:close()
 	local out = {}
-	for ip, ts, name in raw:gmatch('"(%d+%.%d+%.%d+%.%d+)":%s*{%s*"ts":(%d+),%s*"name":"([^"]*)"') do
-		out[ip] = { ts = tonumber(ts) or 0, name = name }
+	for ip, body in raw:gmatch('"(%d+%.%d+%.%d+%.%d+)":%s*(%b{})') do
+		local ts = tonumber(body:match('"ts":(%d+)')) or 0
+		local name = body:match('"name":"([^"]*)"') or ""
+		local mac = body:match('"mac":"([^"]*)"') or ""
+		out[ip] = { ts = ts, name = name, mac = mac }
 	end
 	return out
 end
@@ -186,7 +189,8 @@ local function write_cache(tbl)
 	for ip, v in pairs(tbl) do
 		if not first then parts[#parts + 1] = "," end
 		first = false
-		parts[#parts + 1] = string.format('"%s":{"ts":%d,"name":"%s"}', ip, v.ts or 0, (v.name or ""):gsub('["\\]', ""))
+		parts[#parts + 1] = string.format('"%s":{"ts":%d,"mac":"%s","name":"%s"}',
+			ip, v.ts or 0, (v.mac or ""):gsub('[^%da-fA-F:]', ""), (v.name or ""):gsub('["\\]', ""))
 	end
 	parts[#parts + 1] = "}\n"
 	local tmp = CACHE_FILE .. ".tmp." .. tostring(os.time())
@@ -199,13 +203,14 @@ local function write_cache(tbl)
 end
 
 local ip = arg[1]
+local mac = (arg[2] or ""):lower():gsub('[^%da-f:]', "")
 if not ip or not ip:match("^%d+%.%d+%.%d+%.%d+$") then
 	os.exit(0)
 end
 
 local name = probe_nbstat(ip) or probe_mdns_ptr(ip) or ""
 local cache = read_cache()
-cache[ip] = { ts = os.time(), name = name }
+cache[ip] = { ts = os.time(), mac = mac, name = name }
 write_cache(cache)
 if #name > 0 then
 	print(name)

@@ -251,7 +251,7 @@ function createQuarantineCard(q, allDevs) {
       el('span', { class: 'c-crimson dev-flows-tag' }, '禁網待認領')
     ),
     el('div', { class: 'c-amber', style: { fontSize: '10.5px', lineHeight: '1.35' } }, `${q.mac}${q.ip ? ` · ${q.ip}` : ''} · ${hint}`),
-    el('div', { class: 'dev-nav-sub', style: { justifyContent: 'flex-end', gap: '5px', flexWrap: 'wrap' } },
+    el('div', { style: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '5px', flexWrap: 'wrap' } },
       btnNew,
       allDevs.some(d => d.uid) ? sel : null,
       allDevs.some(d => d.uid) ? btnMerge : null
@@ -298,7 +298,7 @@ function createDeviceCard(mac) {
       if ((d.policy || 'auto') === p) return;
       d.policy = p; // optimistic UI state
       syncDeviceCard(card, d, card._dr, S.selectedDeviceMac === mac);
-      write('device', { mac: d.mac, name: d.name || '', policy: p }, `${d.name || d.mac} 分流律令已設為 ${POLICY_META[p].label}`);
+      write('device', { mac: d.mac, name: d.named ? (d.name || '') : '', policy: p }, `${d.name || d.mac} 分流律令已設為 ${POLICY_META[p].label}`);
     });
     pillBtns[p] = b;
     pillBar.appendChild(b);
@@ -493,19 +493,28 @@ function renderDeviceMenu(devs, quarantine, byIp, totalFlows) {
   }
   for (const emp of empties) emp.remove();
 
-  const qSig = (quarantine || []).map(q => `${q.mac}:${q.ip}:${q.host}:${q.score}:${q.online}:${devs.length}`).join('|');
+  const filteredQuarantine = (quarantine || []).filter(item => {
+    if (!q) return true;
+    const hay = `${item.mac || ''} ${item.ip || ''} ${item.host || ''} ${(item.candidates || []).map(c => c.alias || c.uid).join(' ')}`.toLowerCase();
+    return hay.includes(q);
+  });
+  const devOptsSig = devs.filter(d => d.uid).map(d => `${d.uid}:${d.name || d.host || ''}`).join(',');
+  const qSig = `${devOptsSig}||` + filteredQuarantine.map(item =>
+    `${item.mac}:${item.ip}:${item.host}:${item.score}:${item.online}:${(item.candidates || []).map(c => `${c.uid}:${c.score}`).join(',')}`
+  ).join('|');
   if (list._qSig !== qSig) {
     list._qSig = qSig;
     for (const qc of qCards) qc.remove();
     const frag = document.createDocumentFragment();
-    for (const q of (quarantine || []))
-      frag.appendChild(createQuarantineCard(q, devs));
+    for (const item of filteredQuarantine)
+      frag.appendChild(createQuarantineCard(item, devs));
     if (frag.childNodes.length)
       list.insertBefore(frag, list.firstChild);
   }
-  const qOffset = (quarantine || []).length;
+  const qOffset = filteredQuarantine.length;
 
   if (!sorted.length && !qOffset) {
+    editingMac = null;
     existingByMac.forEach(node => node.remove());
     list.appendChild(el('div', { class: 'c-muted', style: { padding: '14px', textAlign: 'center', fontSize: '11.5px' } }, '無匹配終端'));
     forceReorder = false;
@@ -514,7 +523,10 @@ function renderDeviceMenu(devs, quarantine, byIp, totalFlows) {
 
   const wantedMacs = new Set(sorted.map(d => d.mac));
   existingByMac.forEach((node, mac) => {
-    if (!wantedMacs.has(mac)) node.remove();
+    if (!wantedMacs.has(mac)) {
+      if (editingMac === mac) editingMac = null;
+      node.remove();
+    }
   });
 
   // Freeze permutation while pointer hovers or user edits an alias so rows never shift mid-click
@@ -632,7 +644,7 @@ function renderConnections(devs, selectedDev, rows) {
     seenKeys.add(key);
 
     let badgeClass = f.route === 'tunnel' ? 'cooling' : 'charged';
-    let routeText = f.route === 'tunnel' ? `TW-HOME · ${f.via || 'proxy'}` : `直連 · ${f.via || 'wan'}`;
+    let routeText = f.route === 'tunnel' ? `隧道 · ${f.via || 'proxy'}` : `直連 · ${f.via || 'wan'}`;
     if (f.vip) {
       badgeClass = 'vip';
       routeText = `光道 · ${f.via || 'vip'}`;

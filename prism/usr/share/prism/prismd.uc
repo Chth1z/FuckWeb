@@ -38,7 +38,7 @@ let lan = { list: [], rate: {}, samples: 0 };
 let sampled = 0, series_at = 0, pattern_at = 0;
 let running = false, again = false, first = true, tunnel_ready_for_sync = false;
 let reconcile_timer, sample_timer;
-let kick_pending = false;
+let kick_pending = false, kick, reconcile;
 
 function monotonic() {
 	let c = clock(true);
@@ -105,8 +105,16 @@ function sample_devices(dt) {
 	}
 	if (lan.samples % DEVICE_SCAN == 0)
 		lan.list = devices.scan(cfg);
-	if (tunnel_ready_for_sync && !running && (lan.samples % 2 == 1))
-		tunnel.sync_selected(cfg, snapshot?.lan_ip ?? "192.168.16.1", identity.load_store()?.profiles ?? []);
+	if (tunnel_ready_for_sync && !running && (lan.samples % 2 == 1)) {
+		let cur_pid = trim(core.sh("pidof mihomo").out);
+		if (!length(cur_pid) || cur_pid != (snapshot?.tunnel?.pid ?? "")) {
+			tunnel_ready_for_sync = false;
+			kick(100);
+		}
+		else {
+			tunnel.sync_selected(cfg, snapshot?.lan_ip ?? "192.168.16.1");
+		}
+	}
 	lan.samples++;
 }
 
@@ -194,9 +202,7 @@ function sample() {
 	relay(now);
 }
 
-let reconcile;
-
-function kick(delay_ms) {
+kick = function(delay_ms) {
 	if (kick_pending)
 		return;
 	kick_pending = true;
@@ -204,7 +210,7 @@ function kick(delay_ms) {
 		kick_pending = false;
 		reconcile();
 	});
-}
+};
 
 reconcile = function() {
 	reconcile_timer.set(max(10, cfg.main.tick) * 1000);
@@ -255,12 +261,13 @@ let published = bus.publish("prism", api.methods({
 	reload: sync_lan_cfg,
 	set_device: (a) => {
 		let mac = lc(a.mac ?? ""), name = a.name ?? "", policy = a.policy || "auto";
-		let res = config.device_store(mac, name, policy);
+		let anchor = identity.mac_anchor(mac);
+		let res = config.device_store(anchor, name, policy);
 		if (res.ok) {
-			let p = identity.update_profile_policy(mac, name, policy, cfg);
+			let p = identity.update_profile_policy(anchor, name, policy, cfg);
 			if (!p && (policy != "block" || length(trim(name))))
-				identity.claim({ mac, action: "new", alias: name, policy }, cfg);
-			core.event("DEVICE %s policy=%s name=%s", mac, policy, name);
+				identity.claim({ mac: anchor, action: "new", alias: name, policy }, cfg);
+			core.event("DEVICE %s policy=%s name=%s", anchor, policy, name);
 			sync_lan_cfg();
 			kick(100);
 		}

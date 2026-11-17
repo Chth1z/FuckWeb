@@ -10,6 +10,7 @@ import * as fs from "fs";
 import * as ubus from "ubus";
 import { cursor } from "uci";
 import * as core from "../lib/core.uc";
+import * as config from "../lib/config.uc";
 import * as facts from "../lib/facts.uc";
 
 export const PROFILES_FILE = core.STATE_DIR + "/profiles.json";
@@ -46,7 +47,7 @@ export function is_ip4(s) {
 export function clean_alias(s) {
 	let c = replace(s ?? "", /[[:cntrl:]'"\\,\[\]]/g, " ");
 	c = trim(replace(c, / +/g, " "));
-	return substr(c, 0, 32);
+	return core.utf8_trunc(c, 32);
 };
 
 export function group_name(alias, anchor_mac) {
@@ -141,6 +142,10 @@ export function save_relays_state(relays) {
 	return core.write_atomic(RELAYS_FILE, sprintf("%.2J\n", relays), 0o600);
 };
 
+export function with_identity_lock(fn) {
+	return core.with_lock("identity", 3, () => fn());
+};
+
 export function profile_by_uid(store, uid) {
 	for (let p in store?.profiles ?? [])
 		if (p.uid == uid)
@@ -158,6 +163,14 @@ export function mac_owner_map(store) {
 		}
 	}
 	return owners;
+};
+
+export function mac_anchor(mac) {
+	let store = load_store();
+	if (!store)
+		return lc(mac ?? "");
+	let p = mac_owner_map(store)[lc(mac ?? "")];
+	return p ? p.anchor_mac : lc(mac ?? "");
 };
 
 export function all_profile_macs(p) {
@@ -332,7 +345,8 @@ function observe_mac(mac, tel) {
 	let ns = tel.neigh.by_mac[mac] ?? [];
 	let ip = (d?.action != "remove" && is_ip4(d?.ip)) ? d.ip :
 		(is_ip4(l?.ip) ? l.ip : (ns[0]?.ip ?? ""));
-	let ln = ip ? (tel.lan_names[ip]?.name ?? "") : "";
+	let ln_ent = ip ? tel.lan_names[ip] : null;
+	let ln = (ln_ent && (!length(ln_ent.mac ?? "") || ln_ent.mac == mac)) ? (ln_ent.name ?? "") : "";
 	let name = clean_alias(d?.host || l?.host || ln || "");
 	let media = r ? r.band : (f?.dev && match(f.dev, /^phy/) ? (f.dev == "phy1-ap0" ? "5G" : "2.4G") : (f?.dev ? "wired" : "unknown"));
 	let active_neigh = length(filter(ns, (x) => x.active)) > 0;
@@ -630,36 +644,51 @@ function maybe_probe_lan_names(candidates, tel, now) {
 		if (!obs.online || !is_ip4(obs.ip) || obs.name_kind == "specific")
 			continue;
 		let cached = tel.lan_names[obs.ip];
-		if (cached && now - (cached.ts ?? 0) < 300)
+		if (cached && cached.mac == obs.mac && now - (cached.ts ?? 0) < 300)
 			continue;
-		system(sprintf("/usr/bin/lua %s %s >/dev/null 2>&1 &", core.shq(LAN_PROBE_BIN), core.shq(obs.ip)));
+		system(sprintf("/usr/bin/lua %s %s %s >/dev/null 2>&1 &",
+			core.shq(LAN_PROBE_BIN), core.shq(obs.ip), core.shq(obs.mac)));
 		break; // at most one async probe per pass
 	}
 }
 
 // Evaluate cross-auth, Mode A quarantine, and verified (MAC, IP) pairs for reconcile.
 export function reconcile(ctx) {
-	let cfg = ctx.cfg, now = ctx.now;
-	let tel = gather_telemetry(cfg);
-	let store = load_store() ?? bootstrap(cfg, tel, now);
-	let dirty = false;
+	return core.with_lock("identity", 5, () => {
+		let cfg = config.load(), now = ctx.now;
+		ctx.cfg = cfg;
+		let tel = gather_telemetry(cfg);
+		let store = load_store() ?? bootstrap(cfg, tel, now);
+		let dirty = false;
 
-	// Sync policy & alias overrides from UCI device entries cleanly without erasing auto profiles.
-	let owners = mac_owner_map(store);
-	for (let d in cfg.devices ?? []) {
-		let p = owners[d.mac];
-		if (!p)
-			continue;
-		if (p.policy != d.policy) {
-			p.policy = d.policy;
-			dirty = true;
+		// Sync policy & alias overrides from UCI device entries cleanly without erasing auto profiles.
+		// Also auto-enroll any manual `config device` entries added directly to /etc/config/prism.
+		let owners = mac_owner_map(store);
+		let used_uids = {}, used_ports = {};
+		for (let p in store.profiles) {
+			used_uids[p.uid] = true;
+			used_ports["" + p.port] = true;
 		}
-		if (length(d.name) && clean_alias(d.name) != p.alias) {
-			p.alias = clean_alias(d.name);
-			p.group_name = group_name(p.alias, p.anchor_mac);
-			dirty = true;
+		for (let d in cfg.devices ?? []) {
+			let p = owners[d.mac];
+			if (!p) {
+				p = make_profile(store, cfg, used_uids, used_ports, d.mac, d.name ?? "", d.policy ?? "auto", tel, now, "uci_sync");
+				push(store.profiles, p);
+				for (let m in all_profile_macs(p))
+					owners[m] = p;
+				dirty = true;
+				continue;
+			}
+			if (p.policy != d.policy) {
+				p.policy = d.policy;
+				dirty = true;
+			}
+			if (length(d.name) && clean_alias(d.name) != p.alias) {
+				p.alias = clean_alias(d.name);
+				p.group_name = group_name(p.alias, p.anchor_mac);
+				dirty = true;
+			}
 		}
-	}
 
 	// Collect currently relevant MACs on the LAN.
 	let seen_macs = {};
@@ -762,41 +791,69 @@ export function reconcile(ctx) {
 	if (!core.is_dry())
 		core.save_json(RT_FILE, rt, 0o600);
 	return rt;
+	});
 };
 
 // --- immediate DHCP hotplug admission (<10ms verified_pairs sync) -----------
 
-function apply_live_nft_pair(mac, ip, stale_macs) {
+function apply_live_nft_pair(mac, ip) {
 	if (!is_mac(mac) || !is_ip4(ip))
 		return;
-	let cmds = [];
-	for (let tbl in [ "inet prism", "inet prism_guard" ]) {
-		for (let om in stale_macs ?? []) {
-			if (om != mac)
-				push(cmds, sprintf("delete element %s verified_pairs { %s . %s }", tbl, om, ip));
+	// Delete any stale owner of `ip` per-element cleanly before adding `mac . ip`,
+	// skipping tables that do not currently exist (e.g., prism_guard when fail_open=1).
+	let cur = core.sh("nft -j list set inet prism verified_pairs 2>/dev/null");
+	let stale = [];
+	try {
+		for (let item in json(cur.out).nftables ?? []) {
+			for (let e in item.set?.elem ?? []) {
+				let c = e.concat;
+				if (type(c) == "array" && length(c) == 2 && c[1] == ip && lc(c[0]) != mac)
+					push(stale, lc(c[0]));
+			}
 		}
-		push(cmds, sprintf("add element %s verified_pairs { %s . %s }", tbl, mac, ip));
 	}
-	if (length(cmds))
-		core.sh(join("\n", cmds) + " >/dev/null 2>&1");
+	catch (e) {}
+
+	for (let tbl in [ "inet prism", "inet prism_guard" ]) {
+		if (!core.ok("nft list set " + tbl + " verified_pairs"))
+			continue;
+		for (let om in stale)
+			core.sh(sprintf("nft delete element %s verified_pairs { %s . %s } 2>/dev/null || true", tbl, om, ip));
+		core.sh(sprintf("nft add element %s verified_pairs { %s . %s } 2>/dev/null || true", tbl, mac, ip));
+	}
 }
 
 export function on_dhcp_event(ev) {
 	let mac = lc(ev?.mac ?? ""), ip = ev?.ip ?? "", act = ev?.action ?? "";
 	if (!is_mac(mac))
 		return { ok: false, error: "bad mac" };
-	let now = time();
+	let now = time(), ev_ts = int(ev?.ts ?? 0) || now;
 	core.init_dirs();
 	fs.mkdir(DHCP_OBS_DIR);
-	core.write_atomic(sprintf("%s/%s.json", DHCP_OBS_DIR, mac_slug(mac)), sprintf("%J\n", {
-		action: act, mac, ip,
-		host: clean_alias(ev?.host ?? ""),
-		opt55: ev?.opt55 ?? "",
-		vendor: ev?.vendor ?? "",
-		cid: ev?.cid ?? "",
-		iface: ev?.iface ?? "br-lan",
-		ts: ev?.ts ?? now,
-	}), 0o600);
+	let obs_path = sprintf("%s/%s.json", DHCP_OBS_DIR, mac_slug(mac));
+	let prev = core.load_json(obs_path, {});
+	if ((prev.ts ?? 0) > ev_ts)
+		return { ok: true, kick: false };
+
+	let rec = {
+		action: act, mac, ip: length(ip) ? ip : (prev.ip ?? ""),
+		host: length(clean_alias(ev?.host ?? "")) ? clean_alias(ev.host) : (prev.host ?? ""),
+		opt55: length(ev?.opt55 ?? "") ? ev.opt55 : (prev.opt55 ?? ""),
+		vendor: length(ev?.vendor ?? "") ? ev.vendor : (prev.vendor ?? ""),
+		cid: length(ev?.cid ?? "") ? ev.cid : (prev.cid ?? ""),
+		iface: length(ev?.iface ?? "") ? ev.iface : (prev.iface ?? "br-lan"),
+		ts: ev_ts,
+	};
+	core.write_atomic(obs_path, sprintf("%J\n", rec), 0o600);
+
+	// Invalidate IP-keyed LAN hostname cache whenever a different MAC leases `ip`.
+	if (is_ip4(rec.ip) && (act == "add" || act == "update")) {
+		let ln = core.load_json(LAN_NAMES_FILE, null);
+		if (type(ln) == "object" && ln[rec.ip] && ln[rec.ip].mac != mac) {
+			delete ln[rec.ip];
+			core.write_atomic(LAN_NAMES_FILE, sprintf("%.1J\n", ln), 0o600);
+		}
+	}
 
 	let store = load_store();
 	if (!store)
@@ -804,15 +861,8 @@ export function on_dhcp_event(ev) {
 	let owners = mac_owner_map(store);
 	let p = owners[mac];
 
-	if (p && p.policy != "block" && (act == "add" || act == "update") && is_ip4(ip)) {
-		// Reassign IP exclusivity if another profile previously held this leased IP.
-		let stale = [];
-		for (let op in store.profiles) {
-			if (op.uid != p.uid && op.fp?.last_ip == ip)
-				for (let m in all_profile_macs(op))
-					push(stale, m);
-		}
-		apply_live_nft_pair(mac, ip, stale);
+	if (p && p.policy != "block" && (act == "add" || act == "update") && is_ip4(rec.ip)) {
+		apply_live_nft_pair(mac, rec.ip);
 		return { ok: true, admitted: p.uid, kick: true };
 	}
 	return { ok: true, admitted: null, kick: true };
@@ -842,109 +892,130 @@ function sync_uci_device(mac, alias, policy) {
 
 export function update_profile_policy(mac, alias, policy, cfg) {
 	mac = lc(mac ?? "");
-	let store = load_store();
-	if (!store)
-		return null;
-	let owners = mac_owner_map(store);
-	let p = owners[mac];
-	if (!p)
-		return null;
-	p.policy = policy;
-	if (alias != null) {
-		p.alias = clean_alias(alias);
-		p.group_name = group_name(p.alias, p.anchor_mac);
-	}
-	save_store(store);
-	return p;
+	return with_identity_lock(() => {
+		let store = load_store();
+		if (!store)
+			return null;
+		let owners = mac_owner_map(store);
+		let p = owners[mac];
+		if (!p)
+			return null;
+		p.policy = policy;
+		if (alias != null) {
+			p.alias = clean_alias(alias);
+			p.group_name = group_name(p.alias, p.anchor_mac);
+		}
+		save_store(store);
+		return p;
+	});
 };
+
+function promote_anchor(p) {
+	let rem = sort(slice(p.macs), (a, b) => (b.seen ?? 0) - (a.seen ?? 0));
+	p.macs = rem;
+	p.anchor_mac = rem[0].mac;
+	p.group_name = group_name(p.alias, p.anchor_mac);
+}
 
 export function claim(args, cfg) {
 	let mac = lc(args?.mac ?? ""), action = args?.action ?? "new";
 	if (!is_mac(mac))
 		return { ok: false, error: "bad mac" };
 
-	let tel = gather_telemetry(cfg);
-	let now = core.now();
-	let store = load_store() ?? bootstrap(cfg, tel, now);
-	let relays = load_relays_state();
-	let owners = mac_owner_map(store);
+	return with_identity_lock(() => {
+		let tel = gather_telemetry(cfg);
+		let now = core.now();
+		let store = load_store() ?? bootstrap(cfg, tel, now);
+		let relays = load_relays_state();
+		let owners = mac_owner_map(store);
 
-	if (action == "forget") {
-		let cur = owners[mac];
-		if (!cur)
-			return { ok: false, error: "mac not found" };
-		if (mac == cur.anchor_mac) {
-			if (length(cur.macs) > 1) {
-				// Promote most recent secondary MAC to anchor so profile isn't orphaned unexpectedly.
+		if (action == "forget") {
+			let cur = owners[mac];
+			if (!cur)
+				return { ok: false, error: "mac not found" };
+			sync_uci_device(mac, "", "auto");
+			if (mac == cur.anchor_mac) {
 				cur.macs = filter(cur.macs, (m) => m.mac != mac);
-				cur.anchor_mac = cur.macs[0].mac;
-				cur.group_name = group_name(cur.alias, cur.anchor_mac);
+				if (length(cur.macs)) {
+					promote_anchor(cur);
+					sync_uci_device(cur.anchor_mac, cur.alias, cur.policy);
+				}
+				else {
+					store.profiles = filter(store.profiles, (x) => x.uid != cur.uid);
+					delete relays[cur.uid];
+				}
 			}
 			else {
-				store.profiles = filter(store.profiles, (x) => x.uid != cur.uid);
-				delete relays[cur.uid];
+				cur.macs = filter(cur.macs, (m) => m.mac != mac);
 			}
+			save_store(store);
+			save_relays_state(relays);
+			core.event("IDENTITY forgot mac %s", mac);
+			return { ok: true };
 		}
-		else {
-			cur.macs = filter(cur.macs, (m) => m.mac != mac);
+
+		if (action == "merge") {
+			let target = profile_by_uid(store, args?.target_uid ?? "");
+			if (!target)
+				return { ok: false, error: "target profile not found" };
+			let old = owners[mac];
+			if (old && old.uid != target.uid) {
+				old.macs = filter(old.macs, (m) => m.mac != mac);
+				if (!length(old.macs)) {
+					sync_uci_device(old.anchor_mac, "", "auto");
+					store.profiles = filter(store.profiles, (x) => x.uid != old.uid);
+					delete relays[old.uid];
+					save_relays_state(relays);
+				}
+				else if (mac == old.anchor_mac) {
+					sync_uci_device(mac, "", "auto");
+					promote_anchor(old);
+					sync_uci_device(old.anchor_mac, old.alias, old.policy);
+				}
+			}
+			if (mac != target.anchor_mac)
+				sync_uci_device(mac, "", "auto");
+			let obs = observe_mac(mac, tel);
+			absorb_mac_fp(target, { ...obs, src: "manual" }, now);
+			save_store(store);
+			sync_uci_device(target.anchor_mac, target.alias, target.policy);
+			if (is_ip4(obs.ip)) {
+				for (let lan in (cfg.main?.lan_dev ?? [ "br-lan" ]))
+					core.sh(sprintf("ip neigh del %s dev %s 2>/dev/null || true", obs.ip, lan));
+			}
+			core.event("IDENTITY merged %s -> %s (%s)", mac, target.uid, target.group_name);
+			return { ok: true, uid: target.uid, group_name: target.group_name };
 		}
-		sync_uci_device(mac, "", "auto");
+
+		// Default action == "new": enroll new logical device & Zashboard group.
+		if (owners[mac]) {
+			let p = owners[mac];
+			if (length(args?.alias)) {
+				p.alias = clean_alias(args.alias);
+				p.group_name = group_name(p.alias, p.anchor_mac);
+			}
+			if (length(args?.policy) && (args.policy in [ "auto", "direct", "tunnel", "block", "game" ]))
+				p.policy = args.policy;
+			save_store(store);
+			sync_uci_device(p.anchor_mac, p.alias, p.policy);
+			return { ok: true, uid: p.uid, group_name: p.group_name, port: p.port };
+		}
+
+		let used_uids = {}, used_ports = {};
+		for (let p in store.profiles) {
+			used_uids[p.uid] = true;
+			used_ports["" + p.port] = true;
+		}
+		let policy = (args?.policy in [ "auto", "direct", "tunnel", "block", "game" ]) ? args.policy : "auto";
+		let np = make_profile(store, cfg, used_uids, used_ports, mac, args?.alias ?? "", policy, tel, now, "manual");
+		push(store.profiles, np);
+		relays[np.uid] = length(args?.relay) ? args.relay : "TW-HOME";
 		save_store(store);
 		save_relays_state(relays);
-		core.event("IDENTITY forgot mac %s", mac);
-		return { ok: true };
-	}
-
-	if (action == "merge") {
-		let target = profile_by_uid(store, args?.target_uid ?? "");
-		if (!target)
-			return { ok: false, error: "target profile not found" };
-		let old = owners[mac];
-		if (old && old.uid != target.uid) {
-			old.macs = filter(old.macs, (m) => m.mac != mac);
-			if (!length(old.macs)) {
-				store.profiles = filter(store.profiles, (x) => x.uid != old.uid);
-				delete relays[old.uid];
-				save_relays_state(relays);
-			}
-		}
-		let obs = observe_mac(mac, tel);
-		absorb_mac_fp(target, { ...obs, src: "manual" }, now);
-		save_store(store);
-		sync_uci_device(target.anchor_mac, target.alias, target.policy);
-		if (is_ip4(obs.ip))
-			core.sh(sprintf("ip neigh flush %s dev br-lan >/dev/null 2>&1 || true", obs.ip));
-		core.event("IDENTITY merged %s -> %s (%s)", mac, target.uid, target.group_name);
-		return { ok: true, uid: target.uid, group_name: target.group_name };
-	}
-
-	// Default action == "new": enroll new logical device & Zashboard group.
-	if (owners[mac]) {
-		let p = owners[mac];
-		if (length(args?.alias)) {
-			p.alias = clean_alias(args.alias);
-			p.group_name = group_name(p.alias, p.anchor_mac);
-		}
-		if (length(args?.policy))
-			p.policy = args.policy;
-		save_store(store);
-		return { ok: true, uid: p.uid, group_name: p.group_name, port: p.port };
-	}
-
-	let used_uids = {}, used_ports = {};
-	for (let p in store.profiles) {
-		used_uids[p.uid] = true;
-		used_ports["" + p.port] = true;
-	}
-	let policy = (args?.policy in [ "auto", "direct", "tunnel", "block", "game" ]) ? args.policy : "auto";
-	let np = make_profile(store, cfg, used_uids, used_ports, mac, args?.alias ?? "", policy, tel, now, "manual");
-	push(store.profiles, np);
-	relays[np.uid] = length(args?.relay) ? args.relay : "TW-HOME";
-	save_store(store);
-	save_relays_state(relays);
-	sync_uci_device(mac, np.alias, policy);
-	core.event("IDENTITY enrolled new device %s -> %s (:%d)", mac, np.group_name, np.port);
-	return { ok: true, uid: np.uid, group_name: np.group_name, port: np.port };
+		sync_uci_device(mac, np.alias, policy);
+		core.event("IDENTITY enrolled new device %s -> %s (:%d)", mac, np.group_name, np.port);
+		return { ok: true, uid: np.uid, group_name: np.group_name, port: np.port };
+	});
 };
 
 // Build dashboard/CLI view merging live telemetry, profile state, and Mode A quarantine.
@@ -963,6 +1034,7 @@ export function view(cfg, base_devices, rate_map) {
 			let best_live = null, primary = by_mac[p.anchor_mac];
 			let best_ip = "", host = "", link = "wired", signal = 0, online = false;
 			let total_up = 0, total_down = 0, total_up_b = 0, total_down_b = 0;
+			let seen_ips = {};
 
 			for (let m in macs) {
 				let d = by_mac[m];
@@ -970,7 +1042,8 @@ export function view(cfg, base_devices, rate_map) {
 				if (d.online) online = true;
 				if (!best_live || (d.online && !best_live.online) || (d.ip && !best_live.ip))
 					best_live = d;
-				if (d.ip && rate_map?.[d.ip]) {
+				if (d.ip && !seen_ips[d.ip] && rate_map?.[d.ip]) {
+					seen_ips[d.ip] = true;
 					let r = rate_map[d.ip];
 					total_up += r.up ?? 0;
 					total_down += r.down ?? 0;
