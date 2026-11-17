@@ -55,6 +55,10 @@ function tls_opts(relay, p) {
 		p["reality-opts"] = { "public-key": reality.public_key ?? "" };
 		if (reality.short_id)
 			p["reality-opts"]["short-id"] = reality.short_id;
+		// Xray 26.9.8+ REALITY (e.g. www.qualcomm.com PQ) rejects stripped ClientHellos;
+		// Mihomo defaults support-x25519mlkem768 to false unless explicitly enabled.
+		if (reality.support_x25519mlkem768 ?? (relay.server in [ "182.255.84.190", "18.176.216.3" ]))
+			p["reality-opts"]["support-x25519mlkem768"] = true;
 	}
 	return p;
 }
@@ -477,7 +481,7 @@ export function reload(cfg, lan_ip, profiles) {
 // Delay through TW-HOME (falling back to working VPS relays or mixed-in).
 function canary(cfg, lan_ip) {
 	let c = cfg.tunnel;
-	for (let grp in [ "TW-HOME", "JP-Lightsail-VLESS", "JP-Lightsail-HY2", "US-LA-Hy2" ]) {
+	for (let grp in [ "TW-HOME", "JP-Lightsail-VLESS", "JP-Lightsail-HY2", "US-LA-VLESS", "US-LA-Hy2" ]) {
 		let r = api(cfg, lan_ip, "GET", sprintf("/proxies/%s/delay?timeout=%d&url=%s", urlenc(grp), c.canary_timeout, urlenc(c.canary_url)));
 		let m = match(r.body, /"delay":([0-9]+)/);
 		if (m && int(m[1]) > 0)
