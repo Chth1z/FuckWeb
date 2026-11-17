@@ -17,7 +17,7 @@
 
 ### 2.1 移除與正規化規則
 - **徹底移除鏈式代理**：移除 `JP-Lightsail -> 台湾家宽` 的 `dialer-proxy` 鏈式副本，`JP-Lightsail-VLESS` 獨立透過 6 條 MPTCP 子流直出東京。
-- **徹底移除 `AUTO` 與未留用地區節點**：捨棄 HK、KR、ES、US-家寬、JP05/06、無效域名 `control-hk01.78778m.cn:55024` 以及 `🇨🇳【亚洲】台湾家宽01丨直连`（實測延遲 `444ms` 且與 `02丨直连` 共用同一服務器域名）。
+- **徹底移除 `AUTO` 與未留用地區節點**：捨棄 HK、KR、ES、US-家寬、JP05/06、無效域名 `control-hk01.78778m.cn:55024`，僅保留 `JP-Lightsail` ×2、`US-LA` ×2 與全部 **4 條**台灣家寬節點（`01丨专线【3x】`、`02丨专线【3x】`、`01丨直连`、`02丨直连`）。
 - **前綴剝離**：自動剝除節點名稱上的 `🇨🇳【亚洲】`、`🇹🇼【亚洲】` 等地區 Emoji 前綴，保持 Zashboard 面板乾淨整齊。
 - **探活 URL 同步優化**：實機對比 `www.gstatic.com/generate_204`（偶發超時報錯）與 `https://cp.cloudflare.com/generate_204`（穩定回傳延遲），`TW-HOME` 組測速統一採用 `https://cp.cloudflare.com/generate_204`。
 
@@ -32,17 +32,16 @@
 | **洛杉磯 VPS** | `US-LA-Hy2` | `hysteria2` (`182.255.84.190:443`) | 洛杉磯 UDP 節點 |
 | **台灣家寬** | `台湾家宽01丨专线【3x】` | `trojan` (`control-shared.78778m.cn:54211`) | 台灣專線 01（IPLC 低跳數） |
 | **台灣家寬** | `台湾家宽02丨专线【3x】` | `trojan` (`control-shared.78778m.cn:54211`) | 台灣專線 02（IPLC 低跳數） |
-| **台灣家寬** | `台湾家宽02丨直连` | `hysteria2` (`tw01.poke-mon.xyz:20000`) | 台灣直連（實測 `130ms`，僅保留 02） |
-
-> *註：若後續你在 `relays.json` 中連「专线【3x】」也想一併隱藏、僅留唯一 `台湾家宽02丨直连`，只需調整白名單過濾器即可無縫切換；目前預設將這三條台灣家寬組成 `TW-HOME`（`type: fallback`）供單鍵選用及容災。*
+| **台灣家寬** | `台湾家宽02丨直连` | `hysteria2` (`tw01.poke-mon.xyz:20000`) | 台灣直連 02 |
+| **台灣家寬** | `台湾家宽01丨直连` | `hysteria2` (`tw01.poke-mon.xyz:20000`) | 台灣直連 01 |
 
 #### 策略組（`proxy-groups`）
 1. **`TW-HOME`**（`type: fallback`，測速 `cp.cloudflare.com/generate_204`）：
-   - `proxies`: `[ "台湾家宽01丨专线【3x】", "台湾家宽02丨专线【3x】", "台湾家宽02丨直连" ]`
-   - 保持同一個台灣出口序列容災；若專線暫時抖動自動退回 `台湾家宽02丨直连`（均為純台灣家寬，絕不混入日本/美國）。
+   - `proxies`: `[ "台湾家宽01丨专线【3x】", "台湾家宽02丨专线【3x】", "台湾家宽02丨直连", "台湾家宽01丨直连" ]`
+   - 保持同一個台灣出口序列容災；若專線暫時抖動自動退回台灣直連（均為純台灣家寬，絕不混入日本/美國）。
 2. **各邏輯設備專屬組**（每台已認證設備一組，`type: select`，名稱附帶設備主 MAC）：
    - 名稱格式：`Chth1z [a0:85:27:7b:87:e8]`、`S23-Ultra [ae:75:0e:db:17:03]`、`LAPTOP [74:4c:a1:d6:bc:1d]`
-   - `proxies`: `[ "TW-HOME", "JP-Lightsail-VLESS", "JP-Lightsail-HY2", "US-LA-VLESS", "US-LA-Hy2", "台湾家宽01丨专线【3x】", "台湾家宽02丨专线【3x】", "台湾家宽02丨直连" ]`
+   - `proxies`: `[ "TW-HOME", "JP-Lightsail-VLESS", "JP-Lightsail-HY2", "US-LA-VLESS", "US-LA-Hy2", "台湾家宽01丨专线【3x】", "台湾家宽02丨专线【3x】", "台湾家宽02丨直连", "台湾家宽01丨直连" ]`
    - **禁止放入 `DIRECT` 與 `REJECT`**，確保設備組內怎麼切都不可能直連洩漏。
 
 ---
