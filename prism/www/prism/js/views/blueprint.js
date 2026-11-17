@@ -1007,7 +1007,7 @@ function renderClassifyStrip() {
       renderSegMeter(segEl, 0, 16, 'blue', false);
       frag.appendChild(el('div', {
         class: 'classify-bar-card',
-        style: { '--cb-rgb': '52, 58, 72', '--cb-fill': '0.05', '--cb-bdr-a': '0.16', '--cb-glow-blur': '0px', '--cb-glow-a': '0' }
+        style: { '--cb-rgb': '36, 44, 62', '--cb-fill': '0.02', '--cb-bdr-a': '0.16', '--cb-glow-blur': '0px', '--cb-glow-a': '0' }
       },
         el('div', { class: 'classify-bar-head' },
           el('span', { class: 'c-muted', style: { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label),
@@ -1063,8 +1063,8 @@ function renderClassifyStrip() {
     }
 
     const rHeat = pkts > 0 ? Math.min(1, Math.max(0.08, Math.pow(share / 100, 0.52))) : 0;
-    const heatRgb = pkts > 0 ? desatObsidianRgb(colorRgb, 0.24 + 0.76 * rHeat) : '52, 58, 72';
-    const fillA = pkts > 0 ? (0.09 + 0.17 * rHeat).toFixed(3) : '0.05';
+    const heatRgb = pkts > 0 ? desatObsidianRgb(colorRgb, 0.24 + 0.76 * rHeat) : '36, 44, 62';
+    const fillA = pkts > 0 ? (0.09 + 0.17 * rHeat).toFixed(3) : '0.02';
     const bdrA = pkts > 0 ? (0.28 + 0.58 * rHeat).toFixed(2) : '0.16';
     const glowBlur = pkts > 0 ? `${Math.round(4 + 14 * rHeat)}px` : '0px';
     const glowA = pkts > 0 ? (0.04 + 0.22 * rHeat).toFixed(2) : '0';

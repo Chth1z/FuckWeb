@@ -427,7 +427,7 @@ html.prism-cold .main-stage {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 4.5px;
+  gap: 3.5px;
   margin: 0 -8px;
   padding: 6px 8px 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -436,10 +436,14 @@ html.prism-cold .main-stage {
 }
 
 .classify-bar-card {
-  background-color: rgba(var(--cb-rgb, 52, 58, 72), var(--cb-fill, 0.06));
+  background-color: #080b13;
+  background-image: linear-gradient(
+    rgba(var(--cb-rgb, 36, 44, 62), var(--cb-fill, 0.02)),
+    rgba(var(--cb-rgb, 36, 44, 62), var(--cb-fill, 0.02))
+  );
   border: none;
-  box-shadow: var(--tray-inset);
-  padding: 3.5px 8.5px;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.045);
+  padding: 3px 8.5px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -449,8 +453,11 @@ html.prism-cold .main-stage {
 }
 
 .classify-bar-card .seg-meter {
-  height: 11px;
-  padding: 1px 2px;
+  height: 14px;
+  padding: 3px;
+  gap: 2px;
+  background: rgba(4, 6, 12, 0.88);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.65);
 }
 
 .classify-bar-card.active {
@@ -627,11 +634,9 @@ html.prism-cold .main-stage {
 
 /* Unified Full-Width Segmented Block Meters with Soft Contained Optical Bloom */
 .seg-meter {
-  display: grid;
-  grid-template-columns: repeat(var(--seg-count, 10), minmax(4px, 1fr));
-  grid-template-rows: 1fr;
+  display: flex;
   align-items: stretch;
-  gap: 3px;
+  gap: 2.5px;
   width: 100%;
   min-width: 0;
   height: 15px;
@@ -649,11 +654,12 @@ html.prism-cold .main-stage {
 }
 
 .seg-meter.active {
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+  box-shadow: var(--tray-inset);
 }
 
 .seg-cell {
-  width: 100%;
+  flex: 1 1 0%;
+  min-width: 0;
   height: 100%;
   border-radius: 0;
   background: rgba(255, 255, 255, 0.065);
