@@ -213,6 +213,20 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 		});
 	}
 
+	let mail_proxy = null;
+	for (let cand in [ "JP-Lightsail-VLESS", "JP-Lightsail-HY2", "US-LA-Hy2" ]) {
+		if (cand in names) {
+			mail_proxy = cand;
+			break;
+		}
+	}
+	if (mail_proxy) {
+		// Taiwan residential relays block outbound mail ports (465/587/993); route mail
+		// ports through an owned VPS relay so devices on TW-HOME still sync email cleanly.
+		for (let mp in [ 25, 110, 143, 465, 587, 993, 995 ])
+			push(rules, sprintf("DST-PORT,%d,%s", mp, mail_proxy));
+	}
+
 	let choices = has_tw ? [ "TW-HOME", ...names ] : slice(names);
 	let sorted_profiles = sort(slice(profiles ?? []), (a, b) => (a.port ?? 0) - (b.port ?? 0));
 	for (let p in sorted_profiles) {
