@@ -7,7 +7,7 @@ import { $, $$, toast, setTxt, setCls } from './dom.js?v=5.6.6-b3';
 import { callBatch, call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.6.6-b3';
 import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.js?v=5.6.6-b3';
 import { renderOverview } from './views/overview.js?v=5.6.6-b3';
-import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.6.6-b5';
+import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.6.6-b6';
 import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.6.6-b3';
 import { renderClients, bindClientsEvents } from './views/clients.js?v=5.6.6-b3';
 

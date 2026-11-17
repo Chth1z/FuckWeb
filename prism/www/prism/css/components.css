@@ -436,13 +436,13 @@ html.prism-cold .main-stage {
 }
 
 .classify-bar-card {
-  background-color: #080b13;
+  background-color: rgba(4, 6, 12, 0.54);
   background-image: linear-gradient(
-    rgba(var(--cb-rgb, 36, 44, 62), var(--cb-fill, 0.02)),
-    rgba(var(--cb-rgb, 36, 44, 62), var(--cb-fill, 0.02))
+    rgba(var(--cb-rgb, 52, 58, 72), var(--cb-fill, 0)),
+    rgba(var(--cb-rgb, 52, 58, 72), var(--cb-fill, 0))
   );
   border: none;
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.045);
+  box-shadow: var(--tray-inset);
   padding: 3px 8.5px;
   display: flex;
   flex-direction: column;
@@ -456,15 +456,15 @@ html.prism-cold .main-stage {
   height: 14px;
   padding: 3px;
   gap: 2px;
-  background: rgba(4, 6, 12, 0.88);
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.65);
+  background: rgba(4, 6, 12, 0.62);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.52);
 }
 
 .classify-bar-card.active {
   box-shadow:
     var(--tray-inset),
-    0 0 6px rgba(var(--cb-rgb, 87, 209, 146), calc(var(--cb-glow-a, 0.10) * 0.72)),
-    inset 0 0 14px rgba(var(--cb-rgb, 87, 209, 146), calc(var(--cb-bdr-a, 0.24) * 0.34));
+    inset 0 0 0 0.5px rgba(var(--cb-rgb, 87, 209, 146), calc(var(--cb-bdr-a, 0.20) * 0.35)),
+    inset 0 0 10px rgba(var(--cb-rgb, 87, 209, 146), calc(var(--cb-bdr-a, 0.20) * 0.18));
 }
 
 .classify-bar-head {
@@ -758,6 +758,12 @@ html.prism-cold .main-stage {
   border-color: transparent;
   border-image: var(--bp-spec-grad, var(--prism-spectrum-diag)) 1;
   box-shadow: var(--bp-card-shadow);
+}
+
+/* Keep the spectrum border/glow on NFTABLES CLASSIFY while keeping its interior uniform obsidian like #bp-card-dom */
+#bp-pipeline #bp-card-ingress.bp-stage-card.spectrum {
+  background-color: rgba(6, 8, 15, 0.96);
+  background-image: linear-gradient(rgba(82, 92, 124, 0.06), rgba(82, 92, 124, 0.06));
 }
 
 #bp-card-guard,
