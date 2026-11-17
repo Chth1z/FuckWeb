@@ -16,6 +16,7 @@ import * as weave from "./mod/weave.uc";
 import * as devices from "./mod/devices.uc";
 import * as tunnel from "./mod/tunnel.uc";
 import * as identity from "./mod/identity.uc";
+import * as led from "./mod/led.uc";
 import * as api from "./mod/api.uc";
 
 const PRISM = "/usr/sbin/prism";
@@ -35,8 +36,9 @@ let history = series.create(HISTORY);
 let load = {};                          // dev -> { down, up, bucket, flows }
 let flow_counts = {};                   // strand id -> ESTABLISHED flow count
 let lan = { list: [], rate: {}, samples: 0 };
-let sampled = 0, series_at = 0, pattern_at = 0;
+let sampled = 0, series_at = 0, pattern_at = 0, last_rate = 0;
 let running = false, again = false, first = true, tunnel_ready_for_sync = false;
+let demo_active = false, demo_step = 0, demo_timer = null;
 let reconcile_timer, sample_timer;
 let kick_pending = false, kick, reconcile;
 
@@ -118,8 +120,35 @@ function sample_devices(dt) {
 	lan.samples++;
 }
 
+function start_demo() {
+	demo_active = true;
+	demo_step = 0;
+	if (demo_timer) {
+		demo_timer.cancel();
+		demo_timer = null;
+	}
+	let step_fn;
+	step_fn = () => {
+		if (!demo_active)
+			return;
+		if (demo_step >= 75) {
+			demo_active = false;
+			demo_timer = null;
+			led.clear_override();
+			led.tick(cfg, { rate_bytes: last_rate });
+			return;
+		}
+		led.demo_frame(cfg, demo_step++);
+		demo_timer.set(80);
+	};
+	demo_timer = uloop.timer(10, step_fn);
+	return { ok: true, duration: 6 };
+}
+
 function sync_lan_cfg() {
 	cfg = config.load();
+	if (!demo_active)
+		led.tick(cfg, { rate_bytes: last_rate });
 	let known = {};
 	for (let d in cfg.devices)
 		known[d.mac] = d;
@@ -195,6 +224,9 @@ function sample() {
 			delete load[dev];
 	weave.update_buckets(load, dt, now);
 	sampled = now;
+	last_rate = total.down + total.up;
+	if (!demo_active)
+		led.tick(cfg, { rate_bytes: last_rate });
 	if (record_series) {
 		series_at = now;
 		series.add(history, time(), total.down, total.up, per, per_up);
@@ -229,6 +261,8 @@ reconcile = function() {
 		pattern = weave.current();
 		vip_lane = weave.current_vip();
 		relay(monotonic());
+		if (!demo_active)
+			led.tick(cfg, { rate_bytes: last_rate });
 		if (again) {
 			again = false;
 			kick(DEBOUNCE_MS);
@@ -254,6 +288,18 @@ let published = bus.publish("prism", api.methods({
 	vip: () => vip_lane,
 	history: () => history,
 	devices: device_view,
+	led_view: () => led.inspect(cfg),
+	led_demo: start_demo,
+	led_color: (a) => {
+		demo_active = false;
+		if (demo_timer) {
+			demo_timer.cancel();
+			demo_timer = null;
+		}
+		led.set_override(a.r ?? 0, a.g ?? 0, a.b ?? 0, a.target ?? "both", a.ttl ?? 10);
+		led.tick(cfg, { rate_bytes: last_rate });
+		return { ok: true };
+	},
 	interval: () => cfg.weave.interval,
 	series_interval: () => max(2, cfg.weave.interval),
 	now: monotonic,

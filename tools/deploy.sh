@@ -44,7 +44,7 @@ tools/rsh sh -s <<'REMOTE'
 set -e
 STAGE=/tmp/prism-stage
 PREV=/tmp/prism-prev.tgz
-KEEP="etc/config/prism etc/init.d/prism etc/prism/lists etc/prism/guard.nft etc/prism/provision.json etc/sysctl.d/99-prism.conf usr/sbin/prism usr/share/prism/VERSION usr/share/prism/prism.uc usr/share/prism/prismd.uc usr/share/prism/lib usr/share/prism/mod usr/share/prism/portal usr/share/prism/tpl usr/share/nftables.d/ruleset-post/30-prism-guard.nft usr/share/rpcd/acl.d/prism.json www/prism"
+KEEP="etc/config/prism etc/hotplug.d/dhcp/50-prism etc/init.d/prism etc/prism/lists etc/prism/guard.nft etc/prism/provision.json etc/sysctl.d/99-prism.conf lib/upgrade/keep.d/prism usr/sbin/prism usr/share/prism/VERSION usr/share/prism/prism.uc usr/share/prism/prismd.uc usr/share/prism/lib usr/share/prism/mod usr/share/prism/portal usr/share/prism/tpl usr/share/nftables.d/ruleset-post/30-prism-guard.nft usr/share/rpcd/acl.d/prism.json www/prism"
 guard_before=0
 [ ! -f /etc/prism/guard.nft ] || guard_before=1
 
@@ -53,6 +53,7 @@ have=""
 for f in $KEEP; do [ -e "$f" ] && have="$have $f"; done
 [ -n "$have" ] && tar czf "$PREV" $have
 acl_before=$(md5sum /usr/share/rpcd/acl.d/prism.json 2>/dev/null | cut -d' ' -f1)
+dhcp_before=$(md5sum /etc/hotplug.d/dhcp/50-prism 2>/dev/null | cut -d' ' -f1)
 
 rm -rf /www/prism/css /www/prism/js
 cp -a "$STAGE/tree/." /
@@ -89,6 +90,9 @@ fi
 chmod 755 /usr/sbin/prism /etc/init.d/prism
 chmod 600 /etc/prism/relays.json /etc/prism/controller.secret /etc/prism/portal.secret 2>/dev/null || true
 [ "$acl_before" = "$(md5sum /usr/share/rpcd/acl.d/prism.json | cut -d' ' -f1)" ] || /etc/init.d/rpcd restart
+if [ "$dhcp_before" != "$(md5sum /etc/hotplug.d/dhcp/50-prism 2>/dev/null | cut -d' ' -f1)" ] || ! grep -q '^dhcp-script=' /var/etc/dnsmasq.conf.* 2>/dev/null; then
+	/etc/init.d/dnsmasq restart
+fi
 
 restore() {
 	echo "deploy: $1; restoring the previous version" >&2

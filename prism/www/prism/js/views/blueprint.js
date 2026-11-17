@@ -2,7 +2,7 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6-b3';
+import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6-b10';
 import { $, $$, el, renderSegMeter, renderSessionLog, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.6.6-b3';
 import { write, call } from '../api.js?v=5.6.6-b3';
 
@@ -1733,41 +1733,86 @@ export function renderBlueprintDrawer() {
     return;
   }
   const vals = S.config?.values || S.status?.settings || {};
+  const ls = S.status?.led_state || {};
   const sig = EDITABLE_SPECS.map(s => `${s.key}=${vals[s.key]}`).join('|');
-  if (cp.dataset.sig === sig) return;
-  cp.dataset.sig = sig;
-  cp.innerHTML = '';
-  for (const spec of EDITABLE_SPECS) {
-    const v = vals[spec.key];
-    let control;
-    if (spec.type === 'bool') {
-      control = el('button', {
-        type: 'button',
-        class: `btn-cmd ${v ? 'primary' : ''}`,
-        onClick: () => write('configure', { set: { [spec.key]: v ? 0 : 1 } }, `${spec.label}已切換`)
-      }, v ? '已開啟 (1)' : '已關閉 (0)');
-    } else {
-      const inp = el('input', {
-        class: 'bp-input',
-        type: 'number',
-        min: spec.min,
-        max: spec.max,
-        value: v ?? '',
-        style: { width: '90px', textAlign: 'right' }
-      });
-      const save = el('button', {
-        type: 'button',
-        class: 'btn-cmd',
-        onClick: () => write('configure', { set: { [spec.key]: Number(inp.value) } }, `${spec.key} = ${inp.value}`)
-      }, '套用');
-      control = el('div', { style: { display: 'flex', gap: '6px' } }, inp, save);
+  if (cp.dataset.sig !== sig) {
+    cp.dataset.sig = sig;
+    cp.innerHTML = '';
+    for (const spec of EDITABLE_SPECS) {
+      const v = vals[spec.key];
+      let control;
+      if (spec.type === 'bool') {
+        control = el('button', {
+          type: 'button',
+          class: `btn-cmd ${v ? 'primary' : ''}`,
+          onClick: () => write('configure', { set: { [spec.key]: v ? 0 : 1 } }, `${spec.label}已切換`)
+        }, v ? '已開啟 (1)' : '已關閉 (0)');
+      } else if (spec.type === 'select') {
+        const sel = el('select', {
+          class: 'bp-input',
+          style: { maxWidth: '215px', textAlign: 'left' },
+          onChange: () => write('configure', { set: { [spec.key]: sel.value } }, `${spec.label} -> ${sel.value}`)
+        }, ...(spec.options || []).map(opt => el('option', {
+          value: opt.value,
+          selected: String(v ?? '') === String(opt.value)
+        }, opt.label)));
+        control = sel;
+      } else {
+        const inp = el('input', {
+          class: 'bp-input',
+          type: 'number',
+          min: spec.min,
+          max: spec.max,
+          value: v ?? '',
+          style: { width: '90px', textAlign: 'right' }
+        });
+        const save = el('button', {
+          type: 'button',
+          class: 'btn-cmd',
+          onClick: () => write('configure', { set: { [spec.key]: Number(inp.value) } }, `${spec.key} = ${inp.value}`)
+        }, '套用');
+        control = el('div', { style: { display: 'flex', gap: '6px' } }, inp, save);
+      }
+      cp.appendChild(el('div', { class: 'cfg-row' },
+        el('div', {},
+          el('div', { class: 'c-bright' }, spec.key),
+          el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, spec.label)
+        ),
+        control
+      ));
     }
+    const dot = (id) => el('span', {
+      id,
+      style: {
+        display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%',
+        background: '#111827', border: '1px solid rgba(255,255,255,0.22)',
+        transition: 'background .25s ease, box-shadow .25s ease'
+      }
+    });
     cp.appendChild(el('div', { class: 'cfg-row' },
       el('div', {},
-        el('div', { class: 'c-bright' }, spec.key),
-        el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, spec.label)
+        el('div', { class: 'c-bright', style: { display: 'flex', alignItems: 'center', gap: '7px' } },
+          dot('led-preview-dot-s'),
+          dot('led-preview-dot-n'),
+          el('span', { id: 'led-preview-lbl' }, 'WS2812B 實時燈效')
+        ),
+        el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, '執行 6 秒 7 波長暗面稜鏡掃描測試秀')
       ),
-      control
+      el('button', {
+        type: 'button',
+        class: 'btn-cmd primary',
+        onClick: () => write('led_demo', {}, '已啟動 6 秒光譜試燈秀')
+      }, '光譜試燈 Demo')
     ));
   }
+  const paintDot = (id, hex, title) => {
+    const d = $(id);
+    if (!d) return;
+    d.title = title;
+    d.style.background = hex || '#111827';
+    d.style.boxShadow = hex && hex !== '#000000' ? `0 0 8px ${hex}` : 'none';
+  };
+  paintDot('#led-preview-dot-s', ls.status_hex, `Status ${ls.status_hex || ''}`);
+  paintDot('#led-preview-dot-n', ls.network_hex, `Network ${ls.network_hex || ''}`);
+  setTxt('#led-preview-lbl', `WS2812B 實時燈效 (${ls.alert || 'ok'})`);
 }

@@ -45,7 +45,17 @@ export const EDITABLE_SPECS = [
   { key: 'weave.slots',            label: '槽位總數 (0=自動)', type: 'number', min: 0, max: 252 },
   { key: 'weave.strand_kbit',      label: '單線上限 (kbps)', type: 'number', min: 0, max: 1000000 },
   { key: 'dns.ads',                label: 'SmartDNS 廣告攔截', type: 'bool' },
-  { key: 'main.mss',               label: 'TCP MSS 鉗制', type: 'number', min: 0, max: 1460 }
+  { key: 'main.mss',               label: 'TCP MSS 鉗制', type: 'number', min: 0, max: 1460 },
+  { key: 'led.mode',               label: 'RGB 燈效模式', type: 'select', options: [
+    { value: 'prism',   label: 'prism · 光譜稜鏡雙星 (健康+即時流速)' },
+    { value: 'aurora',  label: 'aurora · 21 波長極光漸變' },
+    { value: 'tunnel',  label: 'tunnel · 節點色碼 + 延遲脈衝' },
+    { value: 'netdev',  label: 'netdev · 硬體網卡 20Hz 雷達' },
+    { value: 'stealth', label: 'stealth · 夜間護眼微光' },
+    { value: 'off',     label: 'off · 完全熄燈' }
+  ]},
+  { key: 'led.bright',             label: 'RGB 亮度上限 (%)', type: 'number', min: 5, max: 100 },
+  { key: 'led.night_dim',          label: '夜間自動降亮 (22:00–08:00)', type: 'bool' }
 ];
 
 // Standard 7-stop Optical Rainbow Spectrum (Red -> Orange -> Yellow -> Green -> Cyan -> Blue -> Violet)

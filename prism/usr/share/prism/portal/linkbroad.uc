@@ -17,7 +17,7 @@ export function login_cmd(dev, secret) {
 	return join("\n", [
 		"rm -f " + jar,
 		"pip=$(nslookup -type=a -timeout=2 -retry=1 portal.linkbroad.com 127.0.0.1 2>/dev/null | awk '/^Name:/{f=1} f&&/^Address/{print $2; exit}')",
-		"[ -n \"$pip\" ] && echo \"$pip\" > " + CACHE + " 2>/dev/null || pip=$(cat " + CACHE + " 2>/dev/null)",
+		"[ -n \"$pip\" ] && [ \"$pip\" != \"$(cat " + CACHE + " 2>/dev/null)\" ] && printf '%s\\n' \"$pip\" > " + CACHE + ".tmp.$$ 2>/dev/null && mv -f " + CACHE + ".tmp.$$ " + CACHE + " 2>/dev/null || [ -n \"$pip\" ] || pip=$(cat " + CACHE + " 2>/dev/null)",
 		"[ -z \"$pip\" ] && pip=" + FALLBACK_IP,
 		curl + " -o /dev/null " + shq(BASE + "/portal.php?lang=zh-CN") + " || true",
 		curl + " -H " + shq("Referer: " + BASE + "/portal.php?lang=zh-CN")

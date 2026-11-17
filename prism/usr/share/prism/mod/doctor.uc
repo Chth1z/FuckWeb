@@ -106,6 +106,9 @@ export function run(ctx) {
 	fail("dnsmasq", core.pidof("dnsmasq"));
 	fail("dhcp_listen", listening("0.0.0.0:67 "));
 	fail("dhcp_lan", uci.get("dhcp", "lan", "dhcpv4") == "server" && uci.get("dhcp", "lan", "ignore") != "1");
+	caution("dhcp_hook", fs.stat("/etc/hotplug.d/dhcp/50-prism") &&
+		!!match(core.sh("grep -l '^dhcp-script=' /var/etc/dnsmasq.conf.* 2>/dev/null").out, /dnsmasq\.conf/),
+		"dnsmasq missing dhcp-script (restart dnsmasq)");
 	let fwd = uci.get("dhcp", "@dnsmasq[0]", "server");
 	fail("dns_forward", join(" ", type(fwd) == "array" ? fwd : [ fwd ]) == sprintf("127.0.0.1#%d", cfg.dns.port), "dnsmasq must forward to SmartDNS only");
 

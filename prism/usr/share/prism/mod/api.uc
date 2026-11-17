@@ -13,6 +13,7 @@ import * as series from "../lib/series.uc";
 import * as weave from "./weave.uc";
 import * as tunnel from "./tunnel.uc";
 import * as identity from "./identity.uc";
+import * as led from "./led.uc";
 
 let list_cache = {};
 let size_cache = {};
@@ -249,6 +250,7 @@ export function methods(d) {
 				return {
 					...snap,
 					settings,
+					led_state: d.led_view ? d.led_view() : led.inspect(cfg),
 					version: core.VERSION,
 					ts: time(),
 					reconciled: snap.ts ?? 0,
@@ -505,6 +507,34 @@ export function methods(d) {
 					core.event("TUNNEL relay selected: %s -> %s", grp, name);
 				}
 				return { ok: res != null };
+			},
+		},
+
+		led_view: {
+			call: function() {
+				return d.led_view ? d.led_view() : led.inspect(d.cfg());
+			},
+		},
+
+		reload: {
+			call: function() {
+				if (d.reload)
+					d.reload();
+				return { ok: true };
+			},
+		},
+
+		led_demo: {
+			call: function() {
+				return d.led_demo ? d.led_demo() : { ok: false, error: "prismd offline" };
+			},
+		},
+
+		led_color: {
+			args: { r: 0, g: 0, b: 0, target: "", ttl: 10 },
+			call: function(req) {
+				let a = req.args ?? {};
+				return d.led_color ? d.led_color(a) : { ok: false, error: "prismd offline" };
 			},
 		},
 	};

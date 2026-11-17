@@ -166,8 +166,8 @@ function locked(fn, wait_s) {
 		lock = core.lock("reconcile");
 	}
 	if (!lock) {
-		// Normal for the periodic pass: someone is already doing its job.
-		if (ARGV[0] != "reconcile")
+		// Normal for the periodic pass and fallback `doctor`: someone is already doing its job.
+		if (!(ARGV[0] in [ "reconcile", "doctor" ]))
 			warn("prism: another pass holds the lock\n");
 		return 0;
 	}
@@ -347,6 +347,77 @@ const COMMANDS = {
 				return prep && tunnel.reload(ctx.cfg, ctx.facts.lan_ip) ? 0 : 1;
 			}
 			printf("http://%s:%d/ui/\n", ctx.facts.lan_ip, ctx.cfg.tunnel.controller_port);
+			return 0;
+		},
+	},
+	led: {
+		help: "led [status | mode <m> | bright <5-100> | night <on|off> | demo | color <r> <g> <b>]",
+		run: (args) => {
+			let sub = args[0] ?? "status", cfg = config.load();
+			if (sub == "mode") {
+				let m = args[1] ?? "";
+				let res = config.store({ "led.mode": m });
+				if (!res.ok) {
+					warn("led mode: " + res.error + "\n");
+					return 1;
+				}
+				system("ubus call prism reload >/dev/null 2>&1");
+				if (!core.ok("ubus list | grep -qx prism"))
+					led.tick(config.load(), {});
+				printf("led mode -> %s\n", m);
+				return 0;
+			}
+			if (sub == "bright") {
+				let res = config.store({ "led.bright": int(args[1] ?? "80") });
+				if (!res.ok) {
+					warn("led bright: " + res.error + "\n");
+					return 1;
+				}
+				system("ubus call prism reload >/dev/null 2>&1");
+				printf("led bright -> %d%%\n", int(args[1] ?? "80"));
+				return 0;
+			}
+			if (sub == "night") {
+				let v = (args[1] == "0" || args[1] == "off") ? 0 : 1;
+				config.store({ "led.night_dim": v });
+				system("ubus call prism reload >/dev/null 2>&1");
+				printf("led night_dim -> %d\n", v);
+				return 0;
+			}
+			if (sub == "demo") {
+				if (system("ubus call prism led_demo >/dev/null 2>&1") == 0) {
+					print("led demo started (6s DSOTM rainbow sweep)\n");
+					return 0;
+				}
+				for (let i = 0; i < 75; i++) {
+					led.demo_frame(cfg, i);
+					sleep(80);
+				}
+				led.clear_override();
+				led.tick(cfg, {});
+				return 0;
+			}
+			if (sub == "color" && length(args) >= 4) {
+				let r = int(args[1]), g = int(args[2]), b = int(args[3]);
+				let target = args[4] ?? "both", ttl = int(args[5] ?? "10") || 10;
+				let payload = sprintf("%J", { r, g, b, target, ttl });
+				if (system("ubus call prism led_color " + core.shq(payload) + " >/dev/null 2>&1") == 0) {
+					printf("led color %d %d %d (%s, %ds)\n", r, g, b, target, ttl);
+					return 0;
+				}
+				led.set_override(r, g, b, target, ttl);
+				led.tick(cfg, {});
+				return 0;
+			}
+			let info = live("led_view") ?? led.inspect(cfg);
+			printf("mode=%-8s bright=%d%% night_dim=%d alert=%s quarantine=%d\n",
+				info.mode, info.bright, info.night_dim, info.alert ?? "-", info.quarantine ?? 0);
+			for (let role in [ "status", "network" ]) {
+				let h = info.hw?.[role];
+				if (h)
+					printf("  %-8s (%s): trig=%-8s bright=%3d rgb=[%s] %s\n",
+						role, h.name, h.trigger, h.brightness, join(",", h.rgb ?? []), h.hex ?? "");
+			}
 			return 0;
 		},
 	},

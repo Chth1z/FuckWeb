@@ -105,6 +105,9 @@ const SCHEMA = {
 		network: "",
 		green: 18,
 		yellow: 8,
+		mode: "prism",                  // prism | aurora | tunnel | netdev | stealth | off
+		bright: 80,                     // 5..100 overall brightness scale (%)
+		night_dim: 1,                   // 1 = smoothly dim at night (22:00..08:00)
 	},
 };
 
@@ -121,6 +124,9 @@ export const TUNABLE = {
 	"tunnel.fail_open": { min: 0, max: 0, locked: true },
 	"dns.ads": { min: 0, max: 1, locked: false },
 	"main.mss": { min: 0, max: 1460, locked: false },
+	"led.mode": { choices: [ "prism", "aurora", "tunnel", "netdev", "stealth", "off" ], locked: false },
+	"led.bright": { min: 5, max: 100, locked: false },
+	"led.night_dim": { min: 0, max: 1, locked: false },
 };
 
 function coerce(value, fallback) {

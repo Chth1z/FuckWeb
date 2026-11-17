@@ -168,8 +168,11 @@ function shaper(cfg, lan) {
 	}
 	if (shape(lan, down, true) && down)
 		core.event("SHAPER %s down %d Mbit (phy %d)", lan, down, speed);
-	if (!slow && speed > 100 && !match(core.sh("tc qdisc show dev " + dev).out, /fq_codel/))
-		core.act(sprintf("tc qdisc replace dev %s root fq_codel noecn", dev));
+	if (!slow && speed > 100) {
+		let qout = core.sh("tc qdisc show dev " + dev).out;
+		if (index(qout, "htb") >= 0 || !match(qout, /fq_codel/))
+			core.act(sprintf("tc qdisc replace dev %s root fq_codel noecn", dev));
+	}
 }
 
 // --- entry point -----------------------------------------------------------
