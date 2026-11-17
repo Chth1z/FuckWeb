@@ -427,11 +427,11 @@ html.prism-cold .main-stage {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 6.5px;
+  gap: 4.5px;
   margin: 0 -8px;
-  padding: 8px 8px 6px;
+  padding: 6px 8px 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  min-height: 220px;
+  min-height: 0;
   overflow: visible;
 }
 
@@ -439,18 +439,18 @@ html.prism-cold .main-stage {
   background-color: rgba(var(--cb-rgb, 52, 58, 72), var(--cb-fill, 0.06));
   border: none;
   box-shadow: var(--tray-inset);
-  padding: 4.5px 9px;
+  padding: 3.5px 8.5px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 3.5px;
+  gap: 2.5px;
   flex: 0 0 auto;
   transition: box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .classify-bar-card .seg-meter {
-  height: 13px;
-  padding: 1.5px 2.5px;
+  height: 11px;
+  padding: 1px 2px;
 }
 
 .classify-bar-card.active {
@@ -720,6 +720,11 @@ html.prism-cold .main-stage {
     0 8px 20px rgba(0, 0, 0, 0.78);
   border-color: var(--bp-card-border);
   box-shadow: var(--bp-card-shadow);
+}
+
+#bp-card-ingress {
+  padding: 8px 11px;
+  gap: 5.5px;
 }
 
 #bp-card-log {
