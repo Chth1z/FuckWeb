@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6-b10';
-import { $, $$, el, renderSegMeter, renderSessionLog, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.6.6-b3';
-import { write, call } from '../api.js?v=5.6.6-b3';
+import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.7.0';
+import { $, $$, el, renderSegMeter, renderSessionLog, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.7.0';
+import { write, call } from '../api.js?v=5.7.0';
 
 let drawerOpen = false;
 let rafId = null;

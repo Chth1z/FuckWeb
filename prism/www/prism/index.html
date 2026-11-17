@@ -6,7 +6,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>PRISM v5.6.6 · Optical Spectrum &amp; Privacy Router</title>
+  <title>PRISM v5.7.0 · Optical Spectrum &amp; Privacy Router</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 24'%3E%3Crect width='32' height='24' rx='5' fill='%2305070d'/%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23ef4444'/%3E%3Cstop offset='.2' stop-color='%23f97316'/%3E%3Cstop offset='.38' stop-color='%23facc15'/%3E%3Cstop offset='.55' stop-color='%2322c55e'/%3E%3Cstop offset='.72' stop-color='%2306b6d4'/%3E%3Cstop offset='.86' stop-color='%233b82f6'/%3E%3Cstop offset='1' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0 14L11.5 10.2' stroke='%23fff' stroke-width='1.5'/%3E%3Cpolygon points='19.5,8.7 32,10.6 32,16.6 21.8,12.5' fill='url(%23g)'/%3E%3Cpolygon points='16,2.2 25.8,19.2 6.2,19.2' fill='%2304070e' stroke='%239ec8d8' stroke-width='1.1'/%3E%3C/svg%3E">
   <script>
   (function(){
     var r = document.documentElement;
@@ -30,19 +31,19 @@
     r.classList.add('prism-cold');
   })();
   </script>
-  <link rel="stylesheet" href="css/tokens.css?v=5.6.6-b4">
-  <link rel="stylesheet" href="css/layout.css?v=5.6.6-b4">
-  <link rel="stylesheet" href="css/components.css?v=5.6.6-b9">
-  <link rel="modulepreload" href="js/main.js?v=5.6.6-b10">
-  <link rel="modulepreload" href="js/state.js?v=5.6.6-b10">
-  <link rel="modulepreload" href="js/dom.js?v=5.6.6-b3">
-  <link rel="modulepreload" href="js/api.js?v=5.6.6-b3">
-  <link rel="modulepreload" href="js/canvas/prism.js?v=5.6.6-b3">
-  <link rel="modulepreload" href="js/canvas/oscilloscope.js?v=5.6.6-b3">
-  <link rel="modulepreload" href="js/views/overview.js?v=5.6.6-b3">
-  <link rel="modulepreload" href="js/views/spectrum.js?v=5.6.6-b3">
-  <link rel="modulepreload" href="js/views/blueprint.js?v=5.6.6-b10">
-  <link rel="modulepreload" href="js/views/clients.js?v=5.6.6-b3">
+  <link rel="stylesheet" href="css/tokens.css?v=5.7.0">
+  <link rel="stylesheet" href="css/layout.css?v=5.7.0">
+  <link rel="stylesheet" href="css/components.css?v=5.7.0">
+  <link rel="modulepreload" href="js/main.js?v=5.7.0">
+  <link rel="modulepreload" href="js/state.js?v=5.7.0">
+  <link rel="modulepreload" href="js/dom.js?v=5.7.0">
+  <link rel="modulepreload" href="js/api.js?v=5.7.0">
+  <link rel="modulepreload" href="js/canvas/prism.js?v=5.7.0">
+  <link rel="modulepreload" href="js/canvas/oscilloscope.js?v=5.7.0">
+  <link rel="modulepreload" href="js/views/overview.js?v=5.7.0">
+  <link rel="modulepreload" href="js/views/spectrum.js?v=5.7.0">
+  <link rel="modulepreload" href="js/views/blueprint.js?v=5.7.0">
+  <link rel="modulepreload" href="js/views/clients.js?v=5.7.0">
 </head>
 <body>
   <div class="app-shell">
@@ -51,16 +52,77 @@
     <header class="topbar">
       <div class="brand-cluster">
         <span class="brand-mark" aria-hidden="true">
-          <svg width="20" height="18" viewBox="0 0 20 18" fill="none">
-            <polygon points="10,1.5 18.5,16.5 1.5,16.5" stroke="#e4ecf8" stroke-width="1.4" fill="rgba(100,174,245,0.08)"/>
-            <line x1="0" y1="12" x2="6.5" y2="9.2" stroke="#ffffff" stroke-width="1.3"/>
-            <line x1="13.5" y1="9.2" x2="20" y2="7.5" stroke="#ee342e" stroke-width="1.2"/>
-            <line x1="13.8" y1="10.2" x2="20" y2="10.2" stroke="#44c65c" stroke-width="1.2"/>
-            <line x1="14.2" y1="11.2" x2="20" y2="13.0" stroke="#9052e4" stroke-width="1.2"/>
+          <svg width="28" height="21" viewBox="0 0 32 24" fill="none">
+            <defs>
+              <clipPath id="pm-tri">
+                <polygon points="16,2.2 25.8,19.2 6.2,19.2"/>
+              </clipPath>
+              <clipPath id="pm-left">
+                <polygon points="0,0 16,0 16,2.2 6.2,19.2 0,24"/>
+              </clipPath>
+              <clipPath id="pm-right">
+                <polygon points="16,2.2 32,0 32,24 25.8,19.2"/>
+              </clipPath>
+              <linearGradient id="pm-glass" x1="16" y1="2.2" x2="16" y2="19.2" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#9ec8d8" stop-opacity="0.16"/>
+                <stop offset="0.55" stop-color="#4e7996" stop-opacity="0.06"/>
+                <stop offset="1" stop-color="#9ec8d8" stop-opacity="0.12"/>
+              </linearGradient>
+              <linearGradient id="pm-wedge" x1="11.5" y1="9.9" x2="21.2" y2="10.4" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#ffffff" stop-opacity="0.86"/>
+                <stop offset="0.22" stop-color="#dbeeff" stop-opacity="0.46"/>
+                <stop offset="0.6" stop-color="#9fc4e6" stop-opacity="0.16"/>
+                <stop offset="1" stop-color="#74a4cc" stop-opacity="0.04"/>
+              </linearGradient>
+              <radialGradient id="pm-hit" cx="11.8" cy="9.8" r="3.2" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#ffffff" stop-opacity="0.45"/>
+                <stop offset="0.5" stop-color="#cde8ff" stop-opacity="0.16"/>
+                <stop offset="1" stop-color="#9ec8d8" stop-opacity="0"/>
+              </radialGradient>
+              <linearGradient id="pm-spectrum" x1="26.8" y1="9.6" x2="25.5" y2="15.1" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#ef4444"/>
+                <stop offset="0.17" stop-color="#f97316"/>
+                <stop offset="0.34" stop-color="#facc15"/>
+                <stop offset="0.52" stop-color="#22c55e"/>
+                <stop offset="0.7" stop-color="#06b6d4"/>
+                <stop offset="0.85" stop-color="#3b82f6"/>
+                <stop offset="1" stop-color="#8b5cf6"/>
+              </linearGradient>
+              <linearGradient id="pm-fade" x1="19.5" y1="10.5" x2="31.8" y2="13.2" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#ffffff" stop-opacity="0.98"/>
+                <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.92"/>
+                <stop offset="1" stop-color="#ffffff" stop-opacity="0.78"/>
+              </linearGradient>
+              <mask id="pm-ray-mask">
+                <rect x="0" y="0" width="32" height="24" fill="url(#pm-fade)"/>
+              </mask>
+            </defs>
+
+            <!-- Incident white light beam (clipped cleanly to left face) -->
+            <g clip-path="url(#pm-left)">
+              <line x1="0.4" y1="13.4" x2="12.6" y2="9.5" stroke="rgba(205,232,255,0.34)" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="0.4" y1="13.4" x2="12.6" y2="9.5" stroke="#ffffff" stroke-width="1.15" stroke-linecap="round"/>
+            </g>
+
+            <!-- Right-side continuous 7-stop spectral dispersion fan -->
+            <g clip-path="url(#pm-right)" mask="url(#pm-ray-mask)">
+              <polygon points="18.6,8.2 31.8,10.2 31.8,16.2 21.1,12.8" fill="url(#pm-spectrum)"/>
+            </g>
+
+            <!-- Sculpted DSOTM obsidian glass prism with inward icy cyan-slate bevel -->
+            <g clip-path="url(#pm-tri)">
+              <polygon points="16,2.2 25.8,19.2 6.2,19.2" fill="#03050a"/>
+              <polygon points="16,2.2 25.8,19.2 6.2,19.2" fill="url(#pm-glass)"/>
+              <polygon points="11.6,9.2 20.1,8.5 22.1,12.5 11.1,10.5" fill="url(#pm-wedge)"/>
+              <circle cx="11.8" cy="9.8" r="3.2" fill="url(#pm-hit)"/>
+              <polygon points="16,2.2 25.8,19.2 6.2,19.2" fill="none" stroke="rgba(158,200,216,0.20)" stroke-width="3.2"/>
+              <polygon points="16,2.2 25.8,19.2 6.2,19.2" fill="none" stroke="rgba(182,220,235,0.34)" stroke-width="1.6"/>
+              <polygon points="16,2.2 25.8,19.2 6.2,19.2" fill="none" stroke="rgba(220,240,250,0.68)" stroke-width="0.75"/>
+            </g>
           </svg>
         </span>
         <span class="brand-name">PRISM</span>
-        <span class="brand-sub"><span id="hdr-ver">v5.6.6</span> · <span id="hdr-ip">192.168.16.1</span></span>
+        <span class="brand-sub"><span id="hdr-ver">v5.7.0</span> · <span id="hdr-ip">192.168.16.1</span></span>
       </div>
 
       <nav class="nav-tabs" aria-label="Primary">
@@ -137,7 +199,7 @@
           <canvas id="topo"></canvas>
 
           <div id="ov-hud-tl" class="corner-hud tl">
-            <div id="ov-ver" class="corner-tag">PRISM v5.6.6 · DISPERSION FLUX</div>
+            <div id="ov-ver" class="corner-tag">PRISM v5.7.0 · DISPERSION FLUX</div>
             <div class="corner-rate-row">
               <span id="ov-down" class="corner-rate-main">0 Mbps</span>
               <span id="ov-up" class="corner-rate-up">↑ 0 Mbps</span>
@@ -636,7 +698,7 @@
 
                 <div class="bp-node-foot bp-node-foot-rule">
                   <span style="display:inline-flex;align-items:center;gap:5px;min-width:0"><span class="run-dot spectrum"></span><span class="c-sec">fw4 masquerade active</span></span>
-                  <span id="bp-up-ver" class="c-muted" style="flex-shrink:0">PRISM 5.6.6</span>
+                  <span id="bp-up-ver" class="c-muted" style="flex-shrink:0">PRISM 5.7.0</span>
                 </div>
               </div>
             </div>
@@ -822,7 +884,7 @@
   <!-- Admin Auth Modal -->
   <div id="scrim" class="modal-scrim" role="dialog" aria-modal="true" aria-labelledby="modal-ver">
     <div class="modal-box">
-      <div id="modal-ver" class="c-spectrum" style="font-weight:700;margin-bottom:4px;width:fit-content">PRISM v5.6.6 · 系統管理認證</div>
+      <div id="modal-ver" class="c-spectrum" style="font-weight:700;margin-bottom:4px;width:fit-content">PRISM v5.7.0 · 系統管理認證</div>
       <div class="c-sec" style="font-size:11.5px;margin-bottom:12px">通過 OpenWrt ubus /rpcd 建立加密管理會話</div>
       <form id="login-form" style="display:flex;flex-direction:column;gap:10px">
         <div>
@@ -844,6 +906,6 @@
 
   <div id="toast" class="toast-bar"></div>
 
-  <script type="module" src="js/main.js?v=5.6.6-b10"></script>
+  <script type="module" src="js/main.js?v=5.7.0"></script>
 </body>
 </html>
