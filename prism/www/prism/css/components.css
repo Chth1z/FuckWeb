@@ -232,7 +232,7 @@ html.prism-cold .main-stage {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  text-shadow: none;
+  text-shadow: none !important;
 }
 
 .s-box.mint {
