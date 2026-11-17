@@ -1056,8 +1056,8 @@ function renderClassifyStrip() {
     const frag = document.createDocumentFragment();
     for (const tag of coreTags) {
       const label = RULE_LABELS[tag] || tag;
-      const segEl = el('span', { class: 'seg-meter compact' });
-      renderSegMeter(segEl, 0, 16, 'blue', true);
+      const segEl = el('span', { class: 'seg-meter' });
+      renderSegMeter(segEl, 0, 16, 'blue', false);
       frag.appendChild(el('div', {
         class: 'classify-bar-card',
         style: { '--cb-rgb': '52, 58, 72', '--cb-fill': '0', '--cb-bdr-a': '0.16', '--cb-glow-blur': '0px', '--cb-glow-a': '0' }
@@ -1130,7 +1130,7 @@ function renderClassifyStrip() {
     if (!rec) {
       const labelEl = el('span', { class: pkts > 0 ? 'c-bright' : 'c-muted', style: { fontWeight: pkts > 0 ? '600' : '400', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label);
       const statEl = el('span', { class: pkts > 0 ? textCls : 'c-muted', style: { fontVariantNumeric: 'tabular-nums', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '9.5px' } }, statTxt);
-      const segEl = el('span', { class: `seg-meter compact${pkts > 0 ? ' active' : ''}` });
+      const segEl = el('span', { class: `seg-meter${pkts > 0 ? ' active' : ''}` });
       const card = el('div', {
         class: `classify-bar-card ${pkts > 0 ? 'active' : ''}`,
         title: `${label} · 進站請求 ${fmtBytes(bytes)} · ${pkts.toLocaleString()} pkts (${pctTxt} 封包命中)`,
@@ -1156,9 +1156,9 @@ function renderClassifyStrip() {
       setStyleProp(rec.labelEl, 'fontWeight', pkts > 0 ? '600' : '400');
       setCls(rec.statEl, pkts > 0 ? textCls : 'c-muted');
       setTxt(rec.statEl, statTxt);
-      setCls(rec.segEl, `seg-meter compact${pkts > 0 ? ' active' : ''}`);
+      setCls(rec.segEl, `seg-meter${pkts > 0 ? ' active' : ''}`);
     }
-    renderSegMeter(rec.segEl, fillPct / 100, 16, colorName, true);
+    renderSegMeter(rec.segEl, fillPct / 100, 16, colorName, false);
     if (frag) frag.appendChild(rec.card);
   }
 
