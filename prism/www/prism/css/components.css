@@ -586,10 +586,10 @@ html.prism-cold .main-stage {
 .mini-spectrum-bar {
   display: flex;
   align-items: stretch;
-  gap: 2.5px;
+  gap: 2px;
   min-height: 14px;
   margin: 0;
-  padding: 2px 3px;
+  padding: 2px;
   background: var(--tray-bg);
   border: none;
   box-shadow: var(--tray-inset);
@@ -630,21 +630,21 @@ html.prism-cold .main-stage {
 .seg-meter {
   display: flex;
   align-items: stretch;
-  gap: 2.5px;
+  gap: 2px;
   width: 100%;
   min-width: 0;
   height: 15px;
   flex-shrink: 0;
-  padding: 2px 3px;
+  padding: 2px;
   background: var(--tray-bg);
   border: none;
   box-shadow: var(--tray-inset);
 }
 
 .seg-meter.compact {
-  gap: 2.5px;
+  gap: 2px;
   height: 12px;
-  padding: 1.5px 3px;
+  padding: 1.5px 2px;
 }
 
 .seg-meter.active {
