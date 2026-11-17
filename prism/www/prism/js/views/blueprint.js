@@ -983,7 +983,19 @@ function renderClassifyStrip() {
   const grid = $('#bp-classify-grid');
   if (!grid) return;
   const rules = S.rules?.rules || [];
-  const coreTags = ['device-direct', 'domestic', 'rest-tunnel', 'relay', 'quic', 'tunnel-range', 'domestic-domain', 'tunnel-domain'];
+  // Keep rules in exact nftables `chain classify` evaluation order (no packet-count re-sorting).
+  const coreTags = [
+    'unverified-drop',
+    'relay',
+    'quic',
+    'device-direct',
+    'device-tunnel',
+    'tunnel-range',
+    'tunnel-domain',
+    'domestic',
+    'domestic-domain',
+    'rest-tunnel'
+  ];
   if (!rules.length) {
     if (grid._orderSig === '__empty__') return;
     grid._orderSig = '__empty__';
@@ -1014,10 +1026,8 @@ function renderClassifyStrip() {
   grid._lastSig = sig;
 
   const tot = Math.max(1, rules.reduce((acc, r) => acc + (r.packets || 0), 0));
-  const coreSet = new Set(coreTags);
-  const visible = rules
-    .filter(r => (r.packets || 0) > 0 || coreSet.has(r.tag))
-    .sort((a, b) => (b.packets || 0) - (a.packets || 0));
+  const coreSet = new Set([...coreTags, 'rest-direct']);
+  const visible = rules.filter(r => (r.packets || 0) > 0 || coreSet.has(r.tag));
 
   const orderSig = visible.map(r => r.tag).join(',');
   const needsRebuild = (grid._orderSig !== orderSig) || !grid._rowsByTag;
