@@ -68,7 +68,7 @@ config shaper 'shaper'
 	option mode 'auto'
 	option device 'wan'
 	option pct '95'
-	option pct_down '72'
+	option pct_down '90'
 
 config wifi 'wifi'
 	option guard '1'

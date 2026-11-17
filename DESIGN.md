@@ -235,7 +235,7 @@ chain postrouting {
 
 ### 3.4 模塊三：三級 DiffServ 優先級整形器規格（`host.uc`）
 
-在 [prism/usr/share/prism/mod/host.uc](file:///d:/Github/FuckWeb/prism/usr/share/prism/mod/host.uc) 中，將原有的單隊列 `250 KB` 整形器重構為 **3-Band Priority HTB + `fq_codel`**，並將下行整形速率校準為貼合酒店物理總帽的 `68 Mbit`（可在 `/etc/config/prism` 配置），上行 `90 Mbit`：
+在 [prism/usr/share/prism/mod/host.uc](file:///d:/Github/FuckWeb/prism/usr/share/prism/mod/host.uc) 中，將原有的單隊列 `250 KB` 整形器重構為 **3-Band Priority HTB + `fq_codel`**，並將下行整形速率校準為貼合百兆銅線物理極限的 `90 Mbit`（LAN 側 `fq_codel` 放寬至 `target 10ms` / `limit 3000` 適配 Wi-Fi 聚包，可在 `/etc/config/prism` 配置），上行 `95 Mbit`：
 
 ```sh
 # 清除舊隊列並建立根 HTB
@@ -247,13 +247,13 @@ tc class add dev $DEV parent 1: classid 1:1 htb rate ${RATE}mbit ceil ${RATE}mbi
 tc class add dev $DEV parent 1:1 classid 1:10 htb rate $((RATE * 20 / 100))mbit ceil ${RATE}mbit prio 0 quantum 1514
 tc qdisc add dev $DEV parent 1:10 handle 10: fq_codel limit 1000 target 2ms interval 50ms quantum 300 memory_limit 2097152 noecn
 
-# Band 2 (1:20, prio 1 突發交互優先級): 網頁、API、Claude、首 8MB 視頻分片突發流 (4MB GSO 緩衝)
+# Band 2 (1:20, prio 1 突發交互優先級): 網頁、API、Claude、首 64MB 視頻分片流 (4MB GSO 緩衝)
 tc class add dev $DEV parent 1:1 classid 1:20 htb rate $((RATE * 50 / 100))mbit ceil ${RATE}mbit prio 1 quantum 1514
-tc qdisc add dev $DEV parent 1:20 handle 20: fq_codel limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 4194304 noecn
+tc qdisc add dev $DEV parent 1:20 handle 20: fq_codel limit 3000 target 10ms interval 100ms quantum 1514 memory_limit 4194304 noecn
 
-# Band 3 (1:30, prio 2 後台吞吐優先級): 累計 >= 8MB 的大文件持續下載流 (4MB GSO 緩衝)
+# Band 3 (1:30, prio 2 後台吞吐優先級): 累計 >= 64MB 的大文件持續下載流 (4MB GSO 緩衝)
 tc class add dev $DEV parent 1:1 classid 1:30 htb rate $((RATE * 30 / 100))mbit ceil ${RATE}mbit prio 2 quantum 1514
-tc qdisc add dev $DEV parent 1:30 handle 30: fq_codel limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 4194304 noecn
+tc qdisc add dev $DEV parent 1:30 handle 30: fq_codel limit 3000 target 10ms interval 100ms quantum 1514 memory_limit 4194304 noecn
 ```
 
 ---
@@ -268,7 +268,7 @@ tc qdisc add dev $DEV parent 1:30 handle 30: fq_codel limit 2000 target 5ms inte
      - 專線組（`专线` / `專線`，Trojan TCP）：`tw_iplc`（如 `🇹🇼【亚洲】台湾家宽01丨专线【3x】`、`🇹🇼【亚洲】台湾家宽02丨专线【3x】`）；
      - 直連組（`直连` / `直連`，Hysteria2）：`tw_direct`（如 `🇨🇳【亚洲】台湾家宽01丨直连`、`🇨🇳【亚洲】台湾家宽02丨直连`）。
 2. **合成鏈式備援節點**：
-   - 當存在 `JP-Lightsail-owner` 時，為台灣家寬**直連**節點自動克隆生成附加 `"dialer-proxy": "JP-Lightsail-owner"` 的鏈式節點（如 `🔗 台湾家宽01丨Lightsail链式`，僅在無直連節點時退回專線），使其流量走：`Router (多路徑 MPTCP 6 端點) -> 東京 JP-Lightsail -> 台灣家寬直連節點`（直出海纜，不回繞大陸 IPLC 入口，延遲從 874–3001ms 降至 ~418ms）。
+   - 當存在 `JP-Lightsail-owner` 時，為台灣家寬**直連**節點自動克隆生成附加 `"dialer-proxy": "JP-Lightsail-owner"` 的鏈式節點（如 `🔗 台湾家宽01丨Lightsail链式`，並剝離 `ports` 避免在加密 MPTCP 隧道內重複 port-hopping 引發 XUDP 建連震盪，使冷啟 TTFB 由 `2.2s` 降至 `0.64s`、穩定延遲 ~`162–187ms`），流量走：`Router (多路徑 MPTCP 6 端點) -> 東京 JP-Lightsail -> 台灣家寬直連節點`（直出海纜，不回繞大陸 IPLC 入口）。
 3. **構建嚴格按序容災的 `TW-HOME` 策略組（`type: "fallback"`）**：
    - `proxies` 順序嚴格排列為：
      1. `🇹🇼【亚洲】台湾家宽01丨专线【3x】`（主用，最低直連跳數）

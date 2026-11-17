@@ -129,6 +129,10 @@ export function load_relays(cfg) {
 			if (base && !seen[tag]) {
 				seen[tag] = true;
 				let cp = { ...base, name: tag, "dialer-proxy": "JP-Lightsail-owner" };
+				// Port-hopping avoids China UDP QoS on direct hops, but inside the
+				// already-encrypted Tokyo VLESS/MPTCP tunnel it only triggers XUDP
+				// stream churn and 2s+ cold TTFB / timeout spikes.
+				delete cp.ports;
 				by_name[tag] = cp;
 				push(proxies, cp);
 			}

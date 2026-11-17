@@ -84,7 +84,7 @@ const SCHEMA = {
 		prefetch: 1,
 		serve_expired: 1,
 		serve_expired_ttl: 259200,
-		speed_check: "none",
+		speed_check: "tcp:443,tcp:80",
 		response_mode: "fastest-response",
 		forward_max: 400,
 		dnsmasq_cache: 0,
@@ -93,7 +93,7 @@ const SCHEMA = {
 		mode: "auto",                   // auto | off
 		device: "wan",
 		pct: 95,                        // upload: percent of a 10/100 link speed
-		pct_down: 72,                   // download, shaped on the LAN side. 0 = off
+		pct_down: 90,                   // download, shaped on the LAN side. 0 = off
 	},
 	wifi: {
 		guard: 1,

@@ -107,21 +107,23 @@ function aql(limits) {
 
 // 3-Band Priority HTB at `rate` Mbit with fq_codel leaves, or nothing when rate is 0.
 //   1:10 (prio 0): VIP gaming/realtime, TCP SYN/ACK, DNS, ICMP (target 2ms, quantum 300)
-//   1:20 (prio 1): Interactive & short bursts < 8 MB (target 5ms, 4 MB GSO-safe buffer)
-//   1:30 (prio 2): Bulk transfers >= 8 MB (target 5ms, 4 MB GSO-safe buffer)
+//   1:20 (prio 1): Interactive, web, video streams < 64 MB (target 10ms LAN / 5ms WAN, 4 MB buffer)
+//   1:30 (prio 2): Bulk transfers >= 64 MB (target 10ms LAN / 5ms WAN, 4 MB buffer)
 // Returns true when it changed something.
-function shape(dev, rate) {
+function shape(dev, rate, is_lan) {
 	let have = core.sh("tc qdisc show dev " + dev).out, ours = index(have, "htb") >= 0;
 	if (rate <= 0) {
 		if (ours)
 			core.act(sprintf("tc qdisc del dev %s root", dev));
 		return ours;
 	}
+	let t_bulk = is_lan ? 10 : 5, lim_bulk = is_lan ? 3000 : 2000, root_burst = is_lan ? "256k" : "128k";
 	let classes = ours ? core.sh("tc class show dev " + dev).out : "";
-	let stale_10 = index(classes, "burst 1600b") >= 0 || index(have, "memory_limit 4Mb") < 0;
-	if (ours && !stale_10 && index(classes, sprintf("1:1 root rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
+	let stale = index(classes, "burst 1600b") >= 0 || index(have, "memory_limit 4Mb") < 0 ||
+		index(have, sprintf("target %dms", t_bulk)) < 0;
+	if (ours && !stale && index(classes, sprintf("1:1 root rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
 		return false;
-	if (ours && !stale_10 && index(classes, sprintf("1:1 htb rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
+	if (ours && !stale && index(classes, sprintf("1:1 htb rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
 		return false;
 	let r10 = max(5, int(rate * 20 / 100));
 	let r20 = max(10, int(rate * 50 / 100));
@@ -132,13 +134,13 @@ function shape(dev, rate) {
 	core.act(join("\n", [
 		sprintf("tc qdisc del dev %s root 2>/dev/null || true", dev),
 		sprintf("tc qdisc add dev %s root handle 1: htb default 20", dev),
-		sprintf("tc class add dev %s parent 1: classid 1:1 htb rate %dmbit ceil %dmbit burst 128k cburst 128k", dev, rate, rate),
+		sprintf("tc class add dev %s parent 1: classid 1:1 htb rate %dmbit ceil %dmbit burst %s cburst %s", dev, rate, rate, root_burst, root_burst),
 		sprintf("tc class add dev %s parent 1:1 classid 1:10 htb rate %dmbit ceil %dmbit prio 0 burst 32k cburst 32k quantum 1514", dev, r10, rate),
-		sprintf("tc class add dev %s parent 1:1 classid 1:20 htb rate %dmbit ceil %dmbit prio 1 burst 64k cburst 64k quantum 1514", dev, r20, rate),
+		sprintf("tc class add dev %s parent 1:1 classid 1:20 htb rate %dmbit ceil %dmbit prio 1 burst %s cburst %s quantum 1514", dev, r20, rate, is_lan ? "128k" : "64k", is_lan ? "128k" : "64k"),
 		sprintf("tc class add dev %s parent 1:1 classid 1:30 htb rate %dmbit ceil %dmbit prio 2 burst 64k cburst 64k quantum 1514", dev, r30, rate),
 		sprintf("%s limit 1000 target 2ms interval 50ms quantum 300 memory_limit 2097152 noecn || %s noecn || %s", q10, q10, q10),
-		sprintf("%s limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 4194304 noecn || %s noecn || %s", q20, q20, q20),
-		sprintf("%s limit 2000 target 5ms interval 100ms quantum 1514 memory_limit 4194304 noecn || %s noecn || %s", q30, q30, q30),
+		sprintf("%s limit %d target %dms interval 100ms quantum 1514 memory_limit 4194304 noecn || %s noecn || %s", q20, lim_bulk, t_bulk, q20, q20),
+		sprintf("%s limit %d target %dms interval 100ms quantum 1514 memory_limit 4194304 noecn || %s noecn || %s", q30, lim_bulk, t_bulk, q30, q30),
 	]));
 	return true;
 }
@@ -160,11 +162,11 @@ function shaper(cfg, lan) {
 	let slow = cfg.mode != "off" && (speed == 10 || speed == 100);
 	let up = slow ? max(1, int(speed * cfg.pct / 100)) : 0;
 	let down = slow && cfg.pct_down > 0 ? max(1, int(speed * cfg.pct_down / 100)) : 0;
-	if (shape(dev, up) && up) {
+	if (shape(dev, up, false) && up) {
 		core.act(sprintf("ip link set dev %s txqueuelen 128", dev));
 		core.event("SHAPER %s up %d Mbit (phy %d)", dev, up, speed);
 	}
-	if (shape(lan, down) && down)
+	if (shape(lan, down, true) && down)
 		core.event("SHAPER %s down %d Mbit (phy %d)", lan, down, speed);
 	if (!slow && speed > 100 && !match(core.sh("tc qdisc show dev " + dev).out, /fq_codel/))
 		core.act(sprintf("tc qdisc replace dev %s root fq_codel noecn", dev));

@@ -175,7 +175,7 @@ table inet prism {
 	chain postrouting {
 		type filter hook postrouting priority mangle; policy accept;
 		meta priority set 1:20
-		ct bytes >= 8388608 meta priority set 1:30
+		ct bytes >= 67108864 meta priority set 1:30
 		ct mark & 0x100 != 0 meta priority set 1:10
 		meta l4proto tcp tcp flags & (syn | ack | fin | rst) != 0 meta length <= 256 meta priority set 1:10
 		meta l4proto udp th dport != { 80, 443 } meta length <= 256 ct bytes < 50000000 meta priority set 1:10
