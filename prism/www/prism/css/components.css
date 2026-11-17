@@ -427,9 +427,9 @@ html.prism-cold .main-stage {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 3.5px;
+  gap: 2.5px;
   margin: 0 -8px;
-  padding: 5px 8px 3px;
+  padding: 4px 8px 2px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   min-height: 0;
   overflow: visible;
@@ -443,11 +443,11 @@ html.prism-cold .main-stage {
   );
   border: none;
   box-shadow: var(--tray-inset);
-  padding: 2.5px 8.5px;
+  padding: 2px 8px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 2px;
+  gap: 1.5px;
   flex: 0 0 auto;
   transition: box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -985,15 +985,15 @@ html.prism-cold .main-stage {
   }
   .classify-strip {
     flex: 0 0 auto;
-    gap: 4.5px;
+    gap: 2px;
     min-height: 0;
     margin: 0 -6px;
-    padding: 6px 6px 4px;
+    padding: 3px 6px 2px;
     overflow: visible;
   }
   .classify-bar-card {
-    padding: 3px 7px;
-    gap: 2px;
+    padding: 1.5px 7px;
+    gap: 1px;
   }
   .guard-invariants-grid {
     min-height: 80px;
