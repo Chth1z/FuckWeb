@@ -14,6 +14,8 @@ import * as config from "./lib/config.uc";
 import * as series from "./lib/series.uc";
 import * as weave from "./mod/weave.uc";
 import * as devices from "./mod/devices.uc";
+import * as tunnel from "./mod/tunnel.uc";
+import * as identity from "./mod/identity.uc";
 import * as api from "./mod/api.uc";
 
 const PRISM = "/usr/sbin/prism";
@@ -101,8 +103,11 @@ function sample_devices(dt) {
 			r[dir + "_bytes"] = bytes;
 		}
 	}
-	if (lan.samples++ % DEVICE_SCAN == 0)
+	if (lan.samples % DEVICE_SCAN == 0)
 		lan.list = devices.scan(cfg);
+	if (lan.samples % 5 == 1 && snapshot?.tunnel?.running && !running)
+		tunnel.sync_selected(cfg, snapshot?.lan_ip ?? "192.168.16.1", identity.load_store()?.profiles ?? []);
+	lan.samples++;
 }
 
 function sync_lan_cfg() {
@@ -129,10 +134,15 @@ function sync_lan_cfg() {
 }
 
 function device_view() {
-	return map(lan.list, (x) => {
+	let rate_map = {};
+	for (let x in lan.list)
+		if (x.ip && lan.rate[x.ip])
+			rate_map[x.ip] = lan.rate[x.ip];
+	let v = identity.view(cfg, map(lan.list, (x) => {
 		let r = lan.rate[x.ip] ?? {};
 		return { ...x, up: int(r.up ?? 0), down: int(r.down ?? 0), up_bytes: r.up_bytes ?? 0, down_bytes: r.down_bytes ?? 0 };
-	});
+	}), rate_map);
+	return v;
 }
 
 function sample() {
@@ -242,6 +252,35 @@ let published = bus.publish("prism", api.methods({
 	now: monotonic,
 	kick: () => kick(DEBOUNCE_MS / 4),
 	reload: sync_lan_cfg,
+	set_device: (a) => {
+		let mac = lc(a.mac ?? ""), name = a.name ?? "", policy = a.policy || "auto";
+		let res = config.device_store(mac, name, policy);
+		if (res.ok) {
+			let p = identity.update_profile_policy(mac, name, policy, cfg);
+			if (!p && (policy != "block" || length(trim(name))))
+				identity.claim({ mac, action: "new", alias: name, policy }, cfg);
+			core.event("DEVICE %s policy=%s name=%s", mac, policy, name);
+			sync_lan_cfg();
+			kick(100);
+		}
+		return res;
+	},
+	claim: (a) => {
+		let res = identity.claim(a, cfg);
+		if (res.ok) {
+			sync_lan_cfg();
+			kick(100);
+		}
+		return res;
+	},
+	dhcp_event: (a) => {
+		let res = identity.on_dhcp_event(a);
+		if (res.kick) {
+			lan.list = devices.scan(cfg);
+			kick(150);
+		}
+		return res;
+	},
 }));
 if (!published)
 	core.err("cannot publish ubus object: %s", ubus.error());

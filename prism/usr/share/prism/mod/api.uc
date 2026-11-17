@@ -11,7 +11,8 @@ import * as core from "../lib/core.uc";
 import * as config from "../lib/config.uc";
 import * as series from "../lib/series.uc";
 import * as weave from "./weave.uc";
-import { save_selected } from "./tunnel.uc";
+import * as tunnel from "./tunnel.uc";
+import * as identity from "./identity.uc";
 
 let list_cache = {};
 let size_cache = {};
@@ -297,33 +298,51 @@ export function methods(d) {
 			},
 		},
 
-		// Relays as the tunnel sees them: who is selected, how fast each is.
+		// Relays as the tunnel sees them: TW-HOME fallback status, kept relays, and per-device groups.
 		tunnel: {
 			call: function() {
-				let all = controller(d.cfg(), lan_ip(), "GET", "/proxies")?.proxies;
+				let cfg = d.cfg(), lip = lan_ip();
+				let all = controller(cfg, lip, "GET", "/proxies")?.proxies;
 				if (!all)
-					return { reachable: false, relays: [] };
+					return { reachable: false, relays: [], groups: [] };
 				let delay = (p) => {
 					let h = p?.history ?? [];
 					return length(h) ? h[length(h) - 1].delay : 0;
 				};
-				let relays = [];
-				for (let name in all.PROXY?.all ?? [])
-					push(relays, { name, type: all[name]?.type ?? "", delay: delay(all[name]) });
+				let relays = [], seen = {};
+				for (let spec in tunnel.load_relays(cfg).proxies) {
+					if (seen[spec.name])
+						continue;
+					seen[spec.name] = true;
+					push(relays, { name: spec.name, type: all[spec.name]?.type ?? spec.type ?? "", delay: delay(all[spec.name]) });
+				}
+				let profiles = identity.load_store()?.profiles ?? [];
+				let groups = map(profiles, (p) => ({
+					uid: p.uid,
+					group_name: p.group_name,
+					anchor_mac: p.anchor_mac,
+					port: p.port,
+					now: all[p.group_name]?.now ?? "",
+				}));
+				let tw_now = all["TW-HOME"]?.now ?? "";
 				return {
 					reachable: true,
-					selected: all.PROXY?.now ?? "",
-					tw_home: all["TW-HOME"]?.now ?? "",
-					auto: all.AUTO?.now ?? "",
+					selected: tw_now || groups[0]?.now || relays[0]?.name || "TW-HOME",
+					tw_home: tw_now,
+					auto: tw_now,
 					relays,
-					dashboard: sprintf("http://%s:%d/ui/", lan_ip(), d.cfg().tunnel.controller_port),
+					groups,
+					dashboard: sprintf("http://%s:%d/ui/", lip, cfg.tunnel.controller_port),
 				};
 			},
 		},
 
 		devices: {
 			call: function() {
-				return { devices: d.devices() };
+				let v = d.devices();
+				if (type(v) == "object" && type(v.devices) == "array")
+					return v;
+				return { devices: v ?? [], quarantine: [] };
 			},
 		},
 
@@ -395,6 +414,8 @@ export function methods(d) {
 			args: { mac: "", name: "", policy: "" },
 			call: function(req) {
 				let a = req.args ?? {};
+				if (d.set_device)
+					return d.set_device(a);
 				let res = config.device_store(lc(a.mac ?? ""), a.name ?? "", a.policy || "auto");
 				if (res.ok) {
 					core.event("DEVICE %s policy=%s name=%s", a.mac, a.policy || "auto", a.name ?? "");
@@ -402,6 +423,22 @@ export function methods(d) {
 					d.kick();
 				}
 				return res;
+			},
+		},
+
+		claim: {
+			args: { mac: "", action: "new", target_uid: "", alias: "", policy: "auto", relay: "" },
+			call: function(req) {
+				let a = req.args ?? {};
+				return d.claim ? d.claim(a) : identity.claim(a, d.cfg());
+			},
+		},
+
+		dhcp_event: {
+			args: { action: "", mac: "", ip: "", host: "", opt55: "", vendor: "", cid: "", iface: "", ts: 0 },
+			call: function(req) {
+				let a = req.args ?? {};
+				return d.dhcp_event ? d.dhcp_event(a) : identity.on_dhcp_event(a);
 			},
 		},
 
@@ -444,13 +481,20 @@ export function methods(d) {
 		},
 
 		select: {
-			args: { name: "" },
+			args: { name: "", group: "" },
 			call: function(req) {
-				let name = req.args?.name ?? "";
-				let res = controller(d.cfg(), lan_ip(), "PUT", "/proxies/PROXY", sprintf("%J", { name }));
+				let name = req.args?.name ?? "", grp_in = req.args?.group ?? "";
+				let profiles = identity.load_store()?.profiles ?? [];
+				let prof = null;
+				for (let p in profiles) {
+					if (p.uid == grp_in || p.group_name == grp_in || (!length(grp_in) && !prof))
+						prof = p;
+				}
+				let grp = prof ? prof.group_name : (length(grp_in) ? grp_in : "TW-HOME");
+				let res = controller(d.cfg(), lan_ip(), "PUT", "/proxies/" + tunnel.urlenc(grp), sprintf("%J", { name }));
 				if (res != null) {
-					save_selected(name);
-					core.event("TUNNEL relay selected: %s", name);
+					tunnel.save_selected(prof ? prof.uid : "_tw_home", name);
+					core.event("TUNNEL relay selected: %s -> %s", grp, name);
 				}
 				return { ok: res != null };
 			},

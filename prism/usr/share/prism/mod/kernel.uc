@@ -12,6 +12,7 @@ import * as facts from "../lib/facts.uc";
 import { path } from "../lib/config.uc";
 import * as weave from "./weave.uc";
 import * as devices from "./devices.uc";
+import * as identity from "./identity.uc";
 
 export const MARK_DIVERTED = 0x4000;    // packet was handed to the tunnel
 export const MARK_TUNNEL_OUT = 0x8000;  // the tunnel's own sockets (routing-mark)
@@ -86,10 +87,12 @@ function build(ctx) {
 	// where traffic actually goes (api.uc: rules).
 	let rule = (test, verdict, tag) => trim(sprintf('%s counter %s comment "%s"', test, verdict, tag));
 
-	// Order is the policy. Devices first, because a per-device choice
-	// overrides everything; then forced-tunnel ranges before the domestic
-	// set, or Cloudflare's mainland ranges would slip out direct.
+	// Order is the policy. Block & Mode A MAC+IP anti-spoof gate sit at the very top,
+	// then per-device choices, then forced-tunnel ranges before domestic sets.
+	let idp = ctx.identity;
 	let classify = [ rule("ether saddr @dev_block", "drop", "device-block") ];
+	if (idp != null)
+		push(classify, rule("ether saddr . ip saddr != @verified_pairs", "drop", "unverified-drop"));
 	if (tun.on)
 		push(classify, rule("ip daddr @relay4", "goto direct_ok", "relay"));
 	if (c.quic == "reject")
@@ -104,6 +107,31 @@ function build(ctx) {
 		if (length(c.tunnel_udp_port))
 			push(classify, rule(sprintf("udp dport { %s }", join(", ", c.tunnel_udp_port)), "goto divert", "tunnel-port"));
 		push(classify, c.remainder == "tunnel" ? rule("", "goto divert", "rest-tunnel") : rule("", "goto direct_ok", "rest-direct"));
+	}
+
+	// Per-device TProxy isolation: each enrolled profile goes strictly to its bound listener port.
+	let divert = [ "ether saddr @dev_block counter drop" ];
+	if (idp != null) {
+		push(divert, "ether saddr . ip saddr != @verified_pairs counter drop");
+		let sorted_prof = sort(slice(idp.profiles ?? []), (a, b) => (a.port ?? 0) - (b.port ?? 0));
+		for (let p in sorted_prof) {
+			if (p.policy == "block" || !p.port)
+				continue;
+			if (!core.is_dry() && tun.ready_ports && !tun.ready_ports["" + p.port])
+				continue;
+			let macs = identity.all_profile_macs(p);
+			if (!length(macs))
+				continue;
+			push(divert, sprintf(
+				'ether saddr { %s } meta l4proto { tcp, udp } tproxy ip to %s:%d meta mark set %s ct mark set %s accept comment "dev:%s"',
+				join(", ", macs), cfg.tunnel.listen_addr, p.port, hex(MARK_DIVERTED), hex(MARK_DIVERTED), p.uid));
+		}
+		push(divert, 'counter drop comment "unmapped-divert-drop"');
+	}
+	else {
+		push(divert, sprintf(
+			"meta l4proto { tcp, udp } tproxy ip to %s:%d meta mark set %s ct mark set %s accept",
+			cfg.tunnel.listen_addr, cfg.tunnel.tproxy_port, hex(MARK_DIVERTED), hex(MARK_DIVERTED)));
 	}
 
 	// See weave.uc for what the maps mean.
@@ -148,7 +176,7 @@ function build(ctx) {
 		];
 	}
 
-	let dev = devices.policy_sets(cfg);
+	let dev = idp?.sets ?? devices.policy_sets(cfg);
 	return [
 		unit("base", base),
 		file_set_unit("domestic4", path(c.domestic4)),
@@ -158,8 +186,10 @@ function build(ctx) {
 		set_unit("set", "dev_tunnel", dev.tunnel),
 		set_unit("set", "dev_block", dev.block),
 		set_unit("set", "dev_game", dev.game),
+		set_unit("set", "verified_pairs", idp?.pairs ?? []),
 		unit("anchor", weave.script("anchor", w.anchor)),
 		chain_unit("classify", classify),
+		chain_unit("divert", divert),
 		chain_unit("weave", lay),
 		chain_unit("weave_out", lay_out),
 	];

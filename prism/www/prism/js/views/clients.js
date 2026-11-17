@@ -187,6 +187,78 @@ export function bindClientsEvents() {
   });
 }
 
+function createQuarantineCard(q, allDevs) {
+  const hostTxt = q.host || q.mac.slice(-8);
+  const topCand = q.candidates?.[0];
+  const hint = topCand
+    ? `疑似 ${topCand.alias || topCand.uid} (${topCand.score}分 · ${(topCand.reasons || []).join('+') || q.reason})`
+    : `未通過交叉認證 (${q.reason || 'new_mac'})`;
+
+  const sel = el('select', {
+    class: 'bp-input',
+    style: { fontSize: '10.5px', padding: '1px 4px', maxWidth: '112px' },
+    title: '選擇要併入的現有設備組'
+  });
+  for (const d of allDevs) {
+    if (!d.uid) continue;
+    const opt = el('option', { value: d.uid }, d.name || d.host || d.mac.slice(-8));
+    if (topCand && topCand.uid === d.uid) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('click', (e) => e.stopPropagation());
+
+  const btnNew = el('button', {
+    type: 'button',
+    class: 'policy-pill on tunnel',
+    style: { padding: '2px 7px' },
+    title: '認領並建立獨立 Zashboard 節點分組'
+  }, '認領建組');
+  btnNew.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!S.session) { openLoginModal(); return; }
+    write('claim', { mac: q.mac, action: 'new', alias: q.host || '' }, `已認領 ${hostTxt} 並建立專屬節點組`);
+  });
+
+  const btnMerge = el('button', {
+    type: 'button',
+    class: 'policy-pill on auto',
+    style: { padding: '2px 7px' },
+    title: '將此隨機/新 MAC 併入上方選中的現有設備'
+  }, '併入');
+  btnMerge.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!S.session) { openLoginModal(); return; }
+    const uid = sel.value;
+    if (!uid) return;
+    write('claim', { mac: q.mac, action: 'merge', target_uid: uid }, `已將 ${q.mac} 併入設備組 ${uid}`);
+  });
+
+  return el('div', {
+    class: `dev-nav-item ${q.online ? 'online' : 'offline'}`,
+    'data-qmac': q.mac,
+    style: {
+      '--dev-sc-rgb': '230, 108, 120',
+      '--dev-rgb': '230, 108, 120',
+      '--dev-fill': '0.13',
+      '--dev-glow': '0.10'
+    }
+  },
+    el('div', { class: 'dev-nav-top' },
+      el('div', { class: 'dev-title-group' },
+        el('span', { class: 'run-dot crimson' }),
+        el('span', { class: 'dev-nav-name' }, `Mode A 攔截 · ${hostTxt}`)
+      ),
+      el('span', { class: 'c-crimson dev-flows-tag' }, '禁網待認領')
+    ),
+    el('div', { class: 'c-amber', style: { fontSize: '10.5px', lineHeight: '1.35' } }, `${q.mac}${q.ip ? ` · ${q.ip}` : ''} · ${hint}`),
+    el('div', { class: 'dev-nav-sub', style: { justifyContent: 'flex-end', gap: '5px', flexWrap: 'wrap' } },
+      btnNew,
+      allDevs.some(d => d.uid) ? sel : null,
+      allDevs.some(d => d.uid) ? btnMerge : null
+    )
+  );
+}
+
 function createDeviceCard(mac) {
   const dotEl = el('span', { class: 'run-dot' });
   const nameEl = el('span', { class: 'dev-nav-name' });
@@ -213,7 +285,7 @@ function createDeviceCard(mac) {
       type: 'button',
       class: `policy-pill ${p}`,
       'data-policy': p,
-      title: POLICY_META[p].label
+      title: p === 'tunnel' ? '強制全部流量經本設備 Zashboard 節點' : POLICY_META[p].label
     }, POLICY_META[p].short);
     b.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -309,15 +381,17 @@ function syncDeviceCard(card, d, dr, isSelected) {
   const policy = d.policy || 'auto';
   const totalBps = (dr?.down || 0) + (dr?.up || 0);
   const radio = d.signal ? ` ${d.signal}dBm` : '';
+  const relayTag = d.relay ? ` · ${d.relay}` : '';
+  const macCnt = (d.bound_macs?.length || 1) > 1 ? ` · ${d.bound_macs.length}MAC` : '';
   const linkTxt = `${d.link || 'wired'}${radio}`;
   const hasFlows = !!(S.session && dr.count > 0);
   const flowTxt = hasFlows ? `${dr.count} 流` : (d.online ? '在線' : '離線');
   const rateStr = totalBps > 50
     ? ` · ↓${fmtRateCompact(dr.down)} ↑${fmtRateCompact(dr.up)}`
-    : '';
+    : relayTag;
   const ipRateTxt = `${d.ip || d.mac.slice(-8)}${rateStr}`;
   const editing = editingMac === d.mac;
-  const sig = `${d.online ? 1 : 0}|${isSelected ? 1 : 0}|${policy}|${editing ? '' : label}|${linkTxt}|${flowTxt}|${ipRateTxt}|${Math.round(opticalLoad(totalBps, 6, 0.10) * 160)}`;
+  const sig = `${d.online ? 1 : 0}|${isSelected ? 1 : 0}|${policy}|${editing ? '' : label}|${linkTxt}|${flowTxt}|${ipRateTxt}|${d.group_name || ''}|${macCnt}|${Math.round(opticalLoad(totalBps, 6, 0.10) * 160)}`;
   if (card._renderSig === sig) return;
   card._renderSig = sig;
 
@@ -333,7 +407,7 @@ function syncDeviceCard(card, d, dr, isSelected) {
 
   if (!editing) {
     setTxt(r.nameEl, label);
-    setTitle(r.nameEl, `${label} (${d.mac})`);
+    setTitle(r.nameEl, `${d.group_name || `${label} (${d.mac})`}${macCnt}${d.relay ? ` → ${d.relay}` : ''}`);
   }
 
   setTxt(r.linkEl, linkTxt);
@@ -350,9 +424,10 @@ function syncDeviceCard(card, d, dr, isSelected) {
 }
 
 // Keyed in-place reconciliation: preserves DOM nodes & open inputs across 1s polls
-function renderDeviceMenu(devs, byIp, totalFlows) {
+function renderDeviceMenu(devs, quarantine, byIp, totalFlows) {
   const onlineCnt = devs.filter(d => d.online).length;
-  setTxt('#clients-online-cnt', `${onlineCnt} 在線 / ${devs.length} 台`);
+  const qCnt = (quarantine || []).length;
+  setTxt('#clients-online-cnt', qCnt > 0 ? `${onlineCnt} 在線 / ${qCnt} 待認領` : `${onlineCnt} 在線 / ${devs.length} 台`);
 
   let flowDown = 0;
   let flowUp = 0;
@@ -403,18 +478,34 @@ function renderDeviceMenu(devs, byIp, totalFlows) {
   const existingByMac = new Map();
   const domOrder = [];
   const empties = [];
+  const qCards = [];
   for (const child of Array.from(list.children)) {
     const m = child.dataset.mac;
+    const qm = child.dataset.qmac;
     if (m) {
       existingByMac.set(m, child);
       domOrder.push(m);
+    } else if (qm) {
+      qCards.push(child);
     } else {
       empties.push(child);
     }
   }
   for (const emp of empties) emp.remove();
 
-  if (!sorted.length) {
+  const qSig = (quarantine || []).map(q => `${q.mac}:${q.ip}:${q.host}:${q.score}:${q.online}:${devs.length}`).join('|');
+  if (list._qSig !== qSig) {
+    list._qSig = qSig;
+    for (const qc of qCards) qc.remove();
+    const frag = document.createDocumentFragment();
+    for (const q of (quarantine || []))
+      frag.appendChild(createQuarantineCard(q, devs));
+    if (frag.childNodes.length)
+      list.insertBefore(frag, list.firstChild);
+  }
+  const qOffset = (quarantine || []).length;
+
+  if (!sorted.length && !qOffset) {
     existingByMac.forEach(node => node.remove());
     list.appendChild(el('div', { class: 'c-muted', style: { padding: '14px', textAlign: 'center', fontSize: '11.5px' } }, '無匹配終端'));
     forceReorder = false;
@@ -452,7 +543,7 @@ function renderDeviceMenu(devs, byIp, totalFlows) {
     syncDeviceCard(card, d, dr, S.selectedDeviceMac === d.mac);
 
     if (!freezeOrder || card.parentNode !== list) {
-      const curAtIdx = list.children[idx];
+      const curAtIdx = list.children[qOffset + idx];
       if (curAtIdx !== card) {
         list.insertBefore(card, curAtIdx || null);
       }
@@ -611,6 +702,7 @@ function renderConnections(devs, selectedDev, rows) {
 
 export function renderClients() {
   const devs = S.devices?.devices || [];
+  const quarantine = S.devices?.quarantine || [];
   const selectedDev = S.selectedDeviceMac !== 'all'
     ? devs.find(d => d.mac === S.selectedDeviceMac)
     : null;
@@ -618,6 +710,6 @@ export function renderClients() {
     S.selectedDeviceMac = 'all';
   }
   const { byIp, rows } = computeFlowDeltas();
-  renderDeviceMenu(devs, byIp, rows.length);
+  renderDeviceMenu(devs, quarantine, byIp, rows.length);
   renderConnections(devs, selectedDev, rows);
 }

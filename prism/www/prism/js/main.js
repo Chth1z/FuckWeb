@@ -9,7 +9,7 @@ import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.
 import { renderOverview } from './views/overview.js?v=5.6.6';
 import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.6.6';
 import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.6.6';
-import { renderClients, bindClientsEvents } from './views/clients.js?v=5.6.6';
+import { renderClients, bindClientsEvents } from './views/clients.js?v=5.6.6-m2';
 
 let fastTimer = null;
 let slowTimer = null;

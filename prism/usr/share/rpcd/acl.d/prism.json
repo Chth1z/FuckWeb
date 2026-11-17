@@ -16,7 +16,7 @@
 		},
 		"write": {
 			"ubus": {
-				"prism": [ "reconcile", "configure", "relogin", "select", "device", "remember", "forget" ]
+				"prism": [ "reconcile", "configure", "relogin", "select", "device", "claim", "remember", "forget" ]
 			}
 		}
 	}

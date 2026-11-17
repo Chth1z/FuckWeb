@@ -93,6 +93,11 @@ table inet prism {
 		type ether_addr
 	}
 
+	# Dual-factor MAC+IP anti-spoof gate (Mode A drops any unverified pair).
+	set verified_pairs {
+		type ether_addr . ipv4_addr
+	}
+
 	# Per-device accounting, by LAN address. Elements appear on first packet.
 	set dev_up {
 		type ipv4_addr
@@ -190,7 +195,6 @@ table inet prism {
 	}
 
 	chain divert {
-		meta l4proto { tcp, udp } tproxy ip to {{ listen_addr }}:{{ tproxy_port }} meta mark set {{ mark_diverted }} ct mark set {{ mark_diverted }} accept
 	}
 
 	chain direct_ok {

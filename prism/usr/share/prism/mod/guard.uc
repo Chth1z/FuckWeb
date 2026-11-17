@@ -3,6 +3,7 @@
 import * as fs from "fs";
 import * as core from "../lib/core.uc";
 import { path } from "../lib/config.uc";
+import { load_relays } from "./tunnel.uc";
 
 export function render_rules(cfg, ctx) {
 	let rows = [ "table inet prism_guard", "delete table inet prism_guard", "table inet prism_guard {" ];
@@ -15,16 +16,23 @@ export function render_rules(cfg, ctx) {
 		push(rows, "}");
 		return join("\n", rows) + "\n";
 	}
+	let idp = ctx?.identity;
+	let direct_macs = idp?.sets?.direct ?? map(filter(cfg.devices, (d) => d.policy == "direct"), (d) => d.mac);
+	let block_macs = idp?.sets?.block ?? map(filter(cfg.devices, (d) => d.policy == "block"), (d) => d.mac);
+	let verified_pairs = idp?.pairs ?? [];
+
 	set("lan", "ifname", map(cfg.main.lan_dev, (d) => sprintf('"%s"', d)));
-	set("direct_devices", "ether_addr", map(filter(cfg.devices, (d) => d.policy == "direct"), (d) => d.mac));
-	set("blocked_devices", "ether_addr", map(filter(cfg.devices, (d) => d.policy == "block"), (d) => d.mac));
-	let raw = core.load_json(path(cfg.tunnel.relays), []), relays = [];
+	set("direct_devices", "ether_addr", direct_macs);
+	set("blocked_devices", "ether_addr", block_macs);
+	if (idp != null)
+		set("verified_pairs", "ether_addr . ipv4_addr", verified_pairs);
+
+	let active_proxies = load_relays(cfg).proxies, relays = [];
 	let is_ip4 = (s) => match(s ?? "", /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/);
 	let resolved_ips = filter(ctx?.tunnel?.relay_ips ?? [], is_ip4);
 	let by_host = ctx?.tunnel?.relay_host_ips ?? {};
-	if (type(raw) == "object") raw = raw.outbounds ?? (raw.type ? [ raw ] : []);
-	for (let n in raw) {
-		let port = int(n.server_port ?? 443);
+	for (let n in active_proxies) {
+		let port = int(n.port ?? n.server_port ?? 443);
 		if (!(port > 0 && port <= 65535)) continue;
 		// Fixed proxy transports only; arbitrary destination ports stay closed.
 		let protos = n.type in [ "hysteria", "hysteria2", "tuic" ] ? [ "udp" ] :
@@ -47,6 +55,7 @@ export function render_rules(cfg, ctx) {
 		"chain forward { type filter hook forward priority -5; policy accept;",
 		"iifname != @lan return", "oifname @lan return",
 		"ether saddr @blocked_devices counter drop",
+		...(idp != null ? [ "ether saddr . ip saddr != @verified_pairs counter drop" ] : []),
 		"meta l4proto { tcp, udp } th dport { 53, 853 } counter reject with icmpx type admin-prohibited",
 		"ether saddr @direct_devices return",
 		"ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } return",

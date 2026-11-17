@@ -1,4 +1,5 @@
 /etc/prism/
+/etc/hotplug.d/dhcp/50-prism
 /etc/init.d/prism
 /etc/rc.d/S99prism
 /etc/rc.d/K10prism

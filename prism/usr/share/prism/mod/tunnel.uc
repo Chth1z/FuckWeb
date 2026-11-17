@@ -1,19 +1,39 @@
-// The tunnel (mihomo): config rendering, liveness, canary and fail-open.
+// The tunnel (mihomo): config rendering, per-device TProxy isolation,
+// node normalization/deduplication, and Zashboard bidirectional relay sync.
 //
-// The kernel has already classified traffic by the time mihomo sees a packet,
-// so its rule set is a single MATCH. nft decides what is tunnelled; mihomo
-// decides through which relay.
+// Each verified device profile owns a dedicated local TProxy listener (in-<uid>)
+// matched by IN-NAME to its Zashboard select group ("Alias [anchor_mac]").
+// Global PROXY and AUTO groups and chained proxies are permanently removed.
 
 import * as fs from "fs";
 import * as core from "../lib/core.uc";
 import { path } from "../lib/config.uc";
 import { MARK_TUNNEL_OUT } from "./kernel.uc";
+import * as identity from "./identity.uc";
 
 const BIN_GZ = core.SHARE + "/mihomo.gz";
 const SECRET = core.ETC + "/controller.secret";
-const SELECTED_FILE = core.STATE_DIR + "/selected.json";
 const SKIP_TYPES = [ "selector", "urltest", "direct", "block", "dns" ];
 const RELAY_RESOLVE_SEC = 600;
+
+const RENAME_NODES = {
+	"JP-Lightsail-owner": "JP-Lightsail-VLESS",
+	"JP-Lightsail-HY2-owner": "JP-Lightsail-HY2",
+};
+
+const TW_NODES = [
+	"台湾家宽01丨专线【3x】",
+	"台湾家宽02丨专线【3x】",
+	"台湾家宽02丨直连",
+];
+
+const KEEP_ORDER = [
+	"JP-Lightsail-VLESS",
+	"JP-Lightsail-HY2",
+	"US-LA-VLESS",
+	"US-LA-Hy2",
+	...TW_NODES,
+];
 
 export function bin() {
 	return core.RUN + "/mihomo";
@@ -94,50 +114,66 @@ const CONVERT = {
 CONVERT.hysteria = CONVERT.hysteria2;
 CONVERT.ss = CONVERT.shadowsocks;
 
+function is_emoji_or_space(s) {
+	for (let i = 0; i < length(s); ) {
+		let b = ord(s, i);
+		if (b == 0x20 || b == 0x09) {
+			i++;
+			continue;
+		}
+		// UTF-8 4-byte emoji / regional flags start with 0xF0..0xF4. Reject ASCII words & 3-byte CJK (0xE4..0xE9).
+		if (b >= 0xF0 && b <= 0xF4 && i + 4 <= length(s)) {
+			i += 4;
+			continue;
+		}
+		return false;
+	}
+	return true;
+}
+
+function strip_region_prefix(tag) {
+	let idx_open = index(tag ?? "", "【");
+	let idx_close = idx_open >= 0 ? index(tag, "】", idx_open) : -1;
+	if (idx_open >= 0 && idx_close > idx_open && idx_close < 28) {
+		let lead = substr(tag, 0, idx_open);
+		if (is_emoji_or_space(lead))
+			return trim(substr(tag, idx_close + length("】")));
+	}
+	return trim(tag ?? "");
+}
+
+export function normalize_tag(tag) {
+	let cleaned = strip_region_prefix(tag);
+	return RENAME_NODES[cleaned] ?? RENAME_NODES[tag] ?? cleaned;
+};
+
 export function load_relays(cfg) {
 	let raw = core.load_json(path(cfg.tunnel.relays), []);
 	if (type(raw) == "object")
 		raw = raw.outbounds ?? (raw.type ? [ raw ] : []);
-	let proxies = [], ips = [], hosts = [], seen = {}, by_name = {};
+	let by_name = {}, ips = [], hosts = [];
 	for (let n in raw) {
-		if (type(n) != "object" || !n.tag || !n.type || n.type in SKIP_TYPES || seen[n.tag])
+		if (type(n) != "object" || !n.tag || !n.type || n.type in SKIP_TYPES)
+			continue;
+		let name = normalize_tag(n.tag);
+		if (!(name in KEEP_ORDER) || by_name[name])
 			continue;
 		let convert = CONVERT[n.type];
 		if (!convert) {
 			core.err("relay %s: unsupported type %s", n.tag, n.type);
 			continue;
 		}
-		seen[n.tag] = true;
-		let p = { name: n.tag, server: n.server, port: n.server_port ?? 443, ...convert(n) };
-		by_name[n.tag] = p;
-		push(proxies, p);
+		let p = { name, server: n.server, port: n.server_port ?? 443, ...convert(n) };
+		by_name[name] = p;
 		let literal = match(n.server ?? "", /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/);
 		let list = literal ? ips : hosts;
 		if (length(n.server) && !(n.server in list))
 			push(list, n.server);
 	}
-	// Synthesize Lightsail (MPTCP) -> Taiwan direct residential chained backups
-	// so even if the Mainland IPLC entry fails, traffic routes Tokyo -> Taiwan
-	// directly (no China hairpin) and exits from the exact same Taiwan IP.
-	if (by_name["JP-Lightsail-owner"]) {
-		let chains = [
-			[ "🇨🇳【亚洲】台湾家宽01丨直连", "🇹🇼【亚洲】台湾家宽01丨专线【3x】", "🔗 台湾家宽01丨Lightsail链式" ],
-			[ "🇨🇳【亚洲】台湾家宽02丨直连", "🇹🇼【亚洲】台湾家宽02丨专线【3x】", "🔗 台湾家宽02丨Lightsail链式" ],
-		];
-		for (let spec in chains) {
-			let base = by_name[spec[0]] ?? by_name[spec[1]], tag = spec[2];
-			if (base && !seen[tag]) {
-				seen[tag] = true;
-				let cp = { ...base, name: tag, "dialer-proxy": "JP-Lightsail-owner" };
-				// Port-hopping avoids China UDP QoS on direct hops, but inside the
-				// already-encrypted Tokyo VLESS/MPTCP tunnel it only triggers XUDP
-				// stream churn and 2s+ cold TTFB / timeout spikes.
-				delete cp.ports;
-				by_name[tag] = cp;
-				push(proxies, cp);
-			}
-		}
-	}
+	let proxies = [];
+	for (let name in KEEP_ORDER)
+		if (by_name[name])
+			push(proxies, by_name[name]);
 	return { proxies, ips, hosts };
 };
 
@@ -153,44 +189,53 @@ function secret() {
 }
 
 function tw_order(names) {
-	let pref = [
-		"🇹🇼【亚洲】台湾家宽01丨专线【3x】",
-		"🔗 台湾家宽01丨Lightsail链式",
-		"🇨🇳【亚洲】台湾家宽01丨直连",
-		"🇹🇼【亚洲】台湾家宽02丨专线【3x】",
-		"🔗 台湾家宽02丨Lightsail链式",
-		"🇨🇳【亚洲】台湾家宽02丨直连",
-	];
 	let out = [];
-	for (let n in pref)
+	for (let n in TW_NODES)
 		if (n in names)
 			push(out, n);
-	for (let n in names)
-		if (!(n in out) && (index(n, "台湾") >= 0 || index(n, "台灣") >= 0 || index(n, "TW") >= 0))
-			push(out, n);
-	return length(out) ? out : slice(names);
+	return out;
 }
 
-function build_config(cfg, lan_ip, proxies) {
+function build_config(cfg, lan_ip, proxies, profiles) {
 	let c = cfg.tunnel, names = map(proxies, (p) => p.name);
 	let tw_list = tw_order(names);
 	let cn_doh = map(cfg.dns.cn_upstream, (u) => split(u, " ")[0]);
-	let groups = [];
-	if (length(names)) {
+	let groups = [], rules = [];
+	let listeners = [
+		{ name: "mixed-in", type: "mixed", port: c.mixed_port, listen: "127.0.0.1" },
+	];
+
+	let has_tw = length(tw_list) > 0;
+	if (has_tw) {
 		let hb = min(int(c.test_interval), 60);
 		push(groups, {
-			name: "TW-HOME", type: "fallback", url: c.test_url, interval: hb,
-			timeout: 3000, lazy: false, "expected-status": 204, proxies: tw_list,
-		});
-		push(groups, {
-			name: "AUTO", type: "fallback", url: c.test_url, interval: hb,
-			timeout: 3000, lazy: false, "expected-status": 204, proxies: tw_list,
+			name: "TW-HOME", type: "fallback", url: c.test_url || "https://cp.cloudflare.com/generate_204",
+			interval: hb, timeout: 3000, lazy: false, "expected-status": 204, proxies: tw_list,
 		});
 	}
-	push(groups, {
-		name: "PROXY", type: "select",
-		proxies: length(names) ? [ "TW-HOME", "AUTO", ...names ] : [ "DIRECT" ],
-	});
+
+	let choices = has_tw ? [ "TW-HOME", ...names ] : slice(names);
+	let sorted_profiles = sort(slice(profiles ?? []), (a, b) => (a.port ?? 0) - (b.port ?? 0));
+	for (let p in sorted_profiles) {
+		if (!p.uid || !p.port || !p.group_name)
+			continue;
+		let lname = "in-" + p.uid;
+		push(listeners, { name: lname, type: "tproxy", port: p.port, listen: c.listen_addr, udp: true });
+		push(groups, {
+			name: p.group_name,
+			type: "select",
+			proxies: length(choices) ? choices : [ "TW-HOME" ],
+		});
+		push(rules, sprintf("IN-NAME,%s,%s", lname, p.group_name));
+	}
+
+	let dns_proxy_tag = has_tw ? "TW-HOME" : (names[0] ?? "");
+	if (has_tw)
+		push(rules, "IN-NAME,mixed-in,TW-HOME");
+	else if (length(names))
+		push(rules, "IN-NAME,mixed-in," + names[0]);
+	push(rules, "MATCH,REJECT");
+
 	return {
 		mode: "rule",
 		"log-level": "error",
@@ -209,7 +254,7 @@ function build_config(cfg, lan_ip, proxies) {
 		tun: { enable: false },
 		sniffer: {
 			enable: true,
-			"override-destination": false,
+			"override-destination": true,
 			"parse-pure-ip": false,
 			"force-dns-mapping": true,
 			sniff: { HTTP: { ports: [ 80, 8080 ] }, TLS: { ports: [ 443, 8443 ] } },
@@ -228,20 +273,17 @@ function build_config(cfg, lan_ip, proxies) {
 			"respect-rules": false,
 			"default-nameserver": cn_doh,
 			"proxy-server-nameserver": cn_doh,
-			nameserver: length(names) ? [
-				"https://9.9.9.9/dns-query#PROXY",
-				"https://149.112.112.112/dns-query#PROXY",
-				"https://94.140.14.14/dns-query#PROXY",
-				"https://208.67.222.222/dns-query#PROXY",
+			nameserver: length(dns_proxy_tag) ? [
+				"https://9.9.9.9/dns-query#" + dns_proxy_tag,
+				"https://149.112.112.112/dns-query#" + dns_proxy_tag,
+				"https://94.140.14.14/dns-query#" + dns_proxy_tag,
+				"https://208.67.222.222/dns-query#" + dns_proxy_tag,
 			] : cn_doh,
 		},
-		listeners: [
-			{ name: "mixed-in", type: "mixed", port: c.mixed_port, listen: "127.0.0.1" },
-			{ name: "tproxy-in", type: "tproxy", port: c.tproxy_port, listen: c.listen_addr, udp: true },
-		],
+		listeners,
 		proxies,
 		"proxy-groups": groups,
-		rules: [ "MATCH,PROXY" ],
+		rules,
 	};
 }
 
@@ -257,17 +299,20 @@ function extract_bin() {
 	return fs.rename(b + ".tmp", b) == true;
 }
 
-// Render and validate the config. Returns { changed, relays, ips, hosts } or null.
+// Render and validate the config. Returns { changed, relays, ips, hosts, expected_ports } or null.
 // The live file is replaced only by a config mihomo itself accepts.
-export function prepare(cfg, lan_ip) {
+export function prepare(cfg, lan_ip, profiles) {
 	let relays = load_relays(cfg);
 	if (!length(relays.proxies))
-		return { changed: false, relays: 0, ips: [], hosts: [] };
+		return { changed: false, relays: 0, ips: [], hosts: [], expected_ports: [] };
 	if (!extract_bin())
 		return null;
+	profiles ??= identity.load_store()?.profiles ?? [];
 	let file = core.outpath("mihomo.yaml");
-	let text = sprintf("%.2J\n", build_config(cfg, lan_ip, relays.proxies));
-	let res = { changed: false, relays: length(relays.proxies), ips: relays.ips, hosts: relays.hosts };
+	let rendered = build_config(cfg, lan_ip, relays.proxies, profiles);
+	let text = sprintf("%.2J\n", rendered);
+	let expected_ports = map(filter(rendered.listeners, (l) => l.type == "tproxy"), (l) => l.port);
+	let res = { changed: false, relays: length(relays.proxies), ips: relays.ips, hosts: relays.hosts, expected_ports };
 	if (fs.readfile(file) == text)
 		return res;
 	let draft = file + ".draft";
@@ -296,36 +341,94 @@ function api(cfg, lan_ip, method, url, body) {
 	return { status: int(pop(lines)), body: join("\n", lines) };
 }
 
-export function save_selected(name) {
-	if (length(name))
-		core.save_json(SELECTED_FILE, { name, ts: time() });
+export function urlenc(s) {
+	let out = "";
+	for (let i = 0; i < length(s); i++) {
+		let ch = substr(s, i, 1);
+		out += match(ch, /^[A-Za-z0-9_.~-]$/) ? ch : sprintf("%%%02X", ord(s, i));
+	}
+	return out;
 };
 
-export function restore_selected(cfg, lan_ip) {
-	let saved = core.load_json(SELECTED_FILE, {})?.name;
-	let target = length(saved) ? saved : "TW-HOME";
-	api(cfg, lan_ip, "PUT", "/proxies/PROXY", sprintf("%J", { name: target }));
+function parse_json_obj(s) {
+	try {
+		return length(trim(s ?? "")) ? json(s) : null;
+	}
+	catch (e) {
+		return null;
+	}
+}
+
+export function save_selected(uid_or_group, name) {
+	if (!length(name ?? ""))
+		return;
+	let relays = identity.load_relays_state();
+	let key = length(uid_or_group) ? uid_or_group : "_tw_home";
+	if (relays[key] != name) {
+		relays[key] = name;
+		identity.save_relays_state(relays);
+	}
 };
 
-export function reload(cfg, lan_ip) {
+export function restore_selected(cfg, lan_ip, profiles) {
+	profiles ??= identity.load_store()?.profiles ?? [];
+	let relays = identity.load_relays_state();
+	let res = api(cfg, lan_ip, "GET", "/proxies");
+	let live = parse_json_obj(res.body)?.proxies;
+	if (!live)
+		return false;
+	for (let p in profiles) {
+		let g = live[p.group_name];
+		if (!g)
+			continue;
+		let want = relays[p.uid] ?? "TW-HOME";
+		if (!(want in (g.all ?? [])))
+			want = ("TW-HOME" in (g.all ?? [])) ? "TW-HOME" : (g.all?.[0] ?? "");
+		if (length(want) && g.now != want)
+			api(cfg, lan_ip, "PUT", "/proxies/" + urlenc(p.group_name), sprintf("%J", { name: want }));
+	}
+	return true;
+};
+
+// Poll live Zashboard selections from Mihomo RAM and persist only when modified.
+export function sync_selected(cfg, lan_ip, profiles) {
+	profiles ??= identity.load_store()?.profiles ?? [];
+	let res = api(cfg, lan_ip, "GET", "/proxies");
+	let live = parse_json_obj(res.body)?.proxies;
+	if (!live)
+		return false;
+	let saved = identity.load_relays_state();
+	let next = { ...saved }, changed = false;
+	if (live["TW-HOME"]?.now && next._tw_home != live["TW-HOME"].now) {
+		next._tw_home = live["TW-HOME"].now;
+		changed = true;
+	}
+	for (let p in profiles) {
+		let now_sel = live[p.group_name]?.now;
+		if (length(now_sel) && next[p.uid] != now_sel) {
+			next[p.uid] = now_sel;
+			changed = true;
+		}
+	}
+	if (changed)
+		identity.save_relays_state(next);
+	return changed;
+};
+
+export function reload(cfg, lan_ip, profiles) {
 	let r = api(cfg, lan_ip, "PUT", "/configs?force=true", sprintf("%J", { path: core.RUN + "/mihomo.yaml" }));
 	let ok = r.status == 204 || r.status == 200;
 	if (ok)
-		restore_selected(cfg, lan_ip);
+		restore_selected(cfg, lan_ip, profiles);
 	core.event("TUNNEL reload http=%d", r.status);
 	return ok;
 };
 
-function urlenc(s) {
-	return replace(s, /[^A-Za-z0-9_.~-]/g, (c) => sprintf("%%%02X", ord(c)));
-}
-
-// Delay through PROXY (falling back to AUTO), or a real request through the
-// mixed port when the API cannot answer.
+// Delay through TW-HOME (falling back to JP-Lightsail-VLESS or mixed-in).
 function canary(cfg, lan_ip) {
 	let c = cfg.tunnel;
-	for (let grp in [ "PROXY", "AUTO" ]) {
-		let r = api(cfg, lan_ip, "GET", sprintf("/proxies/%s/delay?timeout=%d&url=%s", grp, c.canary_timeout, urlenc(c.canary_url)));
+	for (let grp in [ "TW-HOME", "JP-Lightsail-VLESS", "US-LA-VLESS" ]) {
+		let r = api(cfg, lan_ip, "GET", sprintf("/proxies/%s/delay?timeout=%d&url=%s", urlenc(grp), c.canary_timeout, urlenc(c.canary_url)));
 		let m = match(r.body, /"delay":([0-9]+)/);
 		if (m && int(m[1]) > 0)
 			return int(m[1]);
@@ -335,11 +438,27 @@ function canary(cfg, lan_ip) {
 	return (code == "204" || code == "200") ? 1 : 0;
 }
 
-// Addresses of every relay, so a LAN client running its own proxy client
-// reaches them directly instead of being proxied twice. Hostnames are
-// resolved here, through the same resolver the LAN uses, and retained in a
-// 24h sliding window so CDN/GTM round-robin rotation does not churn @relay4,
-// while also keeping per-host mappings so @relay_ports avoids cross-products.
+function listening_ports() {
+	let ports = {};
+	for (let line in split(core.sh("netstat -lnt 2>/dev/null").out, "\n")) {
+		let m = match(line, /:([0-9]+)[ \t]+.*LISTEN/);
+		if (m)
+			ports[m[1]] = true;
+	}
+	return ports;
+}
+
+function all_expected_ready(ready, mixed_port, expected_ports) {
+	if (!ready["" + mixed_port])
+		return false;
+	for (let p in expected_ports ?? [])
+		if (!ready["" + p])
+			return false;
+	return true;
+}
+
+// Addresses of every active relay, so a LAN client running its own proxy client
+// reaches them directly instead of being proxied twice.
 function relay_addresses(prep, st, now) {
 	let key = join(" ", prep.hosts);
 	let cache = st.resolved ?? {};
@@ -380,7 +499,6 @@ function relay_addresses(prep, st, now) {
 			cache = { key, by_host_seen: clean_host_seen, by_host, ips };
 		else
 			cache = { ...cache, by_host_seen: clean_host_seen, by_host };
-		// Nothing resolved (resolver still starting): try again in a minute.
 		cache.ts = any_found ? now : now - RELAY_RESOLVE_SEC + 60;
 		st.resolved = cache;
 	}
@@ -390,16 +508,18 @@ function relay_addresses(prep, st, now) {
 // Returns the tunnel plan for this pass:
 //   enabled         the operator wants a tunnel and there are relays
 //   on              traffic should be handed to mihomo right now
+//   ready_ports     map of listening TProxy ports verified live in netstat
 //   relay_ips       relay addresses LAN clients may reach directly
 //   relay_host_ips  per-hostname resolved relay addresses for @relay_ports
 export function observe(ctx) {
 	let cfg = ctx.cfg, c = cfg.tunnel, now = ctx.now;
 	let st = (ctx.st.tunnel ??= { since: 0, fails: 0, open: false, checked: 0, delay: 0 });
-	let plan = { enabled: false, on: false, running: false, relays: 0, relay_ips: [], relay_host_ips: {} };
+	let profiles = ctx.identity?.profiles ?? identity.load_store()?.profiles ?? [];
+	let plan = { enabled: false, on: false, running: false, relays: 0, relay_ips: [], relay_host_ips: {}, ready_ports: {} };
 	if (!c.enabled)
 		return plan;
 
-	let prep = prepare(cfg, ctx.facts.lan_ip);
+	let prep = prepare(cfg, ctx.facts.lan_ip, profiles);
 	if (!prep || !prep.relays)
 		return plan;
 	plan.enabled = true;
@@ -408,32 +528,43 @@ export function observe(ctx) {
 	plan.relay_ips = addr.ips;
 	plan.relay_host_ips = addr.by_host;
 
-	// A mihomo that was just started needs a moment to bind. Waiting here
-	// keeps the first pass after boot from installing a direct-only table.
-	let listening = () => core.ok(sprintf("netstat -lnt | grep -q ':%d '", c.tproxy_port));
-	for (let i = 0; i < 20 && core.pidof("mihomo") && !listening(); i++)
+	// Wait briefly until Mihomo binds mixed-in and expected per-device TProxy ports.
+	let ready = listening_ports();
+	let min_check = (p) => p["" + c.mixed_port] && (!length(prep.expected_ports) || p["" + prep.expected_ports[0]]);
+	for (let i = 0; i < 20 && core.pidof("mihomo") && !min_check(ready); i++) {
 		sleep(500);
-	plan.running = core.pidof("mihomo") && listening();
+		ready = listening_ports();
+	}
+	plan.running = core.pidof("mihomo") && min_check(ready);
 	if (!plan.running) {
-		// Up but deaf: mihomo skips a listener it cannot bind and keeps
-		// running. Its address exists by now, so a restart fixes it.
 		if (core.pidof("mihomo") && now - (st.restarted ?? 0) >= 120) {
 			st.restarted = now;
-			core.event("TUNNEL tproxy port %d not bound, restarting mihomo", c.tproxy_port);
+			core.event("TUNNEL tproxy listeners not bound, restarting mihomo");
 			core.act("ubus call service signal '{\"name\":\"prism\",\"instance\":\"mihomo\",\"signal\":15}'");
 		}
 		st.since = 0;
 		ctx.want_service_sync = true;
 		plan.on = !c.fail_open;
+		plan.ready_ports = ready;
 		return plan;
 	}
 	if (!st.since) {
 		st.since = now;
 		if (!core.is_dry())
-			restore_selected(cfg, ctx.facts.lan_ip);
+			restore_selected(cfg, ctx.facts.lan_ip, profiles);
 	}
-	if (prep.changed && !core.is_dry())
-		reload(cfg, ctx.facts.lan_ip);
+	if (prep.changed && !core.is_dry()) {
+		reload(cfg, ctx.facts.lan_ip, profiles);
+		for (let i = 0; i < 12; i++) {
+			ready = listening_ports();
+			if (all_expected_ready(ready, c.mixed_port, prep.expected_ports))
+				break;
+			sleep(250);
+		}
+	}
+	plan.ready_ports = ready;
+	if (!all_expected_ready(ready, c.mixed_port, prep.expected_ports))
+		ctx.want_rescan = true;
 
 	if (st.open || st.fails > 0 || now - st.checked >= c.canary_interval) {
 		st.checked = now;

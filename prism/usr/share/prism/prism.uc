@@ -19,6 +19,7 @@ import * as host from "./mod/host.uc";
 import * as wifi from "./mod/wifi.uc";
 import * as led from "./mod/led.uc";
 import * as doctor from "./mod/doctor.uc";
+import * as identity from "./mod/identity.uc";
 
 const STATE = core.RUN + "/state.json";
 const STATUS = core.RUN + "/status.json";
@@ -109,6 +110,7 @@ function reconcile(ctx) {
 	ctx.strands = strands.discover(ctx);
 	kernel.plumb(ctx);
 	ctx.health = strands.check(ctx);
+	ctx.identity = identity.reconcile(ctx);
 	ctx.tunnel = tunnel.observe(ctx);
 	ctx.weave = weave.plan(ctx);
 	kernel.apply(ctx);
@@ -219,8 +221,48 @@ const COMMANDS = {
 			fs.unlink(STOPPED);
 			kernel.listen_addr(ctx.cfg);
 			if (ctx.cfg.tunnel.enabled)
-				tunnel.prepare(ctx.cfg, ctx.facts.lan_ip);
+				tunnel.prepare(ctx.cfg, ctx.facts.lan_ip, identity.load_store()?.profiles ?? []);
 			dns.bootstrap(ctx.cfg);
+			return 0;
+		},
+	},
+	devices: {
+		help: "show enrolled device profiles and Mode A quarantine list",
+		run: () => {
+			let res = live("devices") ?? identity.view(context({}).cfg, [], {});
+			printf("%-14s %-17s %-6s %-8s %-15s %-22s %s\n", "UID", "ANCHOR MAC", "PORT", "POLICY", "IP", "RELAY", "NAME / STATUS");
+			for (let d in (res.devices ?? []))
+				printf("%-14s %-17s %-6d %-8s %-15s %-22s %s (%d MACs%s)\n",
+					d.uid ?? "-", d.mac, d.port ?? 0, d.policy ?? "auto",
+					d.ip ?? "-", d.relay ?? "-", d.name || d.host || "-",
+					length(d.bound_macs ?? [ d.mac ]), d.online ? ", online" : "");
+			if (length(res.quarantine ?? [])) {
+				print("\nQuarantined (Mode A blocked):\n");
+				for (let q in res.quarantine)
+					printf("  %-17s %-15s %-6s score=%-3d (%s) host=%s\n",
+						q.mac, q.ip || "-", q.link || "-", q.score ?? 0, q.reason ?? "-", q.host || "-");
+			}
+			return 0;
+		},
+	},
+	claim: {
+		help: "claim <mac> <new|merge:<uid>|forget> [alias]",
+		run: (args) => {
+			let mac = args[0] ?? "", how = args[1] ?? "new", alias = args[2] ?? "";
+			if (!identity.is_mac(mac)) {
+				warn("usage: prism claim <mac> <new|merge:<uid>|forget> [alias]\n");
+				return 1;
+			}
+			let act = how == "forget" ? "forget" : (index(how, "merge:") == 0 ? "merge" : "new");
+			let uid = act == "merge" ? substr(how, 6) : "";
+			let ctx = context({});
+			let r = identity.claim({ mac, action: act, target_uid: uid, alias }, ctx.cfg);
+			if (!r.ok) {
+				warn("claim failed: " + (r.error ?? "unknown") + "\n");
+				return 1;
+			}
+			printf("%.2J\n", r);
+			kick();
 			return 0;
 		},
 	},

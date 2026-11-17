@@ -53,6 +53,8 @@ export function run(ctx) {
 	fail("dns_hijack", section_has(tbl_prism, "chain dns_hijack", "redirect"));
 	if (!cfg.tunnel.fail_open) {
 		fail("privacy_guard", section_has(tbl_guard, "chain forward", "blocked-fallback"));
+		fail("privacy_verified_pairs", section_has(tbl_guard, "chain forward", "@verified_pairs") &&
+			section_has(tbl_prism, "chain classify", "@verified_pairs"));
 		fail("privacy_guard_persistent", fs.stat(path("guard.nft")) &&
 			fs.stat("/usr/share/nftables.d/ruleset-post/30-prism-guard.nft") &&
 			uci.get("firewall", "@defaults[0]", "auto_includes") != "0");
