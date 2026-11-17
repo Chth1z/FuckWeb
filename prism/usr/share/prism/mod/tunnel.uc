@@ -305,6 +305,21 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 	};
 }
 
+function sanitize_cache_db() {
+	let p = core.RUN + "/cache.db";
+	let f = fs.open(p, "r");
+	if (!f)
+		return;
+	let hdr = f.read(20) ?? "";
+	f.close();
+	// Remove non-bbolt cache.db (e.g. legacy SmartDNS collision or truncated DB) before Mihomo reads it.
+	let valid_bbolt = length(hdr) >= 20
+		&& ord(hdr, 16) == 0xed && ord(hdr, 17) == 0xda
+		&& ord(hdr, 18) == 0x0c && ord(hdr, 19) == 0xed;
+	if (length(hdr) > 0 && !valid_bbolt)
+		fs.unlink(p);
+}
+
 function extract_bin() {
 	let b = bin();
 	if (fs.access(b, "x") && core.ok(b + " -v"))
@@ -325,6 +340,7 @@ export function prepare(cfg, lan_ip, profiles) {
 		return { changed: false, relays: 0, ips: [], hosts: [], expected_ports: [] };
 	if (!extract_bin())
 		return null;
+	sanitize_cache_db();
 	profiles ??= identity.load_store()?.profiles ?? [];
 	let file = core.outpath("mihomo.yaml");
 	let rendered = build_config(cfg, lan_ip, relays.proxies, profiles);
@@ -469,13 +485,18 @@ export function sync_selected(cfg, lan_ip, profiles) {
 	});
 };
 
-export function reload(cfg, lan_ip, profiles) {
+function reload_raw(cfg, lan_ip, profiles) {
+	sanitize_cache_db();
 	let r = api(cfg, lan_ip, "PUT", "/configs?force=true", sprintf("%J", { path: core.RUN + "/mihomo.yaml" }));
 	let ok = r.status == 204 || r.status == 200;
 	if (ok)
 		ok = restore_selected(cfg, lan_ip, profiles);
 	core.event("TUNNEL reload http=%d restored=%d", r.status, ok ? 1 : 0);
-	return ok;
+	return { ok, status: r.status };
+}
+
+export function reload(cfg, lan_ip, profiles) {
+	return reload_raw(cfg, lan_ip, profiles).ok;
 };
 
 // Delay through TW-HOME (falling back to working VPS relays or mixed-in).
@@ -608,11 +629,25 @@ export function observe(ctx) {
 	if (prep.changed && !core.is_dry()) {
 		if (st.since && st.pid == pid)
 			sync_selected(cfg, ctx.facts.lan_ip);
-		let ok = reload(cfg, ctx.facts.lan_ip, profiles);
+		let rr = reload_raw(cfg, ctx.facts.lan_ip, profiles);
+		let ok = rr.ok;
 		plan.restored = ok;
 		if (ok) {
 			st.since ||= now;
 			st.pid = pid;
+		}
+		else if ((rr.status == 0 || rr.status >= 500) && now - (st.restarted ?? 0) >= 60) {
+			st.restarted = now;
+			st.since = 0;
+			st.pid = "";
+			fs.unlink(core.RUN + "/cache.db");
+			core.event("TUNNEL reload http=%d failed, restarting mihomo", rr.status);
+			core.act("ubus call service signal '{\"name\":\"prism\",\"instance\":\"mihomo\",\"signal\":15}'");
+			ctx.want_service_sync = true;
+			ctx.want_rescan = true;
+			plan.ready_ports = listening_ports();
+			plan.on = !c.fail_open;
+			return plan;
 		}
 		else {
 			st.pid = "";

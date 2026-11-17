@@ -50,7 +50,8 @@ function smartdns_conf(cfg, proxy_on) {
 		"server-name prism-dns",
 		"response-mode " + d.response_mode,
 		sprintf("cache-size %d", d.cache_size),
-		sprintf("cache-file %s/cache.db", core.RUN),
+		// Keep SmartDNS cache separate from Mihomo's bbolt <homedir>/cache.db.
+		sprintf("cache-file %s/smartdns.cache", core.RUN),
 		"cache-persist yes",
 		"cache-checkpoint-time 1800",
 		"prefetch-domain " + yn(d.prefetch),
