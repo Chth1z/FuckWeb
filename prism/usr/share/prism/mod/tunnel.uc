@@ -208,10 +208,8 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 
 	let has_tw = length(tw_list) > 0;
 	if (has_tw) {
-		let hb = min(int(c.test_interval), 60);
 		push(groups, {
-			name: "TW-HOME", type: "fallback", url: c.test_url || "https://cp.cloudflare.com/generate_204",
-			interval: hb, timeout: 3000, lazy: false, "expected-status": 204, proxies: tw_list,
+			name: "TW-HOME", type: "select", proxies: tw_list,
 		});
 	}
 
@@ -378,6 +376,14 @@ export function restore_selected(cfg, lan_ip, profiles) {
 	let live = parse_json_obj(res.body)?.proxies;
 	if (!live)
 		return false;
+	let tw_g = live["TW-HOME"];
+	if (tw_g) {
+		let want_tw = relays._tw_home ?? "";
+		if (!(want_tw in (tw_g.all ?? [])))
+			want_tw = tw_g.all?.[0] ?? "";
+		if (length(want_tw) && tw_g.now != want_tw)
+			api(cfg, lan_ip, "PUT", "/proxies/TW-HOME", sprintf("%J", { name: want_tw }));
+	}
 	for (let p in profiles) {
 		let g = live[p.group_name];
 		if (!g)
