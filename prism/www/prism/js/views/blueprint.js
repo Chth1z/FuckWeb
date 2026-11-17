@@ -1411,11 +1411,6 @@ export function renderBlueprint() {
     ? `${(liveFlow.totPkts / 1e6).toFixed(2)}M pkts`
     : `${(liveFlow.totPkts / 1000).toFixed(1)}k pkts`);
   renderClassifyStrip();
-  const mixTot = Math.max(1, liveFlow.totPkts);
-  const domShare = Math.round((liveFlow.domPkts / mixTot) * 100);
-  const tunShare = Math.round((liveFlow.tunPkts / mixTot) * 100);
-  const dropShare = Math.max(0, (((liveFlow.dropPkts ?? liveFlow.quicPkts) / mixTot) * 100)).toFixed(1);
-  setTxt('#bp-classify-mix', `直連 ${domShare}% · 歸籠 ${tunShare}% · 阻斷 ${dropShare}%`);
   setTxt('#bp-classify-foot', `prerouting · ${(S.rules?.rules || []).length} rules`);
   setTxt('#bp-classify-bytes', `累計 ${fmtBytes(liveFlow.totBytes)}`);
 
