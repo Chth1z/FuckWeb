@@ -84,6 +84,7 @@ function snapshot(ctx, report, led_color) {
 		weave: { policy: ctx.cfg.weave.policy, affinity: ctx.cfg.weave.affinity, slots: ctx.weave.slots },
 		tunnel: {
 			enabled: ctx.tunnel.enabled, running: ctx.tunnel.running, on: ctx.tunnel.on,
+			restored: !!ctx.tunnel.restored, pid: ctx.tunnel.pid ?? "",
 			relays: ctx.tunnel.relays, fail_open: !!st.tunnel?.open,
 			canary_ms: st.tunnel?.delay ?? 0, canary_fails: st.tunnel?.fails ?? 0,
 		},
@@ -271,9 +272,12 @@ const COMMANDS = {
 		run: () => locked(() => {
 			let ctx = context({});
 			fs.writefile(STOPPED, "");
+			if (ctx.cfg.tunnel.enabled && core.pidof("mihomo"))
+				tunnel.sync_selected(ctx.cfg, ctx.facts.lan_ip, identity.load_store()?.profiles ?? []);
 			ctx.strands = [];
 			kernel.teardown(ctx);
 			dns.teardown(ctx);
+			delete ctx.st.tunnel;
 			core.save_json(STATE, ctx.st, 0o600);
 			return 0;
 		}, 90),

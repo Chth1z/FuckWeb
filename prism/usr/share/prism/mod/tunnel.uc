@@ -372,8 +372,12 @@ export function save_selected(uid_or_group, name) {
 export function restore_selected(cfg, lan_ip, profiles) {
 	profiles ??= identity.load_store()?.profiles ?? [];
 	let relays = identity.load_relays_state();
-	let res = api(cfg, lan_ip, "GET", "/proxies");
-	let live = parse_json_obj(res.body)?.proxies;
+	let live = null;
+	for (let i = 0; i < 4 && !live; i++) {
+		live = parse_json_obj(api(cfg, lan_ip, "GET", "/proxies").body)?.proxies;
+		if (!live && i < 3)
+			sleep(250);
+	}
 	if (!live)
 		return false;
 	let tw_g = live["TW-HOME"];
@@ -522,7 +526,7 @@ export function observe(ctx) {
 	let cfg = ctx.cfg, c = cfg.tunnel, now = ctx.now;
 	let st = (ctx.st.tunnel ??= { since: 0, fails: 0, open: false, checked: 0, delay: 0 });
 	let profiles = ctx.identity?.profiles ?? identity.load_store()?.profiles ?? [];
-	let plan = { enabled: false, on: false, running: false, relays: 0, relay_ips: [], relay_host_ips: {}, ready_ports: {} };
+	let plan = { enabled: false, on: false, running: false, restored: false, pid: "", relays: 0, relay_ips: [], relay_host_ips: {}, ready_ports: {} };
 	if (!c.enabled)
 		return plan;
 
@@ -550,24 +554,51 @@ export function observe(ctx) {
 			core.act("ubus call service signal '{\"name\":\"prism\",\"instance\":\"mihomo\",\"signal\":15}'");
 		}
 		st.since = 0;
+		st.pid = "";
 		ctx.want_service_sync = true;
 		plan.on = !c.fail_open;
 		plan.ready_ports = ready;
 		return plan;
 	}
-	if (!st.since) {
-		st.since = now;
-		if (!core.is_dry())
-			restore_selected(cfg, ctx.facts.lan_ip, profiles);
-	}
+	let pid = trim(core.sh("pidof mihomo").out);
+	plan.pid = pid;
 	if (prep.changed && !core.is_dry()) {
-		reload(cfg, ctx.facts.lan_ip, profiles);
+		let ok = reload(cfg, ctx.facts.lan_ip, profiles);
+		plan.restored = ok;
+		if (ok) {
+			st.since ||= now;
+			st.pid = pid;
+		}
+		else {
+			st.pid = "";
+			ctx.want_rescan = true;
+		}
 		for (let i = 0; i < 12; i++) {
 			ready = listening_ports();
 			if (all_expected_ready(ready, c.mixed_port, prep.expected_ports))
 				break;
 			sleep(250);
 		}
+	}
+	else if (!st.since || st.pid != pid || ctx.boot) {
+		if (!core.is_dry()) {
+			let ok = restore_selected(cfg, ctx.facts.lan_ip, profiles);
+			plan.restored = ok;
+			if (ok) {
+				st.since ||= now;
+				st.pid = pid;
+			}
+			else {
+				st.pid = "";
+				ctx.want_rescan = true;
+			}
+		}
+		else {
+			plan.restored = true;
+		}
+	}
+	else {
+		plan.restored = true;
 	}
 	plan.ready_ports = ready;
 	if (!all_expected_ready(ready, c.mixed_port, prep.expected_ports))

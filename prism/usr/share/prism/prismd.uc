@@ -36,7 +36,7 @@ let load = {};                          // dev -> { down, up, bucket, flows }
 let flow_counts = {};                   // strand id -> ESTABLISHED flow count
 let lan = { list: [], rate: {}, samples: 0 };
 let sampled = 0, series_at = 0, pattern_at = 0;
-let running = false, again = false, first = true;
+let running = false, again = false, first = true, tunnel_ready_for_sync = false;
 let reconcile_timer, sample_timer;
 let kick_pending = false;
 
@@ -105,7 +105,7 @@ function sample_devices(dt) {
 	}
 	if (lan.samples % DEVICE_SCAN == 0)
 		lan.list = devices.scan(cfg);
-	if (lan.samples % 5 == 1 && snapshot?.tunnel?.running && !running)
+	if (tunnel_ready_for_sync && !running && (lan.samples % 2 == 1))
 		tunnel.sync_selected(cfg, snapshot?.lan_ip ?? "192.168.16.1", identity.load_store()?.profiles ?? []);
 	lan.samples++;
 }
@@ -219,6 +219,7 @@ reconcile = function() {
 		running = false;
 		cfg = config.load();
 		snapshot = core.load_json(STATUS, snapshot);
+		tunnel_ready_for_sync = !!(snapshot?.tunnel?.running && snapshot?.tunnel?.restored);
 		pattern = weave.current();
 		vip_lane = weave.current_vip();
 		relay(monotonic());
