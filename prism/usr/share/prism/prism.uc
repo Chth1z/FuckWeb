@@ -157,6 +157,10 @@ function reconcile(ctx) {
 	return report;
 }
 
+function clean_tok(s) {
+	return trim(replace("" + (s ?? ""), /[\r\n\u00a0\u200b-\u200d\ufeff]/g, ""));
+}
+
 // wait_s > 0 queues behind a running pass instead of giving up.
 function locked(fn, wait_s) {
 	core.init_dirs();
@@ -167,7 +171,7 @@ function locked(fn, wait_s) {
 	}
 	if (!lock) {
 		// Normal for the periodic pass and fallback `doctor`: someone is already doing its job.
-		if (!(ARGV[0] in [ "reconcile", "doctor" ]))
+		if (!(clean_tok(ARGV[0]) in [ "reconcile", "doctor" ]))
 			warn("prism: another pass holds the lock\n");
 		return 0;
 	}
@@ -445,13 +449,19 @@ function usage() {
 	return 1;
 }
 
-let cmd = COMMANDS[ARGV[0]];
+function sanitize_argv(list) {
+	// Strip CR, NBSP, and zero-width chars often introduced by copy/paste into Windows SSH terminals.
+	return map(list ?? [], (a, idx) => idx == 0 ? clean_tok(a) : replace("" + a, /[\r\n\u00a0\u200b-\u200d\ufeff]/g, ""));
+}
+
+let clean_argv = sanitize_argv(ARGV);
+let cmd = COMMANDS[clean_argv[0]];
 let rc = 1;
 try {
-	rc = cmd ? cmd.run(slice(ARGV, 1)) : usage();
+	rc = cmd ? cmd.run(slice(clean_argv, 1)) : usage();
 }
 catch (e) {
-	core.err("%s: %s\n%s", ARGV[0], e.message, join("\n", map(e.stacktrace ?? [], (f) => sprintf("  at %s:%d", f.filename ?? "?", f.line ?? 0))));
+	core.err("%s: %s\n%s", clean_argv[0], e.message, join("\n", map(e.stacktrace ?? [], (f) => sprintf("  at %s:%d", f.filename ?? "?", f.line ?? 0))));
 	rc = 2;
 }
 exit(rc ?? 0);
