@@ -24,7 +24,7 @@ const SCHEMA = {
 		// HTTP request with its own 200 page, so 200 cannot prove a login.
 		probe_url: "http://connect.rom.miui.com/generate_204",
 		probe_expect: 204,
-		probe_timeout: 3,
+		probe_timeout: 4,
 		probe_interval: 45,
 		fail_keep: 2,
 		auth_batch: 6,

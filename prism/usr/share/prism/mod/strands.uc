@@ -139,7 +139,7 @@ function probe(set, cfg) {
 			push(cmds, "ucode -e 'sleep(60)'");
 		let s = set[i];
 		push(cmds, sprintf(
-			"curl -4 --interface %s -m %d --connect-timeout 2 -sS -o /dev/null -w '%s %%{http_code} %%{time_connect} %%{time_starttransfer} %%{time_namelookup}\\n' %s 2>/dev/null &",
+			"curl -4 --interface %s -m %d --connect-timeout 3 -sS -o /dev/null -w '%s %%{http_code} %%{time_connect} %%{time_starttransfer} %%{time_namelookup}\\n' %s 2>/dev/null &",
 			s.dev, cfg.probe_timeout, s.dev, core.shq(cfg.probe_url)));
 	}
 	push(cmds, "wait");
@@ -208,11 +208,13 @@ export function check(ctx) {
 			h.code = r.code;
 			let sloss = r.loss ?? 0.0;
 			if (!h.probed || h.loss == null)
-				h.loss = sloss;
-			else if (sloss >= 0.5)
+				h.loss = (r.code == cfg.probe_expect) ? min(sloss, 0.15) : sloss;
+			else if (r.code != cfg.probe_expect)
 				h.loss = max(0.45 * sloss + 0.55 * h.loss, sloss * 0.7);
+			else if (sloss >= 0.5)
+				h.loss = 0.22 * sloss + 0.78 * h.loss;
 			else if (sloss > 0)
-				h.loss = 0.40 * sloss + 0.60 * h.loss;
+				h.loss = 0.35 * sloss + 0.65 * h.loss;
 			else
 				h.loss = h.loss * 0.35;
 			if (h.loss < 0.002)

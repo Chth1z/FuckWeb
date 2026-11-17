@@ -52,6 +52,7 @@ function smartdns_conf(cfg, proxy_on) {
 		sprintf("cache-size %d", d.cache_size),
 		sprintf("cache-file %s/cache.db", core.RUN),
 		"cache-persist yes",
+		"cache-checkpoint-time 1800",
 		"prefetch-domain " + yn(d.prefetch),
 		"serve-expired " + yn(d.serve_expired),
 		"serve-expired-reply-ttl 2",

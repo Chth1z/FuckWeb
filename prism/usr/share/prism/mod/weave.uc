@@ -274,7 +274,7 @@ const POLICIES = {
 			let l = load[s.dev] ?? {}, b = l.bucket ?? { tokens: BURST_MAX, state: "charged" };
 			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, (l.up?.now ?? 0) * 1.2, (l.up?.rate ?? 0) * 1.2);
 			let rl = rel_loss(lb, s);
-			if (b.state != "depleted" && rate < EFF_CIR_BYTES_S * 0.65 && rl < 0.14)
+			if (b.state != "depleted" && rate < EFF_CIR_BYTES_S * 0.65 && rl < 0.12)
 				clean_active++;
 		}
 		if (min_ttfb >= 10.0)
@@ -291,9 +291,9 @@ const POLICIES = {
 			let rate = max(l.down?.now ?? 0, l.down?.rate ?? 0, (l.up?.now ?? 0) * 1.2, (l.up?.rate ?? 0) * 1.2);
 			let ratio = b.tokens / (1.0 * BURST_MAX);
 
-			// Shield heavily losing (>=14% relative loss) or depleted strands when
+			// Shield heavily losing (>=12% relative loss) or depleted strands when
 			// healthier clean alternatives exist, avoiding CUBIC SYN/CWND stalls.
-			if (b.state == "depleted" || rate >= EFF_CIR_BYTES_S * 0.65 || rl >= 0.14)
+			if (b.state == "depleted" || rate >= EFF_CIR_BYTES_S * 0.65 || rl >= 0.12)
 				return clean_active > 0 ? 0 : max(FLOOR, (1.0 - rate / (1.5 * EFF_CIR_BYTES_S)) * lq);
 			let af = l.flows ?? 0;
 			let flow_bias = 1.0 / (1.0 + 0.08 * af);

@@ -392,13 +392,22 @@ export function mptcp_candidates(ctx, current_eps) {
 	if (length(healthy) < 2)
 		return [];
 
-	let score = (l) => (l.loss ?? 0.0) * 100.0 + ((l.ttfb && l.ttfb >= 0.008) ? l.ttfb : 0.25);
+	let lb_floor = 1.0;
+	for (let l in healthy)
+		if ((l.loss ?? 0.0) < lb_floor)
+			lb_floor = l.loss ?? 0.0;
+	let rel_loss = (l) => (lb_floor < 0.90) ? max(0.0, (l.loss ?? 0.0) - lb_floor * 0.5) : 0.0;
+	let score = (l) => rel_loss(l) * 100.0 + ((l.ttfb && l.ttfb >= 0.008) ? l.ttfb : 0.25);
 	let sorted = sort(slice(healthy), (a, b) => {
 		let sa = score(a), sb = score(b);
 		return sa < sb ? -1 : (sa > sb ? 1 : a.id - b.id);
 	});
-	let clean = filter(sorted, (l) => (l.loss ?? 0.0) < 0.14);
+	// Separate entry (<12% rel loss) and eviction (<22% rel loss) thresholds
+	// so occasional WAN SYN retransmits do not churn live MP_JOIN subflows.
+	let clean = filter(sorted, (l) => rel_loss(l) < 0.12);
 	let pool = length(clean) >= 2 ? clean : sorted;
+	let keepable = filter(sorted, (l) => rel_loss(l) < 0.22);
+	let keep_pool = length(keepable) >= 2 ? keepable : sorted;
 	let min_ttfb = 10.0;
 	for (let l in pool) {
 		let t = (l.ttfb && l.ttfb >= 0.008) ? l.ttfb : 0.25;
@@ -408,7 +417,7 @@ export function mptcp_candidates(ctx, current_eps) {
 	let ttfb_ceil = max(min_ttfb + 0.060, min_ttfb * 1.60);
 
 	let by_id = {};
-	for (let l in pool)
+	for (let l in keep_pool)
 		by_id["" + l.id] = l;
 	let selected = [], picked = {};
 	for (let e in (current_eps ?? facts.ip("mptcp endpoint show"))) {

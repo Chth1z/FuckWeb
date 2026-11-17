@@ -213,18 +213,18 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 		});
 	}
 
-	let mail_proxy = null;
+	let vps_proxy = null;
 	for (let cand in [ "JP-Lightsail-VLESS", "JP-Lightsail-HY2", "US-LA-Hy2" ]) {
 		if (cand in names) {
-			mail_proxy = cand;
+			vps_proxy = cand;
 			break;
 		}
 	}
-	if (mail_proxy) {
+	if (vps_proxy) {
 		// Taiwan residential relays block outbound mail ports (465/587/993); route mail
 		// ports through an owned VPS relay so devices on TW-HOME still sync email cleanly.
 		for (let mp in [ 25, 110, 143, 465, 587, 993, 995 ])
-			push(rules, sprintf("DST-PORT,%d,%s", mp, mail_proxy));
+			push(rules, sprintf("DST-PORT,%d,%s", mp, vps_proxy));
 	}
 
 	let choices = has_tw ? [ "TW-HOME", ...names ] : slice(names);
@@ -243,6 +243,7 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 	}
 
 	let dns_proxy_tag = has_tw ? "TW-HOME" : (names[0] ?? "");
+	let dns_alt_tag = vps_proxy ?? dns_proxy_tag;
 	if (has_tw)
 		push(rules, "IN-NAME,mixed-in,TW-HOME");
 	else if (length(names))
@@ -287,9 +288,9 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 			"default-nameserver": cn_doh,
 			"proxy-server-nameserver": cn_doh,
 			nameserver: length(dns_proxy_tag) ? [
-				"https://9.9.9.9/dns-query#" + dns_proxy_tag,
+				"https://9.9.9.9/dns-query#" + dns_alt_tag,
 				"https://149.112.112.112/dns-query#" + dns_proxy_tag,
-				"https://94.140.14.14/dns-query#" + dns_proxy_tag,
+				"https://94.140.14.14/dns-query#" + dns_alt_tag,
 				"https://208.67.222.222/dns-query#" + dns_proxy_tag,
 			] : cn_doh,
 		},
@@ -473,10 +474,10 @@ export function reload(cfg, lan_ip, profiles) {
 	return ok;
 };
 
-// Delay through TW-HOME (falling back to JP-Lightsail-VLESS or mixed-in).
+// Delay through TW-HOME (falling back to working VPS relays or mixed-in).
 function canary(cfg, lan_ip) {
 	let c = cfg.tunnel;
-	for (let grp in [ "TW-HOME", "JP-Lightsail-VLESS", "US-LA-VLESS" ]) {
+	for (let grp in [ "TW-HOME", "JP-Lightsail-VLESS", "JP-Lightsail-HY2", "US-LA-Hy2" ]) {
 		let r = api(cfg, lan_ip, "GET", sprintf("/proxies/%s/delay?timeout=%d&url=%s", urlenc(grp), c.canary_timeout, urlenc(c.canary_url)));
 		let m = match(r.body, /"delay":([0-9]+)/);
 		if (m && int(m[1]) > 0)
