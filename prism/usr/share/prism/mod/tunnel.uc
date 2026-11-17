@@ -23,9 +23,9 @@ const RENAME_NODES = {
 
 const TW_NODES = [
 	"台湾家宽01丨专线【3x】",
+	"台湾家宽01丨直连",
 	"台湾家宽02丨专线【3x】",
 	"台湾家宽02丨直连",
-	"台湾家宽01丨直连",
 ];
 
 const KEEP_ORDER = [

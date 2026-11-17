@@ -31,17 +31,17 @@
 | **洛杉磯 VPS** | `US-LA-VLESS` | `vless` (`182.255.84.190:443`) | 洛杉磯 TCP/Reality 節點 |
 | **洛杉磯 VPS** | `US-LA-Hy2` | `hysteria2` (`182.255.84.190:443`) | 洛杉磯 UDP 節點 |
 | **台灣家寬** | `台湾家宽01丨专线【3x】` | `trojan` (`control-shared.78778m.cn:54211`) | 台灣專線 01（IPLC 低跳數） |
+| **台灣家寬** | `台湾家宽01丨直连` | `hysteria2` (`tw01.poke-mon.xyz:20000`) | 台灣直連 01 |
 | **台灣家寬** | `台湾家宽02丨专线【3x】` | `trojan` (`control-shared.78778m.cn:54211`) | 台灣專線 02（IPLC 低跳數） |
 | **台灣家寬** | `台湾家宽02丨直连` | `hysteria2` (`tw01.poke-mon.xyz:20000`) | 台灣直連 02 |
-| **台灣家寬** | `台湾家宽01丨直连` | `hysteria2` (`tw01.poke-mon.xyz:20000`) | 台灣直連 01 |
 
 #### 策略組（`proxy-groups`）
 1. **`TW-HOME`**（`type: fallback`，測速 `cp.cloudflare.com/generate_204`）：
-   - `proxies`: `[ "台湾家宽01丨专线【3x】", "台湾家宽02丨专线【3x】", "台湾家宽02丨直连", "台湾家宽01丨直连" ]`
-   - 保持同一個台灣出口序列容災；若專線暫時抖動自動退回台灣直連（均為純台灣家寬，絕不混入日本/美國）。
+   - `proxies`: `[ "台湾家宽01丨专线【3x】", "台湾家宽01丨直连", "台湾家宽02丨专线【3x】", "台湾家宽02丨直连" ]`
+   - 保持同一個台灣出口序列容災（01 專線 → 01 直連 → 02 專線 → 02 直連，絕不混入日本/美國）。
 2. **各邏輯設備專屬組**（每台已認證設備一組，`type: select`，名稱附帶設備主 MAC）：
    - 名稱格式：`Chth1z [a0:85:27:7b:87:e8]`、`S23-Ultra [ae:75:0e:db:17:03]`、`LAPTOP [74:4c:a1:d6:bc:1d]`
-   - `proxies`: `[ "TW-HOME", "JP-Lightsail-VLESS", "JP-Lightsail-HY2", "US-LA-VLESS", "US-LA-Hy2", "台湾家宽01丨专线【3x】", "台湾家宽02丨专线【3x】", "台湾家宽02丨直连", "台湾家宽01丨直连" ]`
+   - `proxies`: `[ "TW-HOME", "JP-Lightsail-VLESS", "JP-Lightsail-HY2", "US-LA-VLESS", "US-LA-Hy2", "台湾家宽01丨专线【3x】", "台湾家宽01丨直连", "台湾家宽02丨专线【3x】", "台湾家宽02丨直连" ]`
    - **禁止放入 `DIRECT` 與 `REJECT`**，確保設備組內怎麼切都不可能直連洩漏。
 
 ---
@@ -125,7 +125,7 @@ LAN 設備封包 (來源 MAC + 來源 IP)
 ## 五、Clash (`mihomo.yaml`) 配置去重規範與實例
 
 1. **群組名稱去重**：使用 **`別名 [Anchor-MAC]`**（如 `Chth1z [a0:85:27:7b:87:e8]`、`LAPTOP-C7VL18HJ [74:4c:a1:d6:bc:1d]`）。即使兩台設備同名（例如兩支 `iPhone`），因附帶各自固定 Anchor-MAC，在 Zashboard 和 `mihomo.yaml` 中 **100% 絕對唯一**，且不會因為之後交叉認證多認領了一個 2.4G 或隨機 MAC 而改動 Zashboard 組名（組名永遠鎖定創檔時的 Anchor-MAC，`in-<uid>` 埠亦固定）。
-2. **節點層去重**：解析 `relays.json` 時先剝離地區前綴，按 `(type, server, port, credential_hash)` 去重，嚴格只保留 7 個去重後基礎節點（Lightsail ×2、洛杉磯 ×2、台灣家寬 ×3）+ `TW-HOME` fallback 組。
+2. **節點層去重**：解析 `relays.json` 時先剝離地區前綴，按標準化名稱去重並嚴格維持固定順序，保留 8 個基礎節點（Lightsail ×2、洛杉磯 ×2、台灣家寬 ×4：`01丨专线【3x】` → `01丨直连` → `02丨专线【3x】` → `02丨直连`）+ `TW-HOME` fallback 組。
 3. **MAC 單一歸屬去重**：產出 `chain divert` 與 `@verified_pairs` 前強制進行全域檢查，確保任何一個 MAC 在任何時刻最多只存在於一個活躍 `profile` 中。
 
 ### 配置輸出範例 (`mihomo.yaml`)
@@ -145,20 +145,21 @@ proxy-groups:
     lazy: false
     proxies:
       - 台湾家宽01丨专线【3x】
+      - 台湾家宽01丨直连
       - 台湾家宽02丨专线【3x】
       - 台湾家宽02丨直连
 
   - name: Chth1z [a0:85:27:7b:87:e8]
     type: select
-    proxies: [ TW-HOME, JP-Lightsail-VLESS, JP-Lightsail-HY2, US-LA-VLESS, US-LA-Hy2, 台湾家宽01丨专线【3x】, 台湾家宽02丨专线【3x】, 台湾家宽02丨直连 ]
+    proxies: [ TW-HOME, JP-Lightsail-VLESS, JP-Lightsail-HY2, US-LA-VLESS, US-LA-Hy2, 台湾家宽01丨专线【3x】, 台湾家宽01丨直连, 台湾家宽02丨专线【3x】, 台湾家宽02丨直连 ]
 
   - name: S23-Ultra [ae:75:0e:db:17:03]
     type: select
-    proxies: [ TW-HOME, JP-Lightsail-VLESS, JP-Lightsail-HY2, US-LA-VLESS, US-LA-Hy2, 台湾家宽01丨专线【3x】, 台湾家宽02丨专线【3x】 , 台湾家宽02丨直连 ]
+    proxies: [ TW-HOME, JP-Lightsail-VLESS, JP-Lightsail-HY2, US-LA-VLESS, US-LA-Hy2, 台湾家宽01丨专线【3x】, 台湾家宽01丨直连, 台湾家宽02丨专线【3x】, 台湾家宽02丨直连 ]
 
   - name: LAPTOP-C7VL18HJ [74:4c:a1:d6:bc:1d]
     type: select
-    proxies: [ TW-HOME, JP-Lightsail-VLESS, JP-Lightsail-HY2, US-LA-VLESS, US-LA-Hy2, 台湾家宽01丨专线【3x】, 台湾家宽02丨专线【3x】, 台湾家宽02丨直连 ]
+    proxies: [ TW-HOME, JP-Lightsail-VLESS, JP-Lightsail-HY2, US-LA-VLESS, US-LA-Hy2, 台湾家宽01丨专线【3x】, 台湾家宽01丨直连, 台湾家宽02丨专线【3x】, 台湾家宽02丨直连 ]
 
 rules:
   - IN-NAME,in-pc_chth1z,Chth1z [a0:85:27:7b:87:e8]
