@@ -423,39 +423,34 @@ html.prism-cold .main-stage {
 
 /* Integrated Nftables Classify Strip — Vertical Full-Width Block Stack */
 .classify-strip {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 8.5px;
+  gap: 6.5px;
   margin: 0 -8px;
-  padding: 9px 8px 6px;
+  padding: 8px 8px 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   min-height: 220px;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.classify-strip::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
 }
 
 .classify-bar-card {
   background-color: rgba(var(--cb-rgb, 52, 58, 72), var(--cb-fill, 0.06));
   border: none;
   box-shadow: var(--tray-inset);
-  padding: 5px 9px;
+  padding: 4.5px 9px;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 4px;
+  gap: 3.5px;
   flex: 0 0 auto;
   transition: box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .classify-bar-card .seg-meter {
-  height: 13.5px;
-  padding: 2px 3px;
+  height: 13px;
+  padding: 1.5px 2.5px;
 }
 
 .classify-bar-card.active {
@@ -756,12 +751,12 @@ html.prism-cold .main-stage {
 
 #bp-card-guard,
 #bp-card-pregate,
+#bp-card-ingress,
 #bp-card-vip,
 #bp-card-tun,
 #bp-card-dom,
 #bp-card-qos,
 #bp-card-uplink  { flex: 0 0 auto; }
-#bp-card-ingress { flex: 0 1 auto; }
 
 .bp-card-body {
   display: flex;
@@ -974,16 +969,16 @@ html.prism-cold .main-stage {
     gap: 4px;
   }
   #bp-card-ingress {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
   }
   .classify-strip {
-    flex: 0 1 auto;
-    gap: 6px;
-    min-height: 98px;
+    flex: 0 0 auto;
+    gap: 4.5px;
+    min-height: 0;
     margin: 0 -6px;
     padding: 6px 6px 4px;
-    overflow-y: auto;
+    overflow: visible;
   }
   .classify-bar-card {
     padding: 3px 7px;

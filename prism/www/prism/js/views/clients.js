@@ -2,16 +2,16 @@
  * PRISM — View 04: Merged Wide Device Policy Matrix & Live Flows Explorer
  * ============================================================================ */
 
-import { S, desatObsidianRgb, opticalLoad, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.6.6';
-import { $, $$, el, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.6.6';
-import { write, openLoginModal } from '../api.js?v=5.6.6';
+import { S, desatObsidianRgb, opticalLoad, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.6.6-b3';
+import { $, $$, el, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.6.6-b3';
+import { write, openLoginModal } from '../api.js?v=5.6.6-b3';
 
 const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
 const POLICY_META = {
   auto:   { short: '自動', label: '自動分流',     rgb: '100, 174, 245' },
   game:   { short: '光道', label: '@vip_lane 極速光道', rgb: '100, 174, 245' },
   direct: { short: '直連', label: '強制直連',     rgb: '87, 209, 146' },
-  tunnel: { short: '入籠', label: '強制歸入 TW-HOME', rgb: '170, 142, 240' },
+  tunnel: { short: '入籠', label: '強制歸入分流隧道', rgb: '170, 142, 240' },
   block:  { short: '禁網', label: '禁止聯網',     rgb: '230, 108, 120' }
 };
 

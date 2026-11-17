@@ -30,19 +30,19 @@
     r.classList.add('prism-cold');
   })();
   </script>
-  <link rel="stylesheet" href="css/tokens.css?v=5.6.6">
-  <link rel="stylesheet" href="css/layout.css?v=5.6.6">
-  <link rel="stylesheet" href="css/components.css?v=5.6.6-b2">
-  <link rel="modulepreload" href="js/main.js?v=5.6.6">
-  <link rel="modulepreload" href="js/state.js?v=5.6.6">
-  <link rel="modulepreload" href="js/dom.js?v=5.6.6">
-  <link rel="modulepreload" href="js/api.js?v=5.6.6">
-  <link rel="modulepreload" href="js/canvas/prism.js?v=5.6.6">
-  <link rel="modulepreload" href="js/canvas/oscilloscope.js?v=5.6.6">
-  <link rel="modulepreload" href="js/views/overview.js?v=5.6.6">
-  <link rel="modulepreload" href="js/views/spectrum.js?v=5.6.6">
-  <link rel="modulepreload" href="js/views/blueprint.js?v=5.6.6-b2">
-  <link rel="modulepreload" href="js/views/clients.js?v=5.6.6-m2">
+  <link rel="stylesheet" href="css/tokens.css?v=5.6.6-b3">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.6-b3">
+  <link rel="stylesheet" href="css/components.css?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/main.js?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/state.js?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/dom.js?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/api.js?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/canvas/prism.js?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/canvas/oscilloscope.js?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/views/overview.js?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/views/spectrum.js?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/views/blueprint.js?v=5.6.6-b3">
+  <link rel="modulepreload" href="js/views/clients.js?v=5.6.6-b3">
 </head>
 <body>
   <div class="app-shell">
@@ -179,7 +179,7 @@
           </div>
 
           <div id="ov-hud-br" class="corner-hud br">
-            <div class="corner-tag">TW-HOME PRIVACY CAGE</div>
+            <div class="corner-tag">MIHOMO PRIVACY CAGE</div>
             <div class="corner-sub">
               <span id="ov-relay" class="c-bright">—</span>
               <span>·</span>
@@ -259,7 +259,7 @@
           <div class="legend-group">
             <span class="legend-item"><span class="legend-sq" style="background:var(--prism-spectrum);box-shadow:0 0 8px rgba(100,174,245,0.55)"></span><span>ingress · classify</span></span>
             <span class="legend-item"><span class="legend-sq" style="background:var(--c-red);box-shadow:0 0 8px var(--c-red)"></span><span>@vip_lane · 極速光道</span></span>
-            <span class="legend-item"><span class="legend-sq" style="background:var(--c-mint);box-shadow:0 0 8px var(--c-mint)"></span><span>TW-HOME · 暗面隔離籠</span></span>
+            <span class="legend-item"><span class="legend-sq" style="background:var(--c-mint);box-shadow:0 0 8px var(--c-mint)"></span><span>Mihomo · 暗面隔離籠</span></span>
             <span class="legend-item"><span class="legend-sq" style="background:var(--c-blue);box-shadow:0 0 8px var(--c-blue)"></span><span>burst-harvest · 21 光譜織網</span></span>
           </div>
           <span id="bp-mptcp-badge" class="st-badge vip">MPTCP · checking</span>
@@ -434,8 +434,8 @@
               <div id="bp-card-tun" class="s-box mint bp-stage-card">
                 <div class="bp-node-head">
                   <div>
-                    <div class="bp-card-title c-mint">TW-HOME · 暗面零跳隔離籠</div>
-                    <div class="bp-card-sub">TProxy :61235 · @tunnel4 → weave_out</div>
+                    <div class="bp-card-title c-mint">MIHOMO · 暗面零跳隔離籠</div>
+                    <div class="bp-card-sub">Per-Device TProxy :61236+ → weave_out</div>
                   </div>
                   <div class="bp-head-kpi">
                     <span id="bp-tun-rate" class="bp-live-rate c-mint">0 bps</span>
@@ -448,7 +448,7 @@
                     <strong id="bp-tun-pct" class="bp-meter-val c-bright">0% 流佔比</strong>
                   </div>
                   <div class="bp-tun-node-row">
-                    <span class="c-muted" style="flex-shrink:0">主力</span>
+                    <span class="c-muted" style="flex-shrink:0">TW-HOME</span>
                     <span id="bp-tun-desc" class="bp-tun-node-name c-bright">—</span>
                     <span id="bp-tun-bytes" class="c-mint" style="flex-shrink:0;font-variant-numeric:tabular-nums">0 B</span>
                   </div>
@@ -458,7 +458,7 @@
                     <div class="bp-kv-cell"><span class="k">金絲雀</span><span id="bp-tun-canary" class="v c-mint">— ms</span></div>
                     <div class="bp-kv-cell"><span class="k">失陷籠</span><span id="bp-tun-meta" class="v c-mint">fail-closed</span></div>
                     <div class="bp-kv-cell span-2"><span class="k">出口端點</span><span id="bp-tun-eps" class="v">—</span></div>
-                    <div class="bp-kv-cell span-2"><span class="k">自動備選</span><span id="bp-tun-auto" class="v">—</span></div>
+                    <div class="bp-kv-cell span-2"><span class="k">設備分流</span><span id="bp-tun-auto" class="v">—</span></div>
                   </div>
                   <div id="bp-tun-relay-list" class="relay-mini-list"></div>
                 </div>
@@ -544,7 +544,7 @@
                     </div>
                     <span id="bp-qos-20-bar" class="seg-meter"></span>
                     <div class="qos-band-head" style="font-size:9.5px">
-                      <span class="c-sec">TW-HOME 隔離籠 / 互動突發</span>
+                      <span class="c-sec">分流隧道 / 互動突發</span>
                       <span id="bp-qos-20-sub" class="c-muted">interactive</span>
                     </div>
                   </div>
@@ -700,7 +700,7 @@
                   <div id="conn-route-seg" class="seg-group" aria-label="過濾路由路徑">
                     <button type="button" class="seg-btn on" data-route="all">全部</button>
                     <button type="button" class="seg-btn" data-route="direct">直連</button>
-                    <button type="button" class="seg-btn" data-route="tunnel">TW-HOME</button>
+                    <button type="button" class="seg-btn" data-route="tunnel">分流隧道</button>
                     <button type="button" class="seg-btn" data-route="vip">極速光道</button>
                   </div>
                   <input id="conn-q" class="bp-input" type="search" placeholder="過濾目標 / 域名 / 端口..." aria-label="過濾連接目標" style="width:152px">
@@ -848,6 +848,6 @@
 
   <div id="toast" class="toast-bar"></div>
 
-  <script type="module" src="js/main.js?v=5.6.6"></script>
+  <script type="module" src="js/main.js?v=5.6.6-b3"></script>
 </body>
 </html>

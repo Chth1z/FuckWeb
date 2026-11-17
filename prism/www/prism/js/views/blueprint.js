@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6';
-import { $, $$, el, renderSegMeter, renderSessionLog, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.6.6';
-import { write, call } from '../api.js?v=5.6.6';
+import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.6.6-b3';
+import { $, $$, el, renderSegMeter, renderSessionLog, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.6.6-b3';
+import { write, call } from '../api.js?v=5.6.6-b3';
 
 let drawerOpen = false;
 let rafId = null;
@@ -52,7 +52,7 @@ const RULE_LABELS = {
   'domestic': '國內直連',
   'domestic-domain': 'SmartDNS 國內',
   'tunnel-port': '海外 UDP 入籠',
-  'rest-tunnel': '餘流歸籠→TW-HOME',
+  'rest-tunnel': '餘流歸籠→分流隧道',
   'rest-direct': '餘流→直連'
 };
 
@@ -1477,9 +1477,25 @@ export function renderBlueprint() {
     setTitle(epEl, epFull);
   }
   setTxt('#bp-tun-relays', `${st.tunnel?.relays ?? 0} nodes`);
-  const autoName = tun?.auto || tun?.selected || '—';
-  setTxt('#bp-tun-auto', autoName);
-  setTitle('#bp-tun-auto', autoName);
+  const devGroups = Array.isArray(tun?.groups) ? tun.groups : [];
+  let routeSummary = '—';
+  if (devGroups.length) {
+    const counts = new Map();
+    for (const g of devGroups) {
+      const sel = g.now || 'TW-HOME';
+      counts.set(sel, (counts.get(sel) || 0) + 1);
+    }
+    routeSummary = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([k, n]) => `${n}台→${k}`)
+      .join(' · ');
+    if (counts.size > 2) routeSummary += ` (+${counts.size - 2})`;
+  } else if (tun?.tw_home) {
+    routeSummary = `TW-HOME→${tun.tw_home}`;
+  }
+  setTxt('#bp-tun-auto', routeSummary);
+  setTitle('#bp-tun-auto', devGroups.map(g => `${g.group_name}: ${g.now}`).join('\n') || routeSummary);
   setTxt('#bp-tun-canary', canaryMs > 0 ? `${canaryMs} ms · ${canaryFails}f` : '— ms');
   setTxt('#bp-tun-meta', st.tunnel?.fail_open ? 'fail-open' : 'fail-closed');
   const relayListEl = $('#bp-tun-relay-list');

@@ -34,7 +34,7 @@ export const S = {
 export const LOCKED_SPECS = [
   ['weave.policy',       'harvest', 'Burst-Harvest 2.0 脈衝收割'],
   ['weave.affinity',     'flow',    'Per-Flow 跨線折射鋪開'],
-  ['classify.remainder', 'tunnel',  '海外餘流閉鎖入 TW-HOME 籠'],
+  ['classify.remainder', 'tunnel',  '海外餘流閉鎖入分流隧道'],
   ['classify.quic',      'reject',  'UDP 443 1ms 回退 TCP'],
   ['tunnel.enabled',     '1',       'Mihomo TProxy 常駐'],
   ['tunnel.fail_open',   '0',       'Fail-Closed 嚴禁直連回退']
