@@ -2,8 +2,8 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtClock } from '../state.js?v=5.7.0';
-import { $, $$, el, renderSegMeter, renderStrandSpectrumBar, renderSessionLog, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.7.0';
+import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtPkts, fmtClock } from '../state.js?v=5.7.0';
+import { $, $$, el, renderSegMeter, renderStrandSpectrumBar, renderSessionLog, setTxt, setCls, setTitle, setVar } from '../dom.js?v=5.7.0';
 import { write, call } from '../api.js?v=5.7.0';
 
 let drawerOpen = false;
@@ -173,6 +173,32 @@ function paintAllModuleHeats(snap = false, dt = 0.033) {
     }
   }
   return dirty;
+}
+
+function setSegMeter(sel, ratio, count, colorName, active = false) {
+  const node = $(sel);
+  if (!node) return;
+  renderSegMeter(node, ratio, count, colorName);
+  const want = !!active;
+  if (node.classList.contains('active') !== want) node.classList.toggle('active', want);
+}
+
+function paintQosBandHeat(sel, baseRgb, bps, qosTotBps) {
+  const chip = $(sel);
+  if (!chip) return;
+  const ratio = bps > 32
+    ? Math.min(1, Math.max(0.18, 0.16 + (bps / qosTotBps) * 0.55 + Math.min(0.45, Math.log10(1 + ((bps * 8) / 1e6) * 7) * 0.45)))
+    : 0.04;
+  const q = `${baseRgb}:${Math.round(ratio * 180)}`;
+  if (chip._lastQ === q) return;
+  chip._lastQ = q;
+  const sat = 0.22 + 0.78 * Math.pow(ratio, 0.8);
+  setVar(chip, '--qb-rgb', desatObsidianRgb(baseRgb, sat));
+  setVar(chip, '--qb-fill', (0.06 + 0.18 * ratio).toFixed(3));
+  setVar(chip, '--qb-inset-a', (0.06 + 0.18 * ratio).toFixed(3));
+  setVar(chip, '--qb-bdr-a', (0.20 + 0.58 * ratio).toFixed(2));
+  setVar(chip, '--qb-glow-blur', `${Math.round(4 + 14 * ratio)}px`);
+  setVar(chip, '--qb-glow-a', (0.03 + 0.24 * ratio).toFixed(2));
 }
 
 function clipHalfPlane(ctx, ax, ay, bx, by, sideSign, W, H) {
@@ -1063,8 +1089,8 @@ function renderClassifyStrip() {
         style: { '--cb-rgb': '52, 58, 72', '--cb-fill': '0', '--cb-bdr-a': '0.16', '--cb-glow-blur': '0px', '--cb-glow-a': '0' }
       },
         el('div', { class: 'classify-bar-head' },
-          el('span', { class: 'c-muted', style: { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label),
-          el('span', { class: 'c-muted', style: { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', fontSize: '9.5px' } }, '—')
+          el('span', { class: 'c-muted text-clip' }, label),
+          el('span', { class: 'c-muted classify-stat' }, '—')
         ),
         segEl
       ));
@@ -1122,14 +1148,14 @@ function renderClassifyStrip() {
     const glowA = pkts > 0 ? (0.04 + 0.22 * rHeat).toFixed(2) : '0';
 
     const byteTxt = fmtBytes(bytes).replace(/\s+/g, '');
-    const pktTxt = pkts >= 1e6 ? `${(pkts / 1e6).toFixed(1)}M` : (pkts >= 1000 ? `${Math.round(pkts / 1000)}k` : `${pkts}`);
+    const pktTxt = fmtPkts(pkts, true);
     const pctTxt = pkts > 0 ? (share >= 1 ? `${Math.round(share)}%` : `${share.toFixed(1)}%`) : '0%';
     const statTxt = `${byteTxt}·${pktTxt}·${pctTxt}`;
 
     let rec = rowsByTag.get(r.tag);
     if (!rec) {
-      const labelEl = el('span', { class: pkts > 0 ? 'c-bright' : 'c-muted', style: { fontWeight: pkts > 0 ? '600' : '400', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: '0' } }, label);
-      const statEl = el('span', { class: pkts > 0 ? textCls : 'c-muted', style: { fontVariantNumeric: 'tabular-nums', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '9.5px' } }, statTxt);
+      const labelEl = el('span', { class: `${pkts > 0 ? 'c-bright t-strong' : 'c-muted'} text-clip` }, label);
+      const statEl = el('span', { class: `${pkts > 0 ? textCls : 'c-muted'} classify-stat` }, statTxt);
       const segEl = el('span', { class: `seg-meter${pkts > 0 ? ' active' : ''}` });
       const card = el('div', {
         class: `classify-bar-card ${pkts > 0 ? 'active' : ''}`,
@@ -1152,9 +1178,8 @@ function renderClassifyStrip() {
       setVar(rec.card, '--cb-bdr-a', bdrA);
       setVar(rec.card, '--cb-glow-blur', glowBlur);
       setVar(rec.card, '--cb-glow-a', glowA);
-      setCls(rec.labelEl, pkts > 0 ? 'c-bright' : 'c-muted');
-      setStyleProp(rec.labelEl, 'fontWeight', pkts > 0 ? '600' : '400');
-      setCls(rec.statEl, pkts > 0 ? textCls : 'c-muted');
+      setCls(rec.labelEl, `${pkts > 0 ? 'c-bright t-strong' : 'c-muted'} text-clip`);
+      setCls(rec.statEl, `${pkts > 0 ? textCls : 'c-muted'} classify-stat`);
       setTxt(rec.statEl, statTxt);
       setCls(rec.segEl, `seg-meter${pkts > 0 ? ' active' : ''}`);
     }
@@ -1330,11 +1355,11 @@ export function renderBlueprint() {
         const allOk = !checks.length || matched.length === 0 || passed === matched.length;
         const valTxt = checks.length ? (matched.length ? `${passed}/${matched.length}` : 'n/a') : '—';
         gFrag.appendChild(el('div', { class: `guard-inv-cell ${checks.length ? (allOk ? 'ok' : 'bad') : ''}` },
-          el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '5px', minWidth: '0' } },
+          el('span', { class: 'row-inline' },
             el('span', { class: `run-dot ${checks.length ? (allOk ? 'violet' : 'crimson') : 'off'}` }),
-            el('span', { class: 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, grp.label)
+            el('span', { class: 'c-sec text-clip' }, grp.label)
           ),
-          el('span', { class: checks.length ? (allOk ? 'c-bright' : 'c-crimson') : 'c-muted', style: { fontWeight: '600', fontVariantNumeric: 'tabular-nums', flexShrink: '0' } }, valTxt)
+          el('span', { class: `${checks.length ? (allOk ? 'c-bright' : 'c-crimson') : 'c-muted'} t-strong t-num shrink-0` }, valTxt)
         ));
       }
       invGrid.innerHTML = '';
@@ -1365,9 +1390,7 @@ export function renderBlueprint() {
   renderSessionLog($('#ov-session-log'), evList, 60);
 
   // Tier 1A: Pre-Gate & SmartDNS
-  setTxt('#bp-quic-pkts', liveFlow.quicPkts >= 1000
-    ? `${(liveFlow.quicPkts / 1000).toFixed(1)}k pkts`
-    : `${liveFlow.quicPkts} pkts`);
+  setTxt('#bp-quic-pkts', `${fmtPkts(liveFlow.quicPkts)} pkts`);
   const quicMode = st.settings?.['classify.quic'] || 'reject';
   const dnsTagEl = $('#bp-dns-mode-tag');
   if (dnsTagEl) {
@@ -1426,9 +1449,7 @@ export function renderBlueprint() {
   setTxt('#bp-classify-sub', `mangle · @dev_policy · 餘量${remMode} (上行)`);
   setTxt('#bp-ingress-rate', fmtRate(liveFlow.classifyBps).full);
   setTitle('#bp-ingress-rate', `LAN 出站請求分類速率 · 21線雙向總速 ${fmtRate(totalRate).full}`);
-  setTxt('#bp-ingress-pkts', liveFlow.totPkts >= 1e6
-    ? `${(liveFlow.totPkts / 1e6).toFixed(2)}M pkts`
-    : `${(liveFlow.totPkts / 1000).toFixed(1)}k pkts`);
+  setTxt('#bp-ingress-pkts', `${fmtPkts(liveFlow.totPkts)} pkts`);
   renderClassifyStrip();
   setTxt('#bp-classify-foot', `prerouting · ${(S.rules?.rules || []).length} rules`);
   setTxt('#bp-classify-bytes', fmtBytes(liveFlow.totBytes));
@@ -1485,9 +1506,7 @@ export function renderBlueprint() {
   setTxt('#bp-tun-desc', tun?.tw_home || tun?.selected || 'TW-HOME');
   setTxt('#bp-tun-bytes', fmtBytes(liveFlow.tunBytes));
   setTitle('#bp-tun-bytes', `Mihomo 累計 ↓ ${fmtBytes(liveFlow.tunDownBytes)} · ↑ ${fmtBytes(liveFlow.tunUpBytes)} · 活躍 ${liveFlow.tunConns} 條`);
-  setTxt('#bp-tun-pkts', liveFlow.tunPkts >= 1e6
-    ? `${(liveFlow.tunPkts / 1e6).toFixed(2)}M pkts`
-    : (liveFlow.tunPkts >= 1000 ? `${(liveFlow.tunPkts / 1000).toFixed(1)}k pkts` : `${liveFlow.tunPkts} pkts`));
+  setTxt('#bp-tun-pkts', `${fmtPkts(liveFlow.tunPkts)} pkts`);
   const eps = st.mptcp?.endpoints || [];
   setTxt('#bp-tun-mptcp', st.mptcp?.enabled ? `${st.mptcp.subflows} sub · ${eps.length} ep` : 'single-path');
   const epEl = $('#bp-tun-eps');
@@ -1559,10 +1578,10 @@ export function renderBlueprint() {
           const d = r.delay || 0;
           const latCls = d > 0 ? (d <= 220 ? 'c-mint' : (d <= 500 ? 'c-amber' : 'c-crimson')) : 'c-muted';
           rFrag.appendChild(el('div', { class: 'relay-mini-row' },
-            el('span', { class: isAct ? 'c-mint' : 'c-sec', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: '0' } },
+            el('span', { class: `${isAct ? 'c-mint' : 'c-sec'} text-clip` },
               isAct ? `▸ ${r.name}` : r.name
             ),
-            el('span', { class: latCls, style: { flexShrink: '0', fontWeight: '600', fontVariantNumeric: 'tabular-nums' } },
+            el('span', { class: `${latCls} shrink-0 t-strong t-num` },
               d > 0 ? `${d}ms` : (r.type || '—')
             )
           ));
@@ -1610,8 +1629,7 @@ export function renderBlueprint() {
   renderStrandSpectrumBar($('#bp-mini-spectrum'), strands, { tooltip: true, fmtRate: fmtRateCompact });
   setTxt('#bp-dom-slots', `${w.slots ?? 126} (${w.affinity || 'flow'})`);
   const domByteCompact = fmtBytes(liveFlow.domBytes).replace(/\s+/g, '');
-  const domPktCompact = liveFlow.domPkts >= 1e6 ? `${(liveFlow.domPkts / 1e6).toFixed(1)}M` : `${Math.round(liveFlow.domPkts / 1000)}k`;
-  setTxt('#bp-dom-direct', `${domByteCompact}·${domPktCompact}`);
+  setTxt('#bp-dom-direct', `${domByteCompact}·${fmtPkts(liveFlow.domPkts, true)}`);
   setTitle('#bp-dom-direct', `直連雙向累計 ↓ ${fmtBytes(liveFlow.domDownBytes)} · ↑ ${fmtBytes(liveFlow.domUpBytes)}`);
   setTxt('#bp-dom-probe', `${w.interval ?? 2}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`);
   setTxt('#bp-dom-buckets', `${w.charged_count ?? 0}滿/${w.depleted_count ?? 0}耗/${w.cooling_count ?? 0}冷`);
@@ -1631,20 +1649,12 @@ export function renderBlueprint() {
   const avgTok = strands.length
     ? Math.round(strands.reduce((a, s) => a + (s.tokens_pct ?? 100), 0) / strands.length)
     : 100;
-  setTxt('#bp-dom-toks', `均令牌 ${avgTok}%`);
+  setTxt('#bp-dom-toks', `${avgTok}%`);
   const coolCnt = (w.cooling_count || 0) + (w.depleted_count || 0);
   setTxt('#bp-dom-st', coolCnt > 0 ? `${w.charged_count ?? 0}/${nH} 滿·${coolCnt}冷` : `${w.charged_count ?? 0}/${nH} 滿桶`);
   setTxt('#bp-dom-desc', `直連 ${domByteCompact} · 均${meanRtt != null ? `${meanRtt}ms` : '—'}`);
 
   // Tier 3: Stage 3 Full-Height HTB QoS + 21-Uplink Egress Unified Segmented Meters
-  const setSegMeter = (sel, ratio, count, colorName, active = false) => {
-    const node = $(sel);
-    if (!node) return;
-    renderSegMeter(node, ratio, count, colorName);
-    const want = !!active;
-    if (node.classList.contains('active') !== want) node.classList.toggle('active', want);
-  };
-
   setTxt('#bp-qos-meta', `MSS ${st.settings?.['main.mss'] ?? 1440}`);
   const qos = st.telemetry?.qos || {};
   const qBands = qos.bands || {};
@@ -1654,24 +1664,6 @@ export function renderBlueprint() {
   const shareRatio = (bps) => (bps > 0 ? Math.max(1 / 14, bps / qosTotBps) : 0);
 
   setTxt('#bp-qos-rate', fmtRate(qosSumBps).full);
-
-  const paintQosBandHeat = (sel, baseRgb, bps) => {
-    const chip = $(sel);
-    if (!chip) return;
-    const ratio = bps > 32
-      ? Math.min(1, Math.max(0.18, 0.16 + (bps / qosTotBps) * 0.55 + Math.min(0.45, Math.log10(1 + ((bps * 8) / 1e6) * 7) * 0.45)))
-      : 0.04;
-    const q = `${baseRgb}:${Math.round(ratio * 180)}`;
-    if (chip._lastQ === q) return;
-    chip._lastQ = q;
-    const sat = 0.22 + 0.78 * Math.pow(ratio, 0.8);
-    setVar(chip, '--qb-rgb', desatObsidianRgb(baseRgb, sat));
-    setVar(chip, '--qb-fill', (0.06 + 0.18 * ratio).toFixed(3));
-    setVar(chip, '--qb-inset-a', (0.06 + 0.18 * ratio).toFixed(3));
-    setVar(chip, '--qb-bdr-a', (0.20 + 0.58 * ratio).toFixed(2));
-    setVar(chip, '--qb-glow-blur', `${Math.round(4 + 14 * ratio)}px`);
-    setVar(chip, '--qb-glow-a', (0.03 + 0.24 * ratio).toFixed(2));
-  };
 
   let totalQosDrops = 0;
   for (const [chipSel, rateSel, barSel, key, rgb, color] of [
@@ -1687,7 +1679,7 @@ export function renderBlueprint() {
       ? `${key} · ↓${fmtRate(b.down_bps || 0).full} · ↑${fmtRate(b.up_bps || 0).full} · 累計 ${fmtBytes(b.bytes || 0)} · overlimit ${b.overlimits || 0} · drop ${b.drops || 0}`
       : `${key} · fq_codel 旁路計數 · 累計 ${fmtBytes(b.bytes || 0)}`);
     setSegMeter(barSel, shareRatio(bps), 14, color, bps > 400);
-    paintQosBandHeat(chipSel, rgb, bps);
+    paintQosBandHeat(chipSel, rgb, bps, qosTotBps);
   }
 
   const ewmaDown = st.rate_ewma ?? st.rate ?? 0;
@@ -1720,7 +1712,8 @@ export function renderBlueprint() {
 
   const memMb = Math.round((st.sys?.mem_available_kb || 0) / 1024);
   const load1 = st.sys?.load1 ?? 0;
-  setTxt('#bp-up-mem-txt', `${memMb} MB free · load ${load1}`);
+  setTxt('#bp-up-mem-mb', `${memMb} MB`);
+  setTxt('#bp-up-mem-load', `${load1}`);
   setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / 256)), 16, (load1 > 2.0 || memMb < 48) ? 'amber' : 'spectrum', load1 > 0.5);
 
   setTxt('#bp-up-down', fmtBytes(st.down_bytes || 0));
@@ -1777,7 +1770,7 @@ export function renderBlueprintDrawer() {
       lp.appendChild(el('div', { class: 'cfg-row' },
         el('div', {},
           el('div', { class: 'c-bright' }, k),
-          el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, desc)
+          el('div', { class: 'cfg-desc' }, desc)
         ),
         el('span', { class: 'st-badge draining' }, `LOCKED · ${val}`)
       ));
@@ -1788,7 +1781,7 @@ export function renderBlueprintDrawer() {
   if (!cp) return;
   if (!S.session) {
     cp.innerHTML = '';
-    cp.appendChild(el('div', { class: 'c-muted', style: { padding: '12px 0' } }, '需點擊右上角「管理登入」以調整 UCI 核心參數'));
+    cp.appendChild(el('div', { class: 'c-muted cfg-unauth' }, '需點擊右上角「管理登入」以調整 UCI 核心參數'));
     return;
   }
   const vals = S.config?.values || S.status?.settings || {};
@@ -1808,8 +1801,7 @@ export function renderBlueprintDrawer() {
         }, v ? '已開啟 (1)' : '已關閉 (0)');
       } else if (spec.type === 'select') {
         const sel = el('select', {
-          class: 'bp-input',
-          style: { maxWidth: '215px', textAlign: 'left' },
+          class: 'bp-input cfg-select',
           onChange: () => write('configure', { set: { [spec.key]: sel.value } }, `${spec.label} -> ${sel.value}`)
         }, ...(spec.options || []).map(opt => el('option', {
           value: opt.value,
@@ -1818,44 +1810,36 @@ export function renderBlueprintDrawer() {
         control = sel;
       } else {
         const inp = el('input', {
-          class: 'bp-input',
+          class: 'bp-input cfg-num',
           type: 'number',
           min: spec.min,
           max: spec.max,
-          value: v ?? '',
-          style: { width: '90px', textAlign: 'right' }
+          value: v ?? ''
         });
         const save = el('button', {
           type: 'button',
           class: 'btn-cmd',
           onClick: () => write('configure', { set: { [spec.key]: Number(inp.value) } }, `${spec.key} = ${inp.value}`)
         }, '套用');
-        control = el('div', { style: { display: 'flex', gap: '6px' } }, inp, save);
+        control = el('div', { class: 'cfg-num-wrap' }, inp, save);
       }
       cp.appendChild(el('div', { class: 'cfg-row' },
         el('div', {},
           el('div', { class: 'c-bright' }, spec.key),
-          el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, spec.label)
+          el('div', { class: 'cfg-desc' }, spec.label)
         ),
         control
       ));
     }
-    const dot = (id) => el('span', {
-      id,
-      style: {
-        display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%',
-        background: '#111827', border: '1px solid rgba(255,255,255,0.22)',
-        transition: 'background .25s ease, box-shadow .25s ease'
-      }
-    });
+    const dot = (id) => el('span', { id, class: 'led-preview-dot' });
     cp.appendChild(el('div', { class: 'cfg-row' },
       el('div', {},
-        el('div', { class: 'c-bright', style: { display: 'flex', alignItems: 'center', gap: '7px' } },
+        el('div', { class: 'c-bright led-row-head' },
           dot('led-preview-dot-s'),
           dot('led-preview-dot-n'),
           el('span', { id: 'led-preview-lbl' }, 'WS2812B 實時燈效')
         ),
-        el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, '執行 6 秒 7 波長暗面稜鏡掃描測試秀')
+        el('div', { class: 'cfg-desc' }, '執行 6 秒 7 波長暗面稜鏡掃描測試秀')
       ),
       el('button', {
         type: 'button',
@@ -1867,7 +1851,7 @@ export function renderBlueprintDrawer() {
   const paintDot = (id, hex, title) => {
     const d = $(id);
     if (!d) return;
-    d.title = title;
+    setTitle(d, title);
     d.style.background = hex || '#111827';
     d.style.boxShadow = hex && hex !== '#000000' ? `0 0 8px ${hex}` : 'none';
   };

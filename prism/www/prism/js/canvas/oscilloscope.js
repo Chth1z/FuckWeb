@@ -89,8 +89,8 @@ function ensureOscScaffold(svg, tip) {
         stroke: 'rgba(4, 6, 12, 0.85)',
         'stroke-width': '2.4',
         'paint-order': 'stroke',
-        'font-size': '9', 'font-weight': '600',
-        'text-anchor': 'end', 'font-family': 'monospace'
+        'font-size': '10', 'font-weight': '600',
+        'text-anchor': 'end', 'font-family': 'var(--font-mono)'
       });
       svg.appendChild(lbl);
       labels.push({ k, lbl });

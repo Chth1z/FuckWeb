@@ -145,6 +145,13 @@ export function fmtBytes(bytes) {
   return gb.toFixed(2) + ' GB';
 }
 
+export function fmtPkts(pkts, compact = false) {
+  const p = Math.max(0, pkts || 0);
+  if (p >= 1e6) return `${(p / 1e6).toFixed(compact ? 1 : 2)}M`;
+  if (p >= 1000) return `${compact ? Math.round(p / 1000) : (p / 1000).toFixed(1)}k`;
+  return String(Math.round(p));
+}
+
 export function fmtClock(ts) {
   if (!ts) return '--:--:--';
   const d = new Date(ts * 1000);

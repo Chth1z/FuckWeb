@@ -195,8 +195,7 @@ function createQuarantineCard(q, allDevs) {
     : `未通過交叉認證 (${q.reason || 'new_mac'})`;
 
   const sel = el('select', {
-    class: 'bp-input',
-    style: { fontSize: '10.5px', padding: '1px 4px', maxWidth: '112px' },
+    class: 'bp-input dev-sel-merge',
     title: '選擇要併入的現有設備組'
   });
   for (const d of allDevs) {
@@ -209,8 +208,7 @@ function createQuarantineCard(q, allDevs) {
 
   const btnNew = el('button', {
     type: 'button',
-    class: 'policy-pill on tunnel',
-    style: { padding: '2px 7px' },
+    class: 'policy-pill on tunnel sm',
     title: '認領並建立獨立 Zashboard 節點分組'
   }, '認領建組');
   btnNew.addEventListener('click', (e) => {
@@ -221,8 +219,7 @@ function createQuarantineCard(q, allDevs) {
 
   const btnMerge = el('button', {
     type: 'button',
-    class: 'policy-pill on auto',
-    style: { padding: '2px 7px' },
+    class: 'policy-pill on auto sm',
     title: '將此隨機/新 MAC 併入上方選中的現有設備'
   }, '併入');
   btnMerge.addEventListener('click', (e) => {
@@ -250,8 +247,8 @@ function createQuarantineCard(q, allDevs) {
       ),
       el('span', { class: 'c-crimson dev-flows-tag' }, '禁網待認領')
     ),
-    el('div', { class: 'c-amber', style: { fontSize: '10.5px', lineHeight: '1.35' } }, `${q.mac}${q.ip ? ` · ${q.ip}` : ''} · ${hint}`),
-    el('div', { style: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '5px', flexWrap: 'wrap' } },
+    el('div', { class: 'c-amber dev-meta-hint' }, `${q.mac}${q.ip ? ` · ${q.ip}` : ''} · ${hint}`),
+    el('div', { class: 'dev-q-actions' },
       btnNew,
       allDevs.some(d => d.uid) ? sel : null,
       allDevs.some(d => d.uid) ? btnMerge : null
@@ -264,8 +261,7 @@ function createDeviceCard(mac) {
   const nameEl = el('span', { class: 'dev-nav-name' });
   const renameInput = el('input', {
     type: 'text',
-    class: 'bp-input',
-    style: { display: 'none', padding: '1px 6px', fontSize: '11.5px', width: '138px' },
+    class: 'bp-input dev-rename-in',
     placeholder: '輸入終端別名...'
   });
   const renameBtn = el('button', {
@@ -274,9 +270,9 @@ function createDeviceCard(mac) {
     title: '修改終端別名'
   }, '✎');
 
-  const linkEl = el('span', { class: 'c-sec', style: { fontSize: '10.5px', flexShrink: '0' } });
+  const linkEl = el('span', { class: 'c-sec dev-link' });
   const flowsEl = el('span', { class: 'c-blue dev-flows-tag' });
-  const ipRateEl = el('span', { class: 'c-muted', style: { fontSize: '10.5px', fontVariantNumeric: 'tabular-nums' } });
+  const ipRateEl = el('span', { class: 'c-muted dev-ip-rate' });
 
   const pillBtns = {};
   const pillBar = el('div', { class: 'policy-pill-bar' });
@@ -312,7 +308,7 @@ function createDeviceCard(mac) {
   },
     el('div', { class: 'dev-nav-top' },
       el('div', { class: 'dev-title-group' }, dotEl, nameEl, renameInput, renameBtn),
-      el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: '0' } }, linkEl, flowsEl)
+      el('div', { class: 'row-flex' }, linkEl, flowsEl)
     ),
     el('div', { class: 'dev-nav-sub' }, ipRateEl, pillBar)
   );
@@ -517,7 +513,7 @@ function renderDeviceMenu(devs, quarantine, byIp, totalFlows) {
   if (!sorted.length && !qOffset) {
     editingMac = null;
     existingByMac.forEach(node => node.remove());
-    list.appendChild(el('div', { class: 'c-muted', style: { padding: '14px', textAlign: 'center', fontSize: '11.5px' } }, '無匹配終端'));
+    list.appendChild(el('div', { class: 'c-muted dev-empty' }, '無匹配終端'));
     forceReorder = false;
     return;
   }
@@ -661,8 +657,8 @@ function renderConnections(devs, selectedDev, rows) {
 
     let tr = rowsByKey.get(key);
     if (!tr) {
-      const hostEl = el('div', { class: 'c-bright', style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, hostTxt);
-      const srcEl = el('div', { class: 'c-muted', style: { fontSize: '10.5px' } }, srcTxt);
+      const hostEl = el('div', { class: 'c-bright conn-host' }, hostTxt);
+      const srcEl = el('div', { class: 'c-muted conn-src-sub' }, srcTxt);
       const dstCell = el('td', { title: dstTxt }, dstTxt);
       const portCell = el('td', { class: 'c-sec' }, portTxt);
       const badgeEl = el('span', { class: `st-badge ${badgeClass}` }, routeText);
@@ -682,19 +678,16 @@ function renderConnections(devs, selectedDev, rows) {
       rowsByKey.set(key, tr);
     } else {
       const u = tr._ui;
-      if (u.hostEl.textContent !== hostTxt) u.hostEl.textContent = hostTxt;
-      if (u.srcEl.textContent !== srcTxt) u.srcEl.textContent = srcTxt;
-      if (u.dstCell.textContent !== dstTxt) {
-        u.dstCell.textContent = dstTxt;
-        u.dstCell.title = dstTxt;
-      }
-      if (u.portCell.textContent !== portTxt) u.portCell.textContent = portTxt;
-      const bCls = `st-badge ${badgeClass}`;
-      if (u.badgeEl.className !== bCls) u.badgeEl.className = bCls;
-      if (u.badgeEl.textContent !== routeText) u.badgeEl.textContent = routeText;
-      if (u.downCell.textContent !== downTxt) u.downCell.textContent = downTxt;
-      if (u.upCell.textContent !== upTxt) u.upCell.textContent = upTxt;
-      if (u.bytesCell.textContent !== bytesTxt) u.bytesCell.textContent = bytesTxt;
+      setTxt(u.hostEl, hostTxt);
+      setTxt(u.srcEl, srcTxt);
+      setTxt(u.dstCell, dstTxt);
+      setTitle(u.dstCell, dstTxt);
+      setTxt(u.portCell, portTxt);
+      setCls(u.badgeEl, `st-badge ${badgeClass}`);
+      setTxt(u.badgeEl, routeText);
+      setTxt(u.downCell, downTxt);
+      setTxt(u.upCell, upTxt);
+      setTxt(u.bytesCell, bytesTxt);
     }
     orderedRows.push(tr);
   }

@@ -150,11 +150,8 @@ export function updateAuthButton() {
   const btn = $('#btn-auth');
   if (!btn) return;
   const nextTxt = S.session ? `${S.user || 'root'} · 登出` : '管理登入';
-  const nextBdr = S.session ? 'var(--c-mint)' : 'var(--line-window)';
-  const nextCol = S.session ? 'var(--c-mint)' : 'var(--text-secondary)';
   if (btn.textContent !== nextTxt) btn.textContent = nextTxt;
-  if (btn.style.borderColor !== nextBdr) btn.style.borderColor = nextBdr;
-  if (btn.style.color !== nextCol) btn.style.color = nextCol;
+  btn.classList.toggle('mint', !!S.session);
 }
 
 export function openLoginModal(afterFn = null) {

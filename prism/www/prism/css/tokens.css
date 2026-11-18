@@ -9,6 +9,9 @@
   --bg-panel:      rgba(6, 8, 15, 0.94);
   --bg-panel-alt:  rgba(10, 13, 22, 0.92);
   --bg-glass:      rgba(7, 9, 16, 0.96);
+  --bg-input:      rgba(4, 6, 12, 0.64);
+  --rule-hairline: rgba(255, 255, 255, 0.06);
+  --rule-faint:    rgba(255, 255, 255, 0.04);
 
   /* Crisp Sharp Geometry & Luminous Hairlines */
   --frame-radius:  0px;
@@ -17,11 +20,16 @@
   --line-subtle:   #151c2c;
   --line-dashed:   #242c40;
 
-  /* Crisp Monochrome Typography */
+  /* Crisp Monochrome Typography & Integer Scale (Clean at 100%/125%/150%/200% DPI) */
   --text-bright:   #f4f7fc;
   --text-primary:  #d5dfee;
   --text-secondary:#8c9ab5;
   --text-muted:    #58657e;
+  --fs-xs:         9px;
+  --fs-sm:         10px;
+  --fs-base:       11px;
+  --fs-md:         12px;
+  --fs-lg:         14px;
 
   /* Luminous Spectral Accents (Unified 圖1 Soft Bloom Palette) */
   --c-amber:       #eb9a5e;
