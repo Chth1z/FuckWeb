@@ -30,6 +30,8 @@
   --fs-base:       11px;
   --fs-md:         12px;
   --fs-lg:         14px;
+  --fs-xl:         16px;
+  --fs-hero:       32px;
 
   /* Luminous Spectral Accents (Unified 圖1 Soft Bloom Palette) */
   --c-amber:       #eb9a5e;

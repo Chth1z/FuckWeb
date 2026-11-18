@@ -38,7 +38,7 @@ html.prism-cold .main-stage {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-width: 390px;
+  max-width: 420px;
 }
 
 .corner-hud.tl { top: 20px; left: 24px; align-items: flex-start; }
@@ -64,9 +64,10 @@ html.prism-cold .main-stage {
 }
 
 .corner-rate-main {
-  font-size: 24px;
+  font-size: var(--fs-hero);
+  line-height: 40px;
   font-weight: 700;
-  min-width: 132px;
+  min-width: 9.5ch;
   color: #ffffff;
   letter-spacing: -0.02em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.96);
@@ -107,7 +108,7 @@ html.prism-cold .main-stage {
 }
 
 .corner-rate-up {
-  font-size: var(--fs-lg);
+  font-size: var(--fs-xl);
   font-weight: 700;
   color: var(--c-blue);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.96);
@@ -2038,7 +2039,8 @@ html.prism-cold .main-stage {
   .corner-hud.tr { top: 12px; right: 12px; }
   .corner-hud.bl { bottom: 12px; left: 12px; }
   .corner-hud.br { bottom: 12px; right: 12px; }
-  .corner-rate-main { font-size: 17px; }
+  .corner-rate-main { font-size: 20px; line-height: 28px; min-width: 0; }
+  .corner-rate-up { font-size: var(--fs-md); }
   .seg-meter--ov { width: 136px; }
   .bp-split-2 { grid-template-columns: 1fr; }
   .heatmap-stage-wrap { container-type: normal; }
