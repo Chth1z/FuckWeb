@@ -425,12 +425,6 @@ export function restore_selected(cfg, lan_ip, profiles) {
 	return all_ok;
 };
 
-// Poll live Zashboard selections from Mihomo RAM and persist only when modified.
-export function sync_selected(cfg, lan_ip, profiles) {
-	let res = api(cfg, lan_ip, "GET", "/proxies");
-	return persist_selected(parse_json_obj(res.body)?.proxies, profiles);
-};
-
 export function persist_selected(live, profiles) {
 	if (!live)
 		return false;
@@ -466,6 +460,12 @@ export function persist_selected(live, profiles) {
 			identity.save_relays_state(next);
 		return changed;
 	});
+};
+
+// Poll live Zashboard selections from Mihomo RAM and persist only when modified.
+export function sync_selected(cfg, lan_ip, profiles) {
+	let res = api(cfg, lan_ip, "GET", "/proxies");
+	return persist_selected(parse_json_obj(res.body)?.proxies, profiles);
 };
 
 function reload_raw(cfg, lan_ip, profiles) {

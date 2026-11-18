@@ -44,7 +44,7 @@ tools/rsh sh -s <<'REMOTE'
 set -e
 STAGE=/tmp/prism-stage
 PREV=/tmp/prism-prev.tgz
-KEEP="etc/config/prism etc/hotplug.d/dhcp/50-prism etc/init.d/prism etc/prism/lists etc/prism/guard.nft etc/prism/provision.json etc/sysctl.d/99-prism.conf lib/upgrade/keep.d/prism usr/sbin/prism usr/share/prism/VERSION usr/share/prism/prism.uc usr/share/prism/prismd.uc usr/share/prism/lib usr/share/prism/mod usr/share/prism/portal usr/share/prism/tpl usr/share/nftables.d/ruleset-post/30-prism-guard.nft usr/share/rpcd/acl.d/prism.json www/prism"
+KEEP="etc/config/prism etc/hotplug.d/dhcp/50-prism etc/init.d/prism etc/prism/lists etc/prism/guard.nft etc/prism/provision.json etc/sysctl.d/99-prism.conf lib/upgrade/keep.d/prism usr/sbin/prism usr/share/prism/VERSION usr/share/prism/prism.uc usr/share/prism/prismd.uc usr/share/prism/bin usr/share/prism/lib usr/share/prism/mod usr/share/prism/portal usr/share/prism/tpl usr/share/nftables.d/ruleset-post/30-prism-guard.nft usr/share/rpcd/acl.d/prism.json www/prism"
 guard_before=0
 [ ! -f /etc/prism/guard.nft ] || guard_before=1
 
