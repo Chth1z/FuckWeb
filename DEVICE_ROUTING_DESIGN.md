@@ -1,5 +1,7 @@
 # Prism 多設備獨立節點分流、MAC+IP 交叉認證與嚴格防呆設計規格書
 
+> **階段性設計規格（歸檔參考）**：核心架構（`TW-HOME`、每設備獨立 TProxy 與 `IN-NAME` 規則、`@verified_pairs` Mode A 門禁與指紋認證）已實裝於現行 **5.8.0** 代碼庫；其中多處實作細節於 5.8.0 已進一步簡化與加固（見 [prism/etc/prism/ARCHITECTURE.md](prism/etc/prism/ARCHITECTURE.md) 與 [ENGINEERING_REPORT.md](ENGINEERING_REPORT.md)）。
+
 > 本文檔根據最終審定需求修訂：保留 **`TW-HOME`** 台灣容災組、將 Lightsail 重命名為 **`JP-Lightsail-VLESS`** 與 **`JP-Lightsail-HY2`**、精簡並去除地區 Emoji 前綴、嚴格採用 **模式 A（未知/未認證設備默認禁網，含反自鎖認領）**、以 **設備別名 + MAC** 作為 Zashboard 組名防重複識別、並採用 **「雙因子 `MAC+IP` 防冒充門禁 ＋ 多維被動指紋交叉認證」** 與 **多埠 `IN-NAME` 物理隔離**，確保 100% 準確分流與嚴格 0 洩漏。
 
 ---

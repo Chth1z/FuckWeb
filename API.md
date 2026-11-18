@@ -114,7 +114,7 @@ interface PrismStatusResponse {
     policy: "harvest" | "headroom" | "even";
     affinity: "flow" | "auto" | "dest";
     slots: number;          // Pattern length, typically 126 (6 * 21)
-    interval: number;       // Sampling & re-weaving interval in seconds (2)
+    interval: number;       // Sampling & re-weaving interval in seconds (1)
     pattern: number[];      // Array of `slots` strand IDs (1..21) currently in `@pattern`
     vip: number[];          // Raw `@vip_lane` kernel map values: `[vip_id | 0x100, vip_id | 0x100]`
     vip_id: number;         // Strand ID (1..21) currently elected as the dedicated VIP gaming lane
@@ -130,7 +130,7 @@ interface PrismStatusResponse {
     enabled: boolean;       // Always true (locked)
     running: boolean;       // True if mihomo process is alive and tproxy port is bound
     on: boolean;            // True if nftables is diverting non-domestic traffic to mihomo
-    relays: number;         // Total number of loaded relay proxies (including synthesized chains)
+    relays: number;         // Total number of loaded relay proxies
     fail_open: boolean;     // Always false (locked fail-closed privacy cage)
     canary_ms: number;      // Last canary probe delay in ms
     canary_fails: number;   // Consecutive canary failures
@@ -345,14 +345,14 @@ interface PrismConfigResponse {
 >   - `weave.policy`: `"harvest"` (Burst-Harvest 2.0 token-bucket scheduler)
 >   - `weave.affinity`: `"flow"` (Per-flow spread across strands)
 >   - `classify.remainder`: `"tunnel"` (Overseas traffic always enters tunnel)
->   - `classify.quic`: `"reject"` (Reject UDP/443 QUIC so browsers use TCP/TLS over multi-strand + BBR)
+>   - `classify.quic`: `"reject"` (Reject UDP/443 QUIC so browsers use multi-strand TCP/TLS)
 >   - `tunnel.enabled`: `1` (Tunnel always enabled)
 >   - `tunnel.fail_open`: `0` (Strict fail-closed privacy guard; zero direct leak on outage)
 > - **Editable (`locked: false`)**:
 >   - `strands.aggregate`: `"auto" | "on" | "off"`
 >   - `strands.probe_interval`: `30 .. 3600` (seconds)
 >   - `weave.slots`: `0 .. 252` (`0` = auto `6` per healthy strand)
->   - `weave.strand_kbit`: `0 .. 1000000` (`0` = auto learn from peaks)
+>   - `weave.strand_kbit`: `0 .. 1000000` (`0` = default 10 Mbps CIR; peak ceiling under `headroom`)
 >   - `dns.ads`: `0 .. 1` (SmartDNS ad blocking)
 >   - `main.mss`: `0 .. 1460` (TCP MSS clamping, default `1440`)
 

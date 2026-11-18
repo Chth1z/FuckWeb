@@ -137,9 +137,10 @@ VIP 选举考虑首字节时间、探测失败及收发负载。有其他健康�
 
 ```
 客户端 → dnsmasq(:53, DHCP 主机名) → SmartDNS(127.0.0.1:6053)
-   隧道在线:  cn 域名表 → 国内 DoH（证书校验）   其余 → 隧道 DNS(5553)
-              tunnel-domains.list → 走默认组，答案写入 nft @tunnel4_dns
-   隧道离线:  全部 → 国内 DoH
+   任意时刻（fail-closed）:
+     cn 域名表 → 国内 DoH（证书校验），答案写入 @domestic4_dns
+     其余       → 隧道 DNS(127.0.0.1:5553)
+     tunnel-domains.list → 走默认组，答案写入 nft @tunnel4_dns
 ```
 
 永不使用明文 UDP/53 上游（这里会被劫持）。portal 未认证时 DoH 证书校验会失败，
@@ -152,9 +153,9 @@ prismd 发布 ubus 对象 `prism`，uhttpd 经 `/ubus` 暴露，ACL 在
 
 | 方法 | 权限 | 内容 |
 |---|---|---|
-| `status` `series` `events` `doctor` `tunnel` `devices` `rules` | 局域网内免登录 | 站点/线路/负载/图样、历史曲线、事件、体检、中继、设备与速率、分类规则及实时命中 |
-| `config` `connections` | 登录 | 可调参数及取值范围；每一条连接（谁在和谁通信属于隐私） |
-| `reconcile` `configure` `relogin` `select` `device` `remember` `forget` | 登录 | 触发一轮、改参数、重登 portal、切换中继、设备改名/改去向、记住/忘记当前网络 |
+| `status` `series` `events` `doctor` `tunnel` `devices` `rules` `led_view` | 局域网内免登录 | 站点/线路/负载/图样、历史曲线、事件、体检、中继、设备与速率、分类规则及实时命中、LED 状态 |
+| `config` `connections` | 登录 | 可调参数及取值范围；活跃直连/隧道流列表（带单调采样时间戳，需鉴权） |
+| `reconcile` `configure` `relogin` `select` `device` `remember` `forget` `claim` `reload` `led_demo` `led_color` | 登录 | 触发一轮、改参数、重登 portal、切换中继、设备改名/改去向/认领、记住/忘记网络、重载配置、LED 控制 |
 
 任何处理函数抛异常只损失这一次应答，不会带垮 prismd。
 
@@ -165,18 +166,22 @@ prismd 发布 ubus 对象 `prism`，uhttpd 经 `/ubus` 暴露，ACL 在
 
 ```
 /etc/config/prism                全部可调参数（完整清单与默认值见 lib/config.uc）
+/etc/hotplug.d/dhcp/50-prism     DHCP 事件入口（调用 bin/dhcp.uc 记录指纹并触发协调）
+/etc/prism/guard.nft             持久化的独立 fail-closed 防护规则（fw4 ruleset-post 包含）
 /etc/prism/lists/*.list          domestic4 / tunnel4 / tunnel-domains，纯数据
-/etc/prism/provision.json        本机应有的 UCI 值、IRQ 亲和等
+/etc/prism/provision.json        本机应有的 UCI 值、IRQ 亲和、AQL 限制
 /etc/prism/relays.json           中继（600）  controller.secret  portal.secret
+/etc/prism/state/                运行持久态：profiles.json、device_relays.json、sites
 /usr/share/prism/prism.uc        CLI + 流水线
 /usr/share/prism/prismd.uc       守护进程
-/usr/share/prism/lib/            core(文件/shell/日志) config facts series
-/usr/share/prism/mod/            strands weave kernel tunnel dns devices host wifi led doctor api
-/usr/share/prism/portal/         portal 插件（导出 login_cmd(dev, secret)）
+/usr/share/prism/bin/            dhcp.uc（DHCP 热插拔） lan_probe.lua（LAN 名称探测）
+/usr/share/prism/lib/            core(文件/shell/日志) config facts(rtnl) series(环形缓冲)
+/usr/share/prism/mod/            strands weave kernel tunnel guard dns devices identity host wifi led doctor api
+/usr/share/prism/portal/         portal 插件（导出 address() 与 login_cmd(dev, secret, ip)）
 /usr/share/prism/tpl/prism.nft.ut   nft 骨架模板
 /www/prism/                      模块化前端控制台（index.html + css/ + js/）
-/tmp/prism/                      运行态：state.json status.json doctor.json pattern.json
-                                 events.log 以及渲染产物 smartdns.conf mihomo.yaml ruleset.nft
+/tmp/prism/                      运行态：state.json status.json doctor.json pattern.json guard.nft
+                                 events.log dhcp_obs/ 以及渲染产物 smartdns.conf mihomo.yaml ruleset.nft
 ```
 
 ## 命令

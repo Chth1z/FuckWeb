@@ -1,5 +1,7 @@
 # Prism 5.0 終極架構與工程詳細設計文檔（完整技術規格書）
 
+> **歷史原始設計基線（歸檔參考）**：本文檔記錄 Prism 5.0 時期的物理實驗數據與原始數學推導，現行 **5.8.0 維護基線**（已部署並驗證於實機）請以 [README.md](README.md)、[prism/etc/prism/ARCHITECTURE.md](prism/etc/prism/ARCHITECTURE.md)、[API.md](API.md) 與 [ENGINEERING_REPORT.md](ENGINEERING_REPORT.md) 為準。
+
 > **核心設計準則：事實與物理定律優先（Truth & Physics First）**  
 > 本文檔為 **Prism 5.0** 的完整工程技術規格書，基於對現場運行中的 Redmi AX6000（`192.168.16.1`，Linux 6.12，MediaTek MT7986 Filogic 830，當前接入 `IHG 酒店` 嶺博科技 LinkBroad YunGW 網關 `192.168.128.1` / `b4:4b:d6:57:18:0b`）的**實網逆向工程數據**、**底層令牌桶微基準測試**與**全量源碼逐行審計**編制。  
 > 文檔完整定義了物理基線、數學模型、內核 `nftables` 規則集、令牌桶收割狀態機、三級硬優先隊列、`TW-HOME` 零跳變防封號隧道、自癒探針及**零斷線無感熱部署方案**。

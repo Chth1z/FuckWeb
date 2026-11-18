@@ -86,3 +86,7 @@ ROUTER
 ```
 
 </details>
+
+## Post-deploy maintenance fix and verification
+
+Following initial router deployment (`e08a659`), live `logread` surfaced a strict-mode forward call in `mod/tunnel.uc` (`sync_selected` calling `persist_selected` before its export declaration). Moving `persist_selected` ahead of `sync_selected` and adding `usr/share/prism/bin` to the `tools/deploy.sh` rollback archive resolved this (`f7b8a1f`). Full local checks, rehearsal, `test-backend.sh`, `test-privacy-netns.sh`, `./tools/deploy.sh` (`DEPLOY_OK`, `OK  fail=0 warn=0`), live `tunnel.sync_selected`, and post-deploy `ubus` / `logread` checks all passed (`21/21` healthy, `mptcp_subflows=5`).
