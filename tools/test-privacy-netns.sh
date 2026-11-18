@@ -6,23 +6,17 @@ BASE=${1:-/tmp/prism-rehearsal/run/plan}
 C=bp-c-$$
 R=bp-r-$$
 W=bp-w-$$
+fixture=$(mktemp -d /tmp/prism-privacy.XXXXXX)
 cleanup() {
+    rm -rf "$fixture"
     for ns in "$C" "$R" "$W"; do ip netns delete "$ns" 2>/dev/null || true; done
 }
 trap cleanup EXIT INT TERM
 ip netns add "$C"
 ip netns add "$R"
 ip netns add "$W"
-ip link add bpc$$ type veth peer name bpr$$
-ip link set bpc$$ netns "$C"
-ip link set bpr$$ netns "$R"
-ip -n "$C" link set bpc$$ name eth0
-ip -n "$R" link set bpr$$ name br-lan
-ip link add bpw$$ type veth peer name bpu$$
-ip link set bpw$$ netns "$R"
-ip link set bpu$$ netns "$W"
-ip -n "$R" link set bpw$$ name wan
-ip -n "$W" link set bpu$$ name eth0
+ip -n "$C" link add eth0 type veth peer name br-lan netns "$R"
+ip -n "$R" link add wan type veth peer name eth0 netns "$W"
 for ns in "$C" "$R" "$W"; do ip -n "$ns" link set lo up; done
 ip -n "$C" addr add 10.200.0.2/24 dev eth0
 ip -n "$C" link set eth0 up
@@ -38,6 +32,7 @@ ip -n "$R" route add local default dev lo table 100
 ip -n "$W" addr add 10.201.0.2/24 dev eth0
 ip -n "$W" link set eth0 up
 ip -n "$W" route add default via 10.201.0.1
+for ns in "$C" "$R" "$W"; do ip netns exec "$ns" sysctl -qw net.ipv6.conf.all.disable_ipv6=0; done
 ip -n "$C" -6 addr add fd00:200::2/64 dev eth0 nodad
 ip -n "$C" -6 route add default via fd00:200::1
 ip -n "$R" -6 addr add fd00:200::1/64 dev br-lan nodad
@@ -49,8 +44,18 @@ ip -n "$W" -6 route add default via fd00:201::1
 for addr in 223.5.5.5 203.0.113.10 18.176.216.3; do ip -n "$W" addr add "$addr/32" dev lo; done
 ip netns exec "$R" sysctl -qw net.ipv4.ip_forward=1
 ip netns exec "$R" sysctl -qw net.ipv6.conf.all.forwarding=1
+ip netns exec "$C" ping -6 -c 3 -W 2 2001:db8:777::1 >/dev/null
 ip netns exec "$R" nft -f "$BASE/ruleset.nft"
 ip netns exec "$R" nft -f "$BASE/guard.nft"
+# Exercise the production shaper exclusively on this namespace's veth.
+(cd /tmp/prism-rehearsal/tree/usr/share/prism && ip netns exec "$R" ucode -S -e '
+import { shape } from "./mod/host.uc";
+for (let rate in [95, 9]) {
+	assert(shape("wan", rate), "expected HTB update");
+	assert(!shape("wan", rate), "HTB did not converge");
+}
+print("PASS shaper 95 and 9 Mbit/s idempotent\n");
+')
 ip netns exec "$W" nft -f - <<'NFT'
 table inet audit {
  counter seen {}
@@ -71,7 +76,38 @@ probe() {
         exit 1
     fi
 }
+probe block 223.5.5.5 8080 unverified_domestic
+# sysfs can reflect the parent mount's netns. Ask rtnetlink for the namespace device.
+client_mac=$(ip -n "$C" -o link show dev eth0 | awk '{for(i=1;i<=NF;i++) if($i=="link/ether") print $(i+1)}')
+for t in prism prism_guard; do
+    ip netns exec "$R" nft add element inet "$t" verified_pairs "{ $client_mac . 10.200.0.2 }"
+done
+ip netns exec "$R" nft -f - <<'NFT'
+table inet check_marks {
+ counter approved {}
+ counter egress {}
+ chain forward { type filter hook forward priority 0; policy accept;
+  ip daddr 223.5.5.5 meta mark & 0x20000000 != 0 ct mark & 0x20000000 == 0 counter name approved
+ }
+ chain post { type filter hook postrouting priority 0; policy accept;
+  oifname "wan" counter name egress
+ }
+}
+NFT
+strand_pkts() {
+    ip netns exec "$R" nft -j list set inet prism strands_up |
+        jsonfilter -e '@.nftables[*].set.elem[@.elem.val="wan"].elem.counter.packets'
+}
+before=$(strand_pkts)
 probe pass 223.5.5.5 8080 domestic_direct_live
+after=$(strand_pkts)
+egress=$(ip netns exec "$R" nft list counter inet check_marks egress | awk '/packets/ {print $2}')
+[ "$egress" -gt 0 ] && [ "$((after-before))" -eq "$egress" ] || exit 1
+echo "PASS single WAN accounting ($egress packets)"
+approved=$(ip netns exec "$R" nft list counter inet check_marks approved | awk '/packets/ {print $2}')
+[ "$approved" -gt 0 ]
+echo "PASS direct authorization only on packet mark ($approved packets)"
+probe block 18.176.216.3 80 unapproved_relay_port_live
 probe block 203.0.113.10 8080 foreign_tunnel_without_listener
 ip netns exec "$R" nft add element inet prism tunnel4 '{ 223.5.5.5 }'
 probe block 223.5.5.5 8080 forced_tunnel_precedes_domestic
@@ -84,7 +120,14 @@ probe block 18.176.216.3 80 other_relay_ports_closed
 probe block 223.5.5.5 53 dns_intercept_survives_stop
 probe block 223.5.5.5 853 dot_rejected_after_stop
 probe block '[2001:db8:777::1]' 8080 ipv6_closed_after_stop
-# Re-loading the guard (the fw4 include path) remains closed without Prism.
-ip netns exec "$R" nft -f "$BASE/guard.nft"
+# Exercise the shipped fw4 include before first policy generation and after persistence.
+include=/tmp/prism-rehearsal/tree/usr/share/nftables.d/ruleset-post/30-prism-guard.nft
+sed "s@/etc/prism/@$fixture/@" "$include" > "$fixture/reload.nft"
+ip netns exec "$R" nft -f "$fixture/reload.nft"
+probe block 18.176.216.3 443 first_boot_without_policy
+cp "$BASE/guard.nft" "$fixture/guard.nft"
+echo "add element inet prism_guard verified_pairs { $client_mac . 10.200.0.2 }" >> "$fixture/guard.nft"
+ip netns exec "$R" nft -f "$fixture/reload.nft"
+probe pass 18.176.216.3 443 relay_after_guard_reload
 probe block 203.0.113.10 8080 firewall_reload_without_prism
-echo 'PRIVACY_NETNS_OK (no external interfaces or Claude requests)'
+echo 'PRIVACY_NETNS_OK'

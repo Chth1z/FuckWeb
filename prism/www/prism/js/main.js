@@ -2,14 +2,14 @@
  * PRISM 5.0 — Bootstrap, 4-Tab Router & Differential Polling Engine
  * ============================================================================ */
 
-import { S, UI_VERSION, fmtRate } from './state.js?v=5.7.0';
-import { $, $$, toast, setTxt, setCls } from './dom.js?v=5.7.0';
-import { callBatch, call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.7.0';
-import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.js?v=5.7.0';
-import { renderOverview } from './views/overview.js?v=5.7.0';
-import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.7.0';
-import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.7.0';
-import { renderClients, bindClientsEvents } from './views/clients.js?v=5.7.0';
+import { S, UI_VERSION, fmtRate } from './state.js?v=5.8.0';
+import { $, $$, toast, setTxt, setCls } from './dom.js?v=5.8.0';
+import { callBatch, call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.8.0';
+import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.js?v=5.8.0';
+import { renderOverview } from './views/overview.js?v=5.8.0';
+import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.8.0';
+import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.8.0';
+import { renderClients, bindClientsEvents } from './views/clients.js?v=5.8.0';
 
 let fastTimer = null;
 let slowTimer = null;
@@ -19,7 +19,6 @@ let slowInFlight = false;
 let connInFlight = false;
 let pendingFast = false;
 let pendingSlow = false;
-let connDeltaTimer = null;
 let lastFastTab = '';
 
 function renderChrome() {
@@ -152,19 +151,11 @@ async function pollConnections(force = false) {
     return;
   }
   connInFlight = true;
-  const hadBaseline = !!S.flowSnapshotTs;
   try {
     const cn = await call('connections');
     if (cn) {
       S.connections = cn;
       if (S.tab === 'clients') renderClients();
-      // First visit to Clients has dt=0; fire one rapid 460ms sample so per-flow rx/tx light up in <0.5s
-      if (!hadBaseline && !connDeltaTimer) {
-        connDeltaTimer = setTimeout(() => {
-          connDeltaTimer = null;
-          pollConnections(false);
-        }, 460);
-      }
     }
   } catch (_) {
   } finally {
@@ -298,8 +289,6 @@ function bindGlobalEvents() {
       if (S.tab === 'blueprint') startBlueprintAnim();
       if (S.tab === 'spectrum') startSpectrumAnim();
     } else {
-      clearTimeout(connDeltaTimer);
-      connDeltaTimer = null;
       stopBlueprintAnim();
       stopSpectrumAnim();
     }
@@ -450,9 +439,11 @@ async function init() {
 
   fastTimer = setInterval(() => {
     pollFast();
-    if (S.tab === 'clients' && S.session) pollConnections();
   }, 1000);
-  slowTimer = setInterval(() => pollSlow(), 6000);
+  slowTimer = setInterval(() => {
+    pollSlow();
+    if (S.tab === 'clients' && S.session) pollConnections();
+  }, 4000);
 }
 
 init();

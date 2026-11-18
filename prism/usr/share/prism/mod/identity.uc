@@ -8,6 +8,7 @@
 
 import * as fs from "fs";
 import * as ubus from "ubus";
+import * as rtnl from "rtnl";
 import { cursor } from "uci";
 import * as core from "../lib/core.uc";
 import * as config from "../lib/config.uc";
@@ -39,7 +40,7 @@ export function is_mac(s) {
 };
 
 export function is_ip4(s) {
-	return !!match(s ?? "", /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/);
+	return length(iptoarr(s ?? "")) == 4;
 };
 
 // Strip brackets, commas, quotes and control characters because Mihomo group
@@ -99,6 +100,7 @@ function alloc_port(store, cfg, used_ports) {
 			break;
 		}
 	}
+	assert(p <= 64000, "device listener port range exhausted");
 	store.next_port = p + 1;
 	return p;
 }
@@ -117,29 +119,31 @@ function push_uniq(arr, val, limit) {
 // --- store persistence -----------------------------------------------------
 
 export function load_store() {
-	let s = core.load_json(PROFILES_FILE, null);
-	if (type(s) != "object" || type(s.profiles) != "array")
+	if (!fs.stat(PROFILES_FILE))
 		return null;
+	let s = json(fs.readfile(PROFILES_FILE));
+	assert(type(s.profiles) == "array", "invalid profile store");
 	return s;
 };
 
 export function save_store(store) {
 	core.init_dirs();
-	return core.write_atomic(PROFILES_FILE, sprintf("%.2J\n", store), 0o600);
+	assert(core.write_atomic(PROFILES_FILE, sprintf("%.2J\n", store), 0o600), "cannot save " + PROFILES_FILE);
 };
 
 export function load_relays_state() {
-	let r = core.load_json(RELAYS_FILE, null);
-	if (type(r) != "object") {
-		let leg = core.load_json(LEGACY_SELECTED_FILE, null);
-		r = type(leg?.name) == "string" && length(leg.name) ? { _tw_home: leg.name } : {};
+	if (fs.stat(RELAYS_FILE)) {
+		let r = json(fs.readfile(RELAYS_FILE));
+		assert(type(r) == "object", "invalid relay selections");
+		return r;
 	}
-	return r;
+	let leg = core.load_json(LEGACY_SELECTED_FILE, null);
+	return type(leg?.name) == "string" && length(leg.name) ? { _tw_home: leg.name } : {};
 };
 
 export function save_relays_state(relays) {
 	core.init_dirs();
-	return core.write_atomic(RELAYS_FILE, sprintf("%.2J\n", relays), 0o600);
+	assert(core.write_atomic(RELAYS_FILE, sprintf("%.2J\n", relays), 0o600), "cannot save " + RELAYS_FILE);
 };
 
 export function with_identity_lock(fn) {
@@ -153,13 +157,24 @@ export function profile_by_uid(store, uid) {
 	return null;
 };
 
+export function all_profile_macs(p) {
+	let out = [];
+	if (is_mac(p.anchor_mac))
+		push(out, lc(p.anchor_mac));
+	for (let m in p.macs ?? []) {
+		let mac = lc(type(m) == "object" ? m.mac : m);
+		if (is_mac(mac) && !(mac in out))
+			push(out, mac);
+	}
+	return out;
+};
+
 export function mac_owner_map(store) {
 	let owners = {};
 	for (let p in store?.profiles ?? []) {
-		for (let m in p.macs ?? []) {
-			let mac = lc(type(m) == "object" ? m.mac : m);
-			if (is_mac(mac))
-				owners[mac] = p;
+		for (let mac in all_profile_macs(p)) {
+			assert(!owners[mac], "multiple profiles own " + mac);
+			owners[mac] = p;
 		}
 	}
 	return owners;
@@ -171,18 +186,6 @@ export function mac_anchor(mac) {
 		return lc(mac ?? "");
 	let p = mac_owner_map(store)[lc(mac ?? "")];
 	return p ? p.anchor_mac : lc(mac ?? "");
-};
-
-export function all_profile_macs(p) {
-	let out = [];
-	if (is_mac(p.anchor_mac))
-		push(out, lc(p.anchor_mac));
-	for (let m in p.macs ?? []) {
-		let mac = lc(type(m) == "object" ? m.mac : m);
-		if (is_mac(mac) && !(mac in out))
-			push(out, mac);
-	}
-	return out;
 };
 
 // --- telemetry & fingerprinting --------------------------------------------
@@ -246,7 +249,7 @@ function read_leases() {
 	let out = {};
 	for (let line in split(fs.readfile("/tmp/dhcp.leases") ?? "", "\n")) {
 		let f = split(trim(line), " ");
-		if (length(f) >= 4 && is_mac(f[1]))
+		if (length(f) >= 4 && is_mac(f[1]) && (int(f[0]) == 0 || int(f[0]) > time()))
 			out[lc(f[1])] = { ts: int(f[0]), ip: f[2], host: f[3] == "*" ? "" : clean_alias(f[3]) };
 	}
 	return out;
@@ -287,45 +290,29 @@ function read_radios(aps) {
 }
 
 function read_fdb(lan_devs) {
-	let br_ifaces = {};
-	let br = "br-lan";
-	for (let d in fs.lsdir("/sys/class/net/" + br + "/brif") ?? []) {
-		let pn = core.read(sprintf("/sys/class/net/%s/brif/%s/port_no", br, d));
-		if (pn != null)
-			br_ifaces["" + hex(pn)] = d;
-	}
+	let entries = rtnl.request(rtnl.const.RTM_GETNEIGH, rtnl.const.NLM_F_DUMP, { family: rtnl.const.AF_BRIDGE });
+	let error = rtnl.error();
+	assert(!error, error);
 	let out = {};
-	let res = core.sh("brctl showmacs " + br + " 2>/dev/null");
-	if (res.code == 0) {
-		for (let line in split(res.out, "\n")) {
-			let f = split(trim(line), /[ \t]+/);
-			if (length(f) >= 4 && is_mac(f[1]) && f[2] != "yes") {
-				out[lc(f[1])] = {
-					dev: br_ifaces[f[0]] ?? "",
-					ageing: +f[3],
-				};
-			}
-		}
+	for (let n in entries ?? []) {
+		if (!(n.master in lan_devs) || !n.lladdr || !n.cacheinfo || (n.state & rtnl.const.NUD_PERMANENT))
+			continue;
+		let mac = lc(n.lladdr), age = n.cacheinfo.updated / 100.0;
+		if (!out[mac] || age < out[mac].ageing)
+			out[mac] = { dev: n.dev, ageing: age };
 	}
 	return out;
 }
 
 function read_neigh(lan_devs) {
 	let by_mac = {}, by_ip = {};
-	for (let lan in lan_devs ?? []) {
-		for (let n in facts.ip("-4 neigh show dev " + lan)) {
-			if (!is_mac(n.lladdr) || !is_ip4(n.dst))
-				continue;
-			let mac = lc(n.lladdr), st = n.state ?? [];
-			let active = ("REACHABLE" in st) || ("DELAY" in st) || ("PROBE" in st);
-			let stale = "STALE" in st;
-			if (!("FAILED" in st) && !("INCOMPLETE" in st)) {
-				let rec = { ip: n.dst, mac, active, stale, lan };
-				push(by_mac[mac] ??= [], rec);
-				if (!by_ip[n.dst] || active)
-					by_ip[n.dst] = rec;
-			}
-		}
+	for (let n in facts.neighbours()) {
+		if (!(n.dev in lan_devs))
+			continue;
+		let mac = lc(n.lladdr), rec = { ip: n.dst, mac, active: facts.active_neighbour(n), lan: n.dev };
+		push(by_mac[mac] ??= [], rec);
+		if (!by_ip[n.dst] || rec.active)
+			by_ip[n.dst] = rec;
 	}
 	return { by_mac, by_ip };
 }
@@ -343,8 +330,7 @@ export function gather_telemetry(cfg) {
 function observe_mac(mac, tel) {
 	let l = tel.leases[mac], d = tel.dhcp_obs[mac], r = tel.radio[mac], f = tel.fdb[mac];
 	let ns = tel.neigh.by_mac[mac] ?? [];
-	let ip = (d?.action != "remove" && is_ip4(d?.ip)) ? d.ip :
-		(is_ip4(l?.ip) ? l.ip : (ns[0]?.ip ?? ""));
+	let ip = l?.ip ?? filter(ns, (n) => n.active)[0]?.ip ?? ns[0]?.ip ?? "";
 	let ln_ent = ip ? tel.lan_names[ip] : null;
 	let ln = (ln_ent && (!length(ln_ent.mac ?? "") || ln_ent.mac == mac)) ? (ln_ent.name ?? "") : "";
 	let name = clean_alias(d?.host || l?.host || ln || "");
@@ -465,7 +451,6 @@ function bootstrap(cfg, tel, now) {
 	let store = { version: 1, next_port: BASE_TPROXY_PORT, profiles: [] };
 	let used_uids = {}, used_ports = {}, seeded = {};
 	let relays = load_relays_state();
-	let default_relay = length(relays._tw_home) ? relays._tw_home : "TW-HOME";
 
 	let add_seed = (mac, alias, policy, src) => {
 		mac = lc(mac ?? "");
@@ -474,7 +459,7 @@ function bootstrap(cfg, tel, now) {
 		seeded[mac] = true;
 		let p = make_profile(store, cfg, used_uids, used_ports, mac, alias, policy, tel, now, src);
 		push(store.profiles, p);
-		relays[p.uid] ??= default_relay;
+		relays[p.uid] ??= "TW-HOME";
 	};
 
 	// Migrate saved UCI device rows + currently active LAN hosts so Mode A never
@@ -484,9 +469,14 @@ function bootstrap(cfg, tel, now) {
 	for (let mac in sort(keys(tel.radio)))
 		add_seed(mac, "", "auto", "online_seed");
 	for (let mac in sort(keys(tel.leases)))
-		add_seed(mac, "", "auto", "lease_seed");
+		if (observe_mac(mac, tel).online)
+			add_seed(mac, "", "auto", "lease_seed");
 	for (let mac in sort(keys(tel.neigh.by_mac)))
-		add_seed(mac, "", "auto", "neigh_seed");
+		if (observe_mac(mac, tel).online)
+			add_seed(mac, "", "auto", "neigh_seed");
+	for (let mac in sort(keys(tel.fdb)))
+		if (tel.fdb[mac].ageing < 20 && !(int("0x" + substr(mac, 0, 2)) & 1))
+			add_seed(mac, "", "auto", "fdb_seed");
 
 	if (!core.is_dry()) {
 		save_store(store);
@@ -599,41 +589,22 @@ function profile_online_map(store, tel) {
 // Compute exclusive (mac . ip) pairs allowed into kernel @verified_pairs.
 export function compute_verified_pairs(store, tel) {
 	let owners = mac_owner_map(store);
-	let ip_winner = {}; // ip -> { mac, prio, ts }
-	let assign_ip = (ip, mac, prio, ts) => {
-		if (!is_ip4(ip) || !is_mac(mac))
-			return;
-		let p = owners[mac];
-		if (!p || p.policy == "block")
-			return;
-		let cur = ip_winner[ip];
-		if (!cur || prio > cur.prio || (prio == cur.prio && ts > cur.ts))
-			ip_winner[ip] = { mac, prio, ts };
-	};
-
-	// Priority: fresh DHCP hotplug ack (3) > active DHCP lease (2) > live neigh of enrolled MAC (1) > last_ip (0)
-	for (let mac, p in owners) {
-		if (p.policy == "block")
+	let by_ip = {};
+	// The active lease owns the IP, including when the lessee is quarantined.
+	for (let mac, lease in tel.leases)
+		by_ip[lease.ip] = mac;
+	for (let ip, n in tel.neigh.by_ip) {
+		if (by_ip[ip] || (!n.active && !tel.radio[n.mac] && !(tel.fdb[n.mac] && tel.fdb[n.mac].ageing < 20)))
 			continue;
-		let d = tel.dhcp_obs[mac];
-		if (d && d.action != "remove" && is_ip4(d.ip))
-			assign_ip(d.ip, mac, 3, d.ts ?? 0);
-		let l = tel.leases[mac];
-		if (l && is_ip4(l.ip))
-			assign_ip(l.ip, mac, 2, l.ts ?? 0);
-		for (let n in (tel.neigh.by_mac[mac] ?? []))
-			assign_ip(n.ip, mac, n.active ? 2 : 1, 0);
-		if (is_ip4(p.fp?.last_ip))
-			assign_ip(p.fp.last_ip, mac, 0, 0);
+		by_ip[ip] = n.mac;
 	}
-
-	let pairs = [], ip_by_mac = {};
-	for (let ip in sort(keys(ip_winner))) {
-		let mac = ip_winner[ip].mac;
-		push(pairs, mac + " . " + ip);
-		ip_by_mac[mac] ??= ip;
+	let pairs = [];
+	for (let ip in sort(keys(by_ip))) {
+		let mac = by_ip[ip], owner = owners[mac];
+		if (owner && owner.policy != "block" && is_ip4(ip))
+			push(pairs, mac + " . " + ip);
 	}
-	return { pairs, ip_winner, ip_by_mac };
+	return pairs;
 };
 
 // Trigger a quick background LAN hostname probe (NBSTAT/mDNS) for unlabeled online IPs.
@@ -652,13 +623,38 @@ function maybe_probe_lan_names(candidates, tel, now) {
 	}
 }
 
+function refresh_missing_neighbours(store, tel, cfg) {
+	let cmds = [];
+	for (let p in store.profiles) {
+		let ip = p.fp?.last_ip;
+		if (p.policy == "block" || !is_ip4(ip) || tel.neigh.by_ip[ip])
+			continue;
+		let linked = false, leased = false;
+		for (let mac in all_profile_macs(p)) {
+			linked ||= !!tel.radio[mac] || !!(tel.fdb[mac] && tel.fdb[mac].ageing < 20);
+			leased ||= !!tel.leases[mac];
+		}
+		if (!linked || leased)
+			continue;
+		let c = rtnl.const, route = rtnl.request(c.RTM_GETROUTE, 0, { family: c.AF_INET, dst: ip });
+		if (route && !route.gateway && (route.oif in cfg.main.lan_dev))
+			push(cmds, sprintf("ping -c 1 -W 1 -I %s %s >/dev/null 2>&1 &", core.shq(route.oif), ip));
+	}
+	if (length(cmds)) {
+		push(cmds, "wait");
+		core.sh(join("\n", cmds));
+		tel.neigh = read_neigh(cfg.main.lan_dev);
+	}
+}
+
 // Evaluate cross-auth, Mode A quarantine, and verified (MAC, IP) pairs for reconcile.
 export function reconcile(ctx) {
 	return core.with_lock("identity", 5, () => {
-		let cfg = config.load(), now = ctx.now;
-		ctx.cfg = cfg;
+		let cfg = ctx.cfg, now = ctx.now;
 		let tel = gather_telemetry(cfg);
 		let store = load_store() ?? bootstrap(cfg, tel, now);
+		if (!core.is_dry())
+			refresh_missing_neighbours(store, tel, cfg);
 		let dirty = false;
 
 		// Sync policy & alias overrides from UCI device entries cleanly without erasing auto profiles.
@@ -722,7 +718,7 @@ export function reconcile(ctx) {
 		if (owners[mac])
 			continue;
 		let obs = observe_mac(mac, tel);
-		if (!obs.online && !tel.dhcp_obs[mac] && !tel.leases[mac])
+		if (!obs.online && !tel.leases[mac])
 			continue;
 
 		// Is the observed IP currently owned by an active different MAC?
@@ -776,7 +772,7 @@ export function reconcile(ctx) {
 	if (dirty && !core.is_dry())
 		save_store(store);
 
-	let vp = compute_verified_pairs(store, tel);
+	let pairs = compute_verified_pairs(store, tel);
 	let sets = { direct: [], tunnel: [], block: [], game: [] };
 	for (let p in store.profiles) {
 		if (sets[p.policy]) {
@@ -787,53 +783,27 @@ export function reconcile(ctx) {
 	for (let q in quarantine)
 		push(sets.block, q.mac);
 
-	let rt = { ts: now, profiles: store.profiles, quarantine, pairs: vp.pairs, sets };
+	let rt = { ts: now, profiles: store.profiles, quarantine, pairs, sets };
 	if (!core.is_dry())
 		core.save_json(RT_FILE, rt, 0o600);
 	return rt;
 	});
 };
 
-// --- immediate DHCP hotplug admission (<10ms verified_pairs sync) -----------
-
-function apply_live_nft_pair(mac, ip) {
-	if (!is_mac(mac) || !is_ip4(ip))
-		return;
-	// Delete any stale owner of `ip` per-element cleanly before adding `mac . ip`,
-	// skipping tables that do not currently exist (e.g., prism_guard when fail_open=1).
-	let cur = core.sh("nft -j list set inet prism verified_pairs 2>/dev/null");
-	let stale = [];
-	try {
-		for (let item in json(cur.out).nftables ?? []) {
-			for (let e in item.set?.elem ?? []) {
-				let c = e.concat;
-				if (type(c) == "array" && length(c) == 2 && c[1] == ip && lc(c[0]) != mac)
-					push(stale, lc(c[0]));
-			}
-		}
-	}
-	catch (e) {}
-
-	for (let tbl in [ "inet prism", "inet prism_guard" ]) {
-		if (!core.ok("nft list set " + tbl + " verified_pairs"))
-			continue;
-		for (let om in stale)
-			core.sh(sprintf("nft delete element %s verified_pairs { %s . %s } 2>/dev/null || true", tbl, om, ip));
-		core.sh(sprintf("nft add element %s verified_pairs { %s . %s } 2>/dev/null || true", tbl, mac, ip));
-	}
-}
-
-export function on_dhcp_event(ev) {
+// DHCP notifications refresh fingerprints and schedule one policy transaction.
+export function record_dhcp(ev) {
 	let mac = lc(ev?.mac ?? ""), ip = ev?.ip ?? "", act = ev?.action ?? "";
 	if (!is_mac(mac))
-		return { ok: false, error: "bad mac" };
+		die("invalid DHCP MAC");
+	if (!(act in [ "add", "update", "remove" ]) || (act != "remove" && !is_ip4(ip)))
+		die("invalid DHCP event");
 	let now = time(), ev_ts = int(ev?.ts ?? 0) || now;
 	core.init_dirs();
 	fs.mkdir(DHCP_OBS_DIR);
 	let obs_path = sprintf("%s/%s.json", DHCP_OBS_DIR, mac_slug(mac));
 	let prev = core.load_json(obs_path, {});
 	if ((prev.ts ?? 0) > ev_ts)
-		return { ok: true, kick: false };
+		return false;
 
 	let rec = {
 		action: act, mac, ip: length(ip) ? ip : (prev.ip ?? ""),
@@ -844,7 +814,7 @@ export function on_dhcp_event(ev) {
 		iface: length(ev?.iface ?? "") ? ev.iface : (prev.iface ?? "br-lan"),
 		ts: ev_ts,
 	};
-	core.write_atomic(obs_path, sprintf("%J\n", rec), 0o600);
+	assert(core.write_atomic(obs_path, sprintf("%J\n", rec), 0o600), "cannot record DHCP event");
 
 	// Invalidate IP-keyed LAN hostname cache whenever a different MAC leases `ip`.
 	if (is_ip4(rec.ip) && (act == "add" || act == "update")) {
@@ -855,17 +825,7 @@ export function on_dhcp_event(ev) {
 		}
 	}
 
-	let store = load_store();
-	if (!store)
-		return { ok: true, kick: true };
-	let owners = mac_owner_map(store);
-	let p = owners[mac];
-
-	if (p && p.policy != "block" && (act == "add" || act == "update") && is_ip4(rec.ip)) {
-		apply_live_nft_pair(mac, rec.ip);
-		return { ok: true, admitted: p.uid, kick: true };
-	}
-	return { ok: true, admitted: null, kick: true };
+	return true;
 };
 
 // --- operator claim / merge / forget / policy sync --------------------------
@@ -979,10 +939,6 @@ export function claim(args, cfg) {
 			absorb_mac_fp(target, { ...obs, src: "manual" }, now);
 			save_store(store);
 			sync_uci_device(target.anchor_mac, target.alias, target.policy);
-			if (is_ip4(obs.ip)) {
-				for (let lan in (cfg.main?.lan_dev ?? [ "br-lan" ]))
-					core.sh(sprintf("ip neigh del %s dev %s 2>/dev/null || true", obs.ip, lan));
-			}
 			core.event("IDENTITY merged %s -> %s (%s)", mac, target.uid, target.group_name);
 			return { ok: true, uid: target.uid, group_name: target.group_name };
 		}

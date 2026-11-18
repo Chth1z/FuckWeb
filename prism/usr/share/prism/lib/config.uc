@@ -64,9 +64,6 @@ const SCHEMA = {
 		canary_interval: 180,
 		canary_timeout: 5000,
 		canary_fails: 3,
-		canary_grace: 90,
-		// 1: a dead tunnel takes its nft rules out, traffic goes direct.
-		// 0: rules stay, tunnelled destinations fail until it is back.
 		fail_open: 0,
 		// SSH maintenance destinations allowed even with the whole service stopped.
 		guard_ssh4: [],
@@ -149,6 +146,8 @@ export function load() {
 		for (let key, fallback in defaults)
 			cfg[section][key] = coerce(all[section]?.[key], fallback);
 	}
+	cfg.tunnel.fail_open = 0;
+	cfg.classify.remainder = "tunnel";
 	// Repeatable sections: the networks we recognise and the devices we know.
 	cfg.sites = [];
 	cfg.devices = [];

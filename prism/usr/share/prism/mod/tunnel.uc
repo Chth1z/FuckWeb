@@ -224,13 +224,6 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 			break;
 		}
 	}
-	if (vps_proxy) {
-		// Taiwan residential relays block outbound mail ports (465/587/993); route mail
-		// ports through an owned VPS relay so devices on TW-HOME still sync email cleanly.
-		for (let mp in [ 25, 110, 143, 465, 587, 993, 995 ])
-			push(rules, sprintf("DST-PORT,%d,%s", mp, vps_proxy));
-	}
-
 	let choices = has_tw ? [ "TW-HOME", ...names ] : slice(names);
 	let sorted_profiles = sort(slice(profiles ?? []), (a, b) => (a.port ?? 0) - (b.port ?? 0));
 	for (let p in sorted_profiles) {
@@ -305,24 +298,9 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 	};
 }
 
-function sanitize_cache_db() {
-	let p = core.RUN + "/cache.db";
-	let f = fs.open(p, "r");
-	if (!f)
-		return;
-	let hdr = f.read(20) ?? "";
-	f.close();
-	// Remove non-bbolt cache.db (e.g. legacy SmartDNS collision or truncated DB) before Mihomo reads it.
-	let valid_bbolt = length(hdr) >= 20
-		&& ord(hdr, 16) == 0xed && ord(hdr, 17) == 0xda
-		&& ord(hdr, 18) == 0x0c && ord(hdr, 19) == 0xed;
-	if (length(hdr) > 0 && !valid_bbolt)
-		fs.unlink(p);
-}
-
 function extract_bin() {
 	let b = bin();
-	if (fs.access(b, "x") && core.ok(b + " -v"))
+	if (fs.access(b, "x"))
 		return true;
 	if (!core.ok(sprintf("gzip -dc %s > %s.tmp && chmod 755 %s.tmp && %s.tmp -v", BIN_GZ, b, b, b))) {
 		fs.unlink(b + ".tmp");
@@ -340,25 +318,24 @@ export function prepare(cfg, lan_ip, profiles) {
 		return { changed: false, relays: 0, ips: [], hosts: [], expected_ports: [] };
 	if (!extract_bin())
 		return null;
-	sanitize_cache_db();
 	profiles ??= identity.load_store()?.profiles ?? [];
 	let file = core.outpath("mihomo.yaml");
 	let rendered = build_config(cfg, lan_ip, relays.proxies, profiles);
 	let text = sprintf("%.2J\n", rendered);
 	let expected_ports = map(filter(rendered.listeners, (l) => l.type == "tproxy"), (l) => l.port);
-	let res = { changed: false, relays: length(relays.proxies), ips: relays.ips, hosts: relays.hosts, expected_ports };
+	let transports = map(relays.proxies, (p) => ({ server: p.server, port: p.port, type: p.type }));
+	let res = { changed: false, transports, relays: length(relays.proxies), ips: relays.ips, hosts: relays.hosts, expected_ports };
 	if (fs.readfile(file) == text)
 		return res;
 	let draft = file + ".draft";
-	fs.writefile(draft, text);
-	fs.chmod(draft, 0o600);
+	assert(core.write_atomic(draft, text, 0o600), "cannot stage mihomo config");
 	let test = core.sh(sprintf("SAFE_PATHS=%s %s -t -d %s -f %s", core.ETC, bin(), core.RUN, draft));
 	if (test.code != 0) {
 		core.err("mihomo rejected the new config: %s", trim(test.out));
 		fs.unlink(draft);
 		return null;
 	}
-	fs.rename(draft, file);
+	assert(fs.rename(draft, file), "cannot install validated mihomo config");
 	res.changed = true;
 	return res;
 };
@@ -393,17 +370,18 @@ function parse_json_obj(s) {
 	}
 }
 
-export function save_selected(uid_or_group, name) {
-	if (!length(name ?? ""))
-		return;
+export function select_relay(cfg, lan_ip, group, key, name) {
+	let res = api(cfg, lan_ip, "PUT", "/proxies/" + urlenc(group), sprintf("%J", { name }));
+	if (res.status != 200 && res.status != 204)
+		return false;
 	identity.with_identity_lock(() => {
 		let relays = identity.load_relays_state();
-		let key = length(uid_or_group) ? uid_or_group : "_tw_home";
 		if (relays[key] != name) {
 			relays[key] = name;
 			identity.save_relays_state(relays);
 		}
 	});
+	return true;
 };
 
 export function restore_selected(cfg, lan_ip, profiles) {
@@ -417,8 +395,8 @@ export function restore_selected(cfg, lan_ip, profiles) {
 	}
 	if (!live)
 		return false;
-	let all_ok = true;
 	let tw_g = live["TW-HOME"];
+	let all_ok = !!tw_g;
 	if (tw_g) {
 		let want_tw = relays._tw_home ?? "";
 		if (!(want_tw in (tw_g.all ?? [])))
@@ -431,8 +409,10 @@ export function restore_selected(cfg, lan_ip, profiles) {
 	}
 	for (let p in profiles) {
 		let g = live[p.group_name];
-		if (!g)
+		if (!g) {
+			all_ok = false;
 			continue;
+		}
 		let want = relays[p.uid] ?? "TW-HOME";
 		if (!(want in (g.all ?? [])))
 			want = ("TW-HOME" in (g.all ?? [])) ? "TW-HOME" : (g.all?.[0] ?? "");
@@ -448,7 +428,10 @@ export function restore_selected(cfg, lan_ip, profiles) {
 // Poll live Zashboard selections from Mihomo RAM and persist only when modified.
 export function sync_selected(cfg, lan_ip, profiles) {
 	let res = api(cfg, lan_ip, "GET", "/proxies");
-	let live = parse_json_obj(res.body)?.proxies;
+	return persist_selected(parse_json_obj(res.body)?.proxies, profiles);
+};
+
+export function persist_selected(live, profiles) {
 	if (!live)
 		return false;
 	return identity.with_identity_lock(() => {
@@ -486,7 +469,6 @@ export function sync_selected(cfg, lan_ip, profiles) {
 };
 
 function reload_raw(cfg, lan_ip, profiles) {
-	sanitize_cache_db();
 	let r = api(cfg, lan_ip, "PUT", "/configs?force=true", sprintf("%J", { path: core.RUN + "/mihomo.yaml" }));
 	let ok = r.status == 204 || r.status == 200;
 	if (ok)
@@ -513,14 +495,26 @@ function canary(cfg, lan_ip) {
 	return (code == "204" || code == "200") ? 1 : 0;
 }
 
-function listening_ports() {
-	let ports = {};
-	for (let line in split(core.sh("netstat -lnt 2>/dev/null").out, "\n")) {
-		let m = match(line, /:([0-9]+)[ \t]+.*LISTEN/);
-		if (m)
-			ports[m[1]] = true;
+function listening_ports(c) {
+	let tcp = {}, ready = {};
+	for (let line in split(core.sh("netstat -lnut").out, "\n")) {
+		let f = split(trim(line), /[ \t]+/);
+		if (f[0] != "tcp" && f[0] != "udp")
+			continue;
+		let addr = split(f[3], ":"), port = addr[1];
+		if (f[0] == "tcp" && f[5] == "LISTEN") {
+			if (addr[0] == "127.0.0.1" && int(port) == c.mixed_port)
+				ready[port] = true;
+			if (addr[0] == c.listen_addr)
+				tcp[port] = true;
+		}
+		if (f[0] == "udp" && addr[0] == c.listen_addr)
+			ready[port] = true;
 	}
-	return ports;
+	for (let port in keys(ready))
+		if (int(port) != c.mixed_port && !tcp[port])
+			delete ready[port];
+	return ready;
 }
 
 function all_expected_ready(ready, mixed_port, expected_ports) {
@@ -570,10 +564,7 @@ function relay_addresses(prep, st, now) {
 			}
 		}
 		ips = sort(uniq(ips));
-		if (length(ips) || cache.key != key)
-			cache = { key, by_host_seen: clean_host_seen, by_host, ips };
-		else
-			cache = { ...cache, by_host_seen: clean_host_seen, by_host };
+		cache = { key, by_host_seen: clean_host_seen, by_host, ips };
 		cache.ts = any_found ? now : now - RELAY_RESOLVE_SEC + 60;
 		st.resolved = cache;
 	}
@@ -588,7 +579,7 @@ function relay_addresses(prep, st, now) {
 //   relay_host_ips  per-hostname resolved relay addresses for @relay_ports
 export function observe(ctx) {
 	let cfg = ctx.cfg, c = cfg.tunnel, now = ctx.now;
-	let st = (ctx.st.tunnel ??= { since: 0, fails: 0, open: false, checked: 0, delay: 0 });
+	let st = (ctx.st.tunnel ??= { since: 0, fails: 0, checked: 0, delay: 0 });
 	let profiles = ctx.identity?.profiles ?? identity.load_store()?.profiles ?? [];
 	let plan = { enabled: false, on: false, running: false, restored: false, pid: "", relays: 0, relay_ips: [], relay_host_ips: {}, ready_ports: {} };
 	if (!c.enabled)
@@ -599,16 +590,17 @@ export function observe(ctx) {
 		return plan;
 	plan.enabled = true;
 	plan.relays = prep.relays;
+	plan.transports = prep.transports;
 	let addr = relay_addresses(prep, st, now);
 	plan.relay_ips = addr.ips;
 	plan.relay_host_ips = addr.by_host;
 
 	// Wait briefly until Mihomo binds mixed-in (and existing profile ports when config unchanged).
-	let ready = listening_ports();
+	let ready = listening_ports(c);
 	let min_check = (p) => p["" + c.mixed_port] && (prep.changed || !length(prep.expected_ports) || p["" + prep.expected_ports[0]]);
 	for (let i = 0; i < 20 && core.pidof("mihomo") && !min_check(ready); i++) {
 		sleep(500);
-		ready = listening_ports();
+		ready = listening_ports(c);
 	}
 	plan.running = core.pidof("mihomo") && min_check(ready);
 	if (!plan.running) {
@@ -620,17 +612,17 @@ export function observe(ctx) {
 		st.since = 0;
 		st.pid = "";
 		ctx.want_service_sync = true;
-		plan.on = !c.fail_open;
-		plan.ready_ports = ready;
+		plan.on = true;
 		return plan;
 	}
 	let pid = trim(core.sh("pidof mihomo").out);
 	plan.pid = pid;
-	if (prep.changed && !core.is_dry()) {
-		if (st.since && st.pid == pid)
+	if ((prep.changed || st.reload_pending) && !core.is_dry()) {
+		if (!st.reload_pending && st.since && st.pid == pid)
 			sync_selected(cfg, ctx.facts.lan_ip);
 		let rr = reload_raw(cfg, ctx.facts.lan_ip, profiles);
 		let ok = rr.ok;
+		st.reload_pending = !ok;
 		plan.restored = ok;
 		if (ok) {
 			st.since ||= now;
@@ -640,13 +632,11 @@ export function observe(ctx) {
 			st.restarted = now;
 			st.since = 0;
 			st.pid = "";
-			fs.unlink(core.RUN + "/cache.db");
 			core.event("TUNNEL reload http=%d failed, restarting mihomo", rr.status);
 			core.act("ubus call service signal '{\"name\":\"prism\",\"instance\":\"mihomo\",\"signal\":15}'");
 			ctx.want_service_sync = true;
 			ctx.want_rescan = true;
-			plan.ready_ports = listening_ports();
-			plan.on = !c.fail_open;
+			plan.on = true;
 			return plan;
 		}
 		else {
@@ -654,7 +644,7 @@ export function observe(ctx) {
 			ctx.want_rescan = true;
 		}
 		for (let i = 0; i < 12; i++) {
-			ready = listening_ports();
+			ready = listening_ports(c);
 			if (all_expected_ready(ready, c.mixed_port, prep.expected_ports))
 				break;
 			sleep(250);
@@ -663,6 +653,7 @@ export function observe(ctx) {
 	else if (!st.since || st.pid != pid || ctx.boot) {
 		if (!core.is_dry()) {
 			let ok = restore_selected(cfg, ctx.facts.lan_ip, profiles);
+			st.reload_pending = !ok;
 			plan.restored = ok;
 			if (ok) {
 				st.since ||= now;
@@ -680,7 +671,7 @@ export function observe(ctx) {
 	else {
 		plan.restored = true;
 	}
-	plan.ready_ports = ready;
+	plan.ready_ports = plan.restored ? ready : {};
 	if (!all_expected_ready(ready, c.mixed_port, prep.expected_ports)) {
 		ctx.want_rescan = true;
 		st.port_fails = (st.port_fails ?? 0) + 1;
@@ -696,20 +687,13 @@ export function observe(ctx) {
 		st.port_fails = 0;
 	}
 
-	if (st.open || st.fails > 0 || now - st.checked >= c.canary_interval) {
+	if (!core.is_dry() && now - st.checked >= c.canary_interval) {
 		st.checked = now;
 		st.delay = canary(cfg, ctx.facts.lan_ip);
-		if (st.delay > 0) {
-			if (st.open)
-				core.event("TUNNEL canary recovered delay=%dms", st.delay);
-			st.fails = 0;
-			st.open = false;
-		}
-		else if (++st.fails >= c.canary_fails && !st.open && now - st.since >= c.canary_grace) {
-			st.open = true;
-			core.event("TUNNEL fail-open after %d failed canaries", st.fails);
-		}
+		st.fails = st.delay > 0 ? 0 : st.fails + 1;
+		if (st.fails == c.canary_fails)
+			core.event("TUNNEL canary failed %d times", st.fails);
 	}
-	plan.on = !st.open || !c.fail_open;
+	plan.on = true;
 	return plan;
 };

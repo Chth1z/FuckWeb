@@ -3,6 +3,7 @@
 
 import * as fs from "fs";
 import * as ubus from "ubus";
+import * as rtnl from "rtnl";
 import { cursor } from "uci";
 import * as core from "./core.uc";
 
@@ -21,11 +22,13 @@ function ip_json(args) {
 // device -> { ip, prefix } for the first IPv4 address of each link
 function addr4() {
 	let out = {};
-	for (let link in ip_json("-4 addr show")) {
-		for (let a in link.addr_info ?? []) {
-			out[link.ifname] ??= { ip: a.local, prefix: a.prefixlen, all: [] };
-			push(out[link.ifname].all, a.local);
-		}
+	let addrs = rtnl.request(rtnl.const.RTM_GETADDR, rtnl.const.NLM_F_DUMP, { family: rtnl.const.AF_INET });
+	let error = rtnl.error();
+	assert(!error, error);
+	for (let a in addrs ?? []) {
+		let parts = split(a.address, "/"), ip = a.local ?? parts[0];
+		out[a.dev] ??= { ip, prefix: int(parts[1]), all: [] };
+		push(out[a.dev].all, ip);
 	}
 	return out;
 }
@@ -45,18 +48,32 @@ function netifd() {
 		for (let r in [ ...(i.route ?? []), ...(i.inactive?.route ?? []) ])
 			if (r.target == "0.0.0.0" && r.mask == 0 && r.nexthop)
 				gw ??= r.nexthop;
-		let upstream_dns = filter(i.inactive?.["dns-server"] ?? [], (s) => index(s, "127.") != 0);
-		out[dev] = { iface: i.interface, up: !!i.up, gw, upstream_dns };
+		out[dev] = { iface: i.interface, up: !!i.up, gw };
 	}
 	return out;
 }
+
+export function neighbours() {
+	let entries = rtnl.request(rtnl.const.RTM_GETNEIGH, rtnl.const.NLM_F_DUMP, { family: rtnl.const.AF_INET });
+	let error = rtnl.error();
+	assert(!error, error);
+	return filter(entries ?? [], (n) => n.lladdr && (n.state & (rtnl.const.NUD_REACHABLE | rtnl.const.NUD_STALE |
+		rtnl.const.NUD_DELAY | rtnl.const.NUD_PROBE | rtnl.const.NUD_PERMANENT)));
+};
+
+export function active_neighbour(n) {
+	return !!(n.state & (rtnl.const.NUD_REACHABLE | rtnl.const.NUD_DELAY | rtnl.const.NUD_PROBE | rtnl.const.NUD_PERMANENT));
+};
 
 export function gather() {
 	let uci = cursor();
 	let lan = uci.get("network", "lan", "ipaddr") ?? "192.168.1.1";
 	if (type(lan) == "array")
 		lan = lan[0];
+	let configured = [];
+	uci.foreach("network", "interface", (s) => { if (s.device) push(configured, s.device); });
 	return {
+		configured,
 		links: fs.lsdir("/sys/class/net") ?? [],
 		addr4: addr4(),
 		netifd: netifd(),

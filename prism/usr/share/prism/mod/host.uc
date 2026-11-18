@@ -2,6 +2,7 @@
 // per-device steering, IPv6 off, IRQ affinity and the uplink shaper.
 
 import * as fs from "fs";
+import { abs } from "math";
 import { cursor } from "uci";
 import * as core from "../lib/core.uc";
 
@@ -105,45 +106,57 @@ function aql(limits) {
 
 // --- shaper ----------------------------------------------------------------
 
-// 3-Band Priority HTB at `rate` Mbit with fq_codel leaves, or nothing when rate is 0.
-//   1:10 (prio 0): VIP gaming/realtime, TCP SYN/ACK, DNS, ICMP (target 2ms, quantum 300)
-//   1:20 (prio 1): Interactive, web, video streams < 64 MB (target 10ms LAN / 5ms WAN, 4 MB buffer)
-//   1:30 (prio 2): Bulk transfers >= 64 MB (target 10ms LAN / 5ms WAN, 4 MB buffer)
-// Returns true when it changed something.
-function shape(dev, rate, is_lan) {
-	let have = core.sh("tc qdisc show dev " + dev).out, ours = index(have, "htb") >= 0;
+// All three classes borrow to line rate. Size HTB credit for four ms at the
+// aggregate rate and fq_codel memory for this swapless board.
+export function shape(dev, rate) {
+	let tcdev = " dev " + core.shq(dev);
+	let q = json(core.sh("tc -j qdisc show" + tcdev).out);
+	let root = filter(q, (x) => x.root)[0];
+	let ours = root?.kind == "htb" && root.handle == "1:";
 	if (rate <= 0) {
 		if (ours)
-			core.act(sprintf("tc qdisc del dev %s root", dev));
+			assert(core.act("tc qdisc del" + tcdev + " root"), "cannot remove shaper on " + dev);
 		return ours;
 	}
-	let t_bulk = is_lan ? 10 : 5, lim_bulk = is_lan ? 3000 : 2000, root_burst = is_lan ? "256k" : "128k";
-	let classes = ours ? core.sh("tc class show dev " + dev).out : "";
-	let stale = index(classes, "burst 1600b") >= 0 || index(have, "memory_limit 4Mb") < 0 ||
-		index(have, sprintf("target %dms", t_bulk)) < 0;
-	if (ours && !stale && index(classes, sprintf("1:1 root rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
+
+	let kbit = rate * 1000, burst = max(3000, rate * 500);
+	let bands = [
+		{ id: "10", pct: 20, target: 2, limit: 256, mem: 262144 },
+		{ id: "20", pct: 50, target: 5, limit: 1024, mem: 1048576 },
+		{ id: "30", pct: 30, target: 5, limit: 1024, mem: 1048576 },
+	];
+	let classes = {}, leaves = {};
+	if (ours) {
+		for (let c in json(core.sh("tc -d -j class show" + tcdev + " parent 1:").out))
+			classes[c.handle] = c;
+		for (let x in q)
+			leaves[x.parent] = x;
+	}
+	let cmds = [];
+	if (!ours || root.options.default != "0x20")
+		push(cmds, "tc qdisc replace" + tcdev + " root handle 1: htb default 20");
+	let class_cmd = (id, parent, kb, suffix, prio) => {
+		let c = classes[id];
+		// tc converts burst to kernel ticks and rounds the byte count on dump.
+		if (!c || c.rate != kb * 125 || c.ceil != kbit * 125 || abs(c.burst - burst) > 16 ||
+		    abs(c.cburst - burst) > 16 || (prio != null && (c.prio != prio || c.quantum != 1514)))
+			push(cmds, sprintf("tc class replace%s parent %s classid %s htb rate %dkbit ceil %dkbit burst %d cburst %d%s",
+				tcdev, parent, id, kb, kbit, burst, burst, suffix));
+	};
+	class_cmd("1:1", "1:", kbit, "", null);
+	for (let i, b in bands) {
+		let id = "1:" + b.id, leaf = leaves[id], o = leaf?.options;
+		class_cmd(id, "1:1", kbit * b.pct / 100, " prio " + i + " quantum 1514", i);
+		if (leaf?.kind != "fq_codel" || o.limit != b.limit || o.memory_limit != b.mem ||
+		    o.quantum != 1514 || abs(o.target - b.target * 1000) > 1 || abs(o.interval - 100000) > 1 || o.ecn)
+			push(cmds, sprintf("tc qdisc replace%s parent %s handle %s: fq_codel limit %d target %dms interval 100ms quantum 1514 memory_limit %d noecn",
+				tcdev, id, b.id, b.limit, b.target, b.mem));
+	}
+	if (!length(cmds))
 		return false;
-	if (ours && !stale && index(classes, sprintf("1:1 htb rate %dMbit", rate)) >= 0 && index(classes, "1:30") >= 0)
-		return false;
-	let r10 = max(5, int(rate * 20 / 100));
-	let r20 = max(10, int(rate * 50 / 100));
-	let r30 = max(5, rate - r10 - r20);
-	let q10 = sprintf("tc qdisc add dev %s parent 1:10 handle 10: fq_codel", dev);
-	let q20 = sprintf("tc qdisc add dev %s parent 1:20 handle 20: fq_codel", dev);
-	let q30 = sprintf("tc qdisc add dev %s parent 1:30 handle 30: fq_codel", dev);
-	core.act(join("\n", [
-		sprintf("tc qdisc del dev %s root 2>/dev/null || true", dev),
-		sprintf("tc qdisc add dev %s root handle 1: htb default 20", dev),
-		sprintf("tc class add dev %s parent 1: classid 1:1 htb rate %dmbit ceil %dmbit burst %s cburst %s", dev, rate, rate, root_burst, root_burst),
-		sprintf("tc class add dev %s parent 1:1 classid 1:10 htb rate %dmbit ceil %dmbit prio 0 burst 32k cburst 32k quantum 1514", dev, r10, rate),
-		sprintf("tc class add dev %s parent 1:1 classid 1:20 htb rate %dmbit ceil %dmbit prio 1 burst %s cburst %s quantum 1514", dev, r20, rate, is_lan ? "128k" : "64k", is_lan ? "128k" : "64k"),
-		sprintf("tc class add dev %s parent 1:1 classid 1:30 htb rate %dmbit ceil %dmbit prio 2 burst 64k cburst 64k quantum 1514", dev, r30, rate),
-		sprintf("%s limit 1000 target 2ms interval 50ms quantum 300 memory_limit 2097152 noecn || %s noecn || %s", q10, q10, q10),
-		sprintf("%s limit %d target %dms interval 100ms quantum 1514 memory_limit 4194304 noecn || %s noecn || %s", q20, lim_bulk, t_bulk, q20, q20),
-		sprintf("%s limit %d target %dms interval 100ms quantum 1514 memory_limit 4194304 noecn || %s noecn || %s", q30, lim_bulk, t_bulk, q30, q30),
-	]));
+	assert(core.act(join(" &&\n", cmds)), "shaper update failed on " + dev);
 	return true;
-}
+};
 
 // On a 10/100 uplink the copper is the bottleneck in both directions, and
 // whoever owns the queue in front of a bottleneck owns the latency.
@@ -162,11 +175,11 @@ function shaper(cfg, lan) {
 	let slow = cfg.mode != "off" && (speed == 10 || speed == 100);
 	let up = slow ? max(1, int(speed * cfg.pct / 100)) : 0;
 	let down = slow && cfg.pct_down > 0 ? max(1, int(speed * cfg.pct_down / 100)) : 0;
-	if (shape(dev, up, false) && up) {
+	if (shape(dev, up) && up) {
 		core.act(sprintf("ip link set dev %s txqueuelen 128", dev));
 		core.event("SHAPER %s up %d Mbit (phy %d)", dev, up, speed);
 	}
-	if (shape(lan, down, true) && down)
+	if (shape(lan, down) && down)
 		core.event("SHAPER %s down %d Mbit (phy %d)", lan, down, speed);
 	if (!slow && speed > 100) {
 		let qout = core.sh("tc qdisc show dev " + dev).out;

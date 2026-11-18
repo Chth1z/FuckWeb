@@ -3,10 +3,11 @@
 // /ubus under the ACL in /usr/share/rpcd/acl.d/prism.json (reads are open on
 // the LAN, writes need a login).
 //
-// Read methods answer from the daemon's memory and the last reconcile
-// snapshot. They never touch the kernel, so a slow client cannot stall it.
+// Status and tunnel telemetry share the daemon snapshots. The privileged
+// flow list and rule-set sizes read kernel state on demand and cache it.
 
 import * as fs from "fs";
+import * as uloop from "uloop";
 import * as core from "../lib/core.uc";
 import * as config from "../lib/config.uc";
 import * as series from "../lib/series.uc";
@@ -31,20 +32,6 @@ function list_count(file) {
 	return count;
 }
 
-function controller(cfg, lan_ip, method, url, body) {
-	let cmd = sprintf("curl -4 --noproxy '*' --connect-timeout 1 -m 2 -sS -X %s -H %s", method,
-		core.shq("Authorization: Bearer " + (core.read(core.ETC + "/controller.secret") ?? "")));
-	if (body)
-		cmd += " -H 'Content-Type: application/json' --data " + core.shq(body);
-	let r = core.sh(sprintf("%s %s 2>/dev/null", cmd, core.shq(sprintf("http://%s:%d%s", lan_ip, cfg.tunnel.controller_port, url))));
-	try {
-		return r.code == 0 ? (length(trim(r.out)) ? json(r.out) : {}) : null;
-	}
-	catch (e) {
-		return null;
-	}
-}
-
 function events(limit) {
 	let lines = split(trim(fs.readfile(core.RUN + "/events.log") ?? ""), "\n");
 	let out = [];
@@ -58,86 +45,65 @@ function events(limit) {
 
 const MAX_FLOWS = 400;
 
-// LAN flows that left directly, from the kernel's connection table.
-function direct_flows(snap) {
-	let lan = replace(snap.lan_ip ?? "", /[0-9]+$/, ""), strand = {}, out = [];
-	for (let s in snap.strands ?? [])
-		strand[s.id] = s.dev;
-	let raw = fs.readfile("/proc/net/nf_conntrack");
-	if (!raw || !length(lan))
-		return out;
-	let lan_tag = "src=" + lan;
-	for (let line in split(raw, "\n")) {
-		if (substr(line, 0, 5) != "ipv4 " || index(line, lan_tag) < 0)
-			continue;
-		let p_mk = index(line, " mark=");
-		if (p_mk < 0)
-			continue;
-		let mark = int(substr(line, p_mk + 6, 12));
-		if (mark & 0x4000)
-			continue;
-		let p_src = index(line, " src=");
-		if (p_src < 12)
-			continue;
-		let i = 5;
-		while (i < p_src && substr(line, i, 1) == " ") i++;
-		while (i < p_src && substr(line, i, 1) != " ") i++;
-		while (i < p_src && substr(line, i, 1) == " ") i++;
-		let ps = i;
-		while (i < p_src && substr(line, i, 1) != " ") i++;
-		let proto = substr(line, ps, i - ps);
-		if (!length(proto))
-			continue;
-		let rest = substr(line, p_src + 5);
-		let p = index(rest, " dst=");
-		if (p < 0)
-			continue;
-		let src = substr(rest, 0, p);
-		if (index(src, lan) != 0)
-			continue;
-		rest = substr(rest, p + 5);
-		p = index(rest, " sport=");
-		if (p < 0)
-			continue;
-		let dst = substr(rest, 0, p);
-		if (index(dst, lan) == 0)
-			continue;
-		rest = substr(rest, p + 7);
-		p = index(rest, " dport=");
-		if (p < 0)
-			continue;
-		let sport = substr(rest, 0, p);
-		rest = substr(rest, p + 7);
-		p = index(rest, " ");
-		if (p < 0)
-			continue;
-		let dport = int(substr(rest, 0, p));
-		p = index(rest, " bytes=");
-		if (p < 0)
-			continue;
-		rest = substr(rest, p + 7);
-		let sp = index(rest, " ");
-		if (sp < 0)
-			continue;
-		let up = int(substr(rest, 0, sp));
-		p = index(rest, " bytes=");
-		if (p < 0)
-			continue;
-		let down = int(substr(rest, p + 7, 20));
-		push(out, {
-			key: proto + src + ":" + sport + ">" + dst + ":" + dport,
-			src, dst, port: dport, proto, route: "direct",
-			via: strand[mark & 0xff] ?? "", vip: (mark & 0x100) != 0,
-			up, down,
-		});
-	}
-	out = sort(out, (a, b) => (b.down + b.up) - (a.down + a.up));
-	return slice(out, 0, MAX_FLOWS);
+// Keep the largest rows while scanning. Scratch memory is bounded even if
+// conntrack reaches its limit or the controller reports many connections.
+function top_flows(rows) {
+	sort(rows, (a, b) => (b.down + b.up) - (a.down + a.up));
+	return slice(rows, 0, MAX_FLOWS);
 }
 
-function tunnel_flows(cfg, lan_ip) {
-	let res = controller(cfg, lan_ip, "GET", "/connections"), out = [];
-	for (let c in res?.connections ?? []) {
+// LAN flows that left directly, from the kernel's connection table.
+function direct_flows(snap) {
+	let sources = {}, strands = {}, wan_ips = {}, out = [];
+	for (let pair in core.load_json(identity.RT_FILE, {})?.pairs ?? [])
+		sources[split(pair, " . ")[1]] = true;
+	for (let s in snap.strands ?? []) {
+		strands[s.id] = s.dev;
+		if (s.ip)
+			wan_ips[s.ip] = s.dev;
+	}
+	let file = fs.open("/proc/net/nf_conntrack");
+	if (!file)
+		return out;
+	for (let line; (line = file.read("line")) != null && length(line); ) {
+		if (substr(line, 0, 5) != "ipv4 ")
+			continue;
+		let tuples = split(line, " src=");
+		if (length(tuples) != 3)
+			continue;
+		let orig = split(tuples[1], " "), src = orig[0];
+		if (!sources[src] || substr(orig[2], 0, 6) != "sport=" || substr(orig[5], 0, 6) != "bytes=")
+			continue;
+		let tag = index(tuples[2], " mark=");
+		if (tag < 0)
+			continue;
+		let mark = int(substr(tuples[2], tag + 6, 12));
+		if (mark & 0x4000)
+			continue;
+		let reply = split(tuples[2], " ");
+		// Masquerade identifies the actual strand even with mark zero on single WAN.
+		let via = wan_ips[substr(reply[1], 4)] ?? strands[mark & 0xff];
+		if (!via || substr(reply[5], 0, 6) != "bytes=")
+			continue;
+		let proto = match(tuples[0], /^ipv4 +[0-9]+ +(tcp|udp) /)?.[1];
+		if (!proto)
+			continue;
+		let dst = substr(orig[1], 4), sport = substr(orig[2], 6), port = int(substr(orig[3], 6));
+		push(out, {
+			key: proto + src + ":" + sport + ">" + dst + ":" + port,
+			src, dst, port, proto, route: "direct", via, vip: (mark & 0x100) != 0,
+			up: int(substr(orig[5], 6)), down: int(substr(reply[5], 6)),
+		});
+		if (length(out) == 2 * MAX_FLOWS)
+			out = top_flows(out);
+	}
+	file.close();
+	return top_flows(out);
+}
+
+export function tunnel_flows(connections) {
+	let out = [];
+	for (let c in connections ?? []) {
 		let m = c.metadata ?? {};
 		if (!m.sourceIP || m.sourceIP == "127.0.0.1")
 			continue;
@@ -147,16 +113,11 @@ function tunnel_flows(cfg, lan_ip) {
 			up: c.upload ?? 0, down: c.download ?? 0,
 			start: c.start ?? "",
 		});
+		if (length(out) == 2 * MAX_FLOWS)
+			out = top_flows(out);
 	}
-	out = sort(out, (a, b) => (b.down + b.up) - (a.down + a.up));
-	return slice(out, 0, MAX_FLOWS);
-}
-
-// What each classify rule means, by its nft comment. Order here is not the
-// order of evaluation: that is whatever the kernel returns.
-function rules() {
-	return weave.classify_counters();
-}
+	return top_flows(out);
+};
 
 function set_size(name) {
 	let now = time(), cached = size_cache[name];
@@ -184,11 +145,11 @@ function set_size(name) {
 export function methods(d) {
 	let lan_ip = () => d.snapshot()?.lan_ip ?? "127.0.0.1";
 
+	let direct = [], direct_sampled = 0, direct_task;
 	let methods = {
 		status: {
 			call: function() {
 				let snap = d.snapshot() ?? {}, load = d.load(), pattern = d.pattern(), vip = d.vip?.() ?? [];
-				let mnow = d.now ? d.now() : 0;
 				let vip_id = (vip[0] ?? 0) & 0xff, vip_dev = "";
 				let weight = {};
 				for (let id in pattern)
@@ -206,7 +167,8 @@ export function methods(d) {
 					if (s.healthy && b_counts[b_state] != null)
 						b_counts[b_state]++;
 					let tokens = int(b.tokens ?? weave.BURST_MAX);
-					let cd_rem = (b.cooldown_until && mnow > 0 && b.cooldown_until > mnow) ? +sprintf("%.1f", b.cooldown_until - mnow) : 0;
+					let refill = (d.cfg().weave.strand_kbit > 0 ? d.cfg().weave.strand_kbit * 125 : weave.CIR_BYTES_S) - max(down.now ?? 0, up.now ?? 0);
+					let cd_rem = b_state == "cooling" && refill > 0 ? +sprintf("%.1f", (weave.BURST_MAX - tokens) / refill) : 0;
 					total += down.now ?? 0;
 					total_up += up.now ?? 0;
 					total_ewma += down.rate ?? 0;
@@ -299,7 +261,7 @@ export function methods(d) {
 		tunnel: {
 			call: function() {
 				let cfg = d.cfg(), lip = lan_ip();
-				let all = controller(cfg, lip, "GET", "/proxies")?.proxies;
+				let all = d.proxies();
 				if (!all)
 					return { reachable: false, relays: [], groups: [] };
 				let delay = (p) => {
@@ -363,7 +325,18 @@ export function methods(d) {
 		connections: {
 			call: function() {
 				let snap = d.snapshot() ?? {};
-				return { connections: [ ...direct_flows(snap), ...tunnel_flows(d.cfg(), lan_ip()) ] };
+				let now = d.now();
+				if ((!direct_sampled || now - direct_sampled >= 4) && (!direct_task || direct_task.finished())) {
+					direct_task = uloop.task(() => direct_flows(snap), (rows) => {
+						direct = rows;
+						direct_sampled = d.now();
+					});
+					assert(direct_task, "cannot sample direct flows: " + uloop.error());
+				}
+				return {
+					sampled: { direct: direct_sampled, tunnel: d.tunnel_sampled() },
+					connections: [ ...direct, ...d.tunnel_flows() ],
+				};
 			},
 		},
 
@@ -372,7 +345,7 @@ export function methods(d) {
 			call: function() {
 				let c = d.cfg();
 				return {
-					rules: rules(),
+					rules: d.rules(),
 					tunnel_on: !!d.snapshot()?.tunnel?.on,
 					sizes: {
 						domestic4: list_count(config.path(c.classify.domestic4)),
@@ -444,14 +417,6 @@ export function methods(d) {
 			},
 		},
 
-		dhcp_event: {
-			args: { action: "", mac: "", ip: "", host: "", opt55: "", vendor: "", cid: "", iface: "", ts: 0 },
-			call: function(req) {
-				let a = req.args ?? {};
-				return d.dhcp_event ? d.dhcp_event(a) : identity.on_dhcp_event(a);
-			},
-		},
-
 		// Remember the network we are on now, and whether to aggregate here.
 		remember: {
 			args: { name: "", aggregate: true, portal: "" },
@@ -509,12 +474,12 @@ export function methods(d) {
 					grp = prof.group_name;
 					save_key = prof.uid;
 				}
-				let res = controller(d.cfg(), lan_ip(), "PUT", "/proxies/" + tunnel.urlenc(grp), sprintf("%J", { name }));
-				if (res != null) {
-					tunnel.save_selected(save_key, name);
+				let ok = tunnel.select_relay(d.cfg(), lan_ip(), grp, save_key, name);
+				if (ok) {
+					d.selected(grp, name);
 					core.event("TUNNEL relay selected: %s -> %s", grp, name);
 				}
-				return { ok: res != null };
+				return { ok };
 			},
 		},
 

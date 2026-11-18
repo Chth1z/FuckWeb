@@ -2,9 +2,9 @@
  * PRISM — View 04: Merged Wide Device Policy Matrix & Live Flows Explorer
  * ============================================================================ */
 
-import { S, desatObsidianRgb, opticalLoad, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.7.0';
-import { $, $$, el, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.7.0';
-import { write, openLoginModal } from '../api.js?v=5.7.0';
+import { S, desatObsidianRgb, opticalLoad, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.8.0';
+import { $, $$, el, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.8.0';
+import { write, openLoginModal } from '../api.js?v=5.8.0';
 
 const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
 const POLICY_META = {
@@ -89,44 +89,36 @@ function compareDevices(a, b, mode, byIp) {
 }
 
 let lastFlowSrc = null;
-let lastFlowByteSig = '';
 let lastFlowResult = { byIp: {}, rows: [] };
 let lastConnRender = null;
-
-function quickConnSig(conns) {
-  const n = conns.length;
-  if (!n) return '0';
-  const a = conns[0];
-  const b = conns[n - 1];
-  return `${n}:${a.key || ''}:${a.down || 0}:${a.up || 0}:${b.key || ''}:${b.down || 0}:${b.up || 0}`;
-}
 
 function computeFlowDeltas() {
   if (!S.session || !S.connections) {
     lastFlowSrc = S.connections;
-    lastFlowByteSig = '';
     lastFlowResult = { byIp: {}, rows: [] };
     return lastFlowResult;
   }
   const conns = S.connections.connections || [];
-  const qSig = quickConnSig(conns);
-  if (S.connections === lastFlowSrc && qSig === lastFlowByteSig)
+  if (S.connections === lastFlowSrc)
     return lastFlowResult;
 
-  const now = performance.now();
-  const dt = S.flowSnapshotTs ? (now - S.flowSnapshotTs) / 1000 : 0;
   const nextSnap = {};
   const byIp = {};
   const rows = [];
 
   for (const f of conns) {
     const prev = S.flowSnapshot[f.key];
+    const ts = S.connections.sampled[f.route];
+    const dt = prev ? ts - prev.ts : 0;
     let rDown = 0, rUp = 0;
-    if (prev && dt > 0.35 && f.down >= prev.down && f.up >= prev.up) {
+    if (prev && dt === 0) {
+      rDown = prev.rDown;
+      rUp = prev.rUp;
+    } else if (dt > 0 && f.down >= prev.down && f.up >= prev.up) {
       rDown = (f.down - prev.down) / dt;
       rUp = (f.up - prev.up) / dt;
     }
-    nextSnap[f.key] = { down: f.down || 0, up: f.up || 0 };
+    nextSnap[f.key] = { down: f.down, up: f.up, ts, rDown, rUp };
     if (f.src) {
       if (!byIp[f.src]) byIp[f.src] = { down: 0, up: 0, count: 0 };
       byIp[f.src].down += rDown;
@@ -136,9 +128,7 @@ function computeFlowDeltas() {
     rows.push({ ...f, rDown, rUp });
   }
   S.flowSnapshot = nextSnap;
-  S.flowSnapshotTs = now;
   lastFlowSrc = S.connections;
-  lastFlowByteSig = qSig;
   lastFlowResult = { byIp, rows };
   return lastFlowResult;
 }

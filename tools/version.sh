@@ -39,6 +39,7 @@ fi
 sed -i "s/^export const VERSION = \".*\";/export const VERSION = \"$ver\";/" "$CORE_UC"
 sed -i "s/^export const UI_VERSION = '.*';/export const UI_VERSION = '$ver';/" "$STATE_JS"
 sed -i -E "s/<title>PRISM [^<]*<\/title>/<title>PRISM v$ver · Optical Spectrum \&amp; Privacy Router<\/title>/" "$INDEX_HTML"
+sed -i -E "s/(PRISM v?)[0-9]+[.][0-9]+[.][0-9]+/\\1$ver/g" "$INDEX_HTML"
 sed -i -E "s/(id=\"hdr-ver\">)v[^<]+/\1v$ver/" "$INDEX_HTML"
 sed -i -E "s/\?v=[A-Za-z0-9._-]+/?v=$ver/g" "$INDEX_HTML"
 

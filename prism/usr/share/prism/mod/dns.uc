@@ -2,7 +2,6 @@
 //
 //   tunnel up    cn-list -> domestic DoH, everything else -> mihomo's resolver
 //               (so a name is resolved the same way its traffic is forwarded)
-//   fail-open    tunnel down -> domestic DoH
 //   fail-closed  boot/down/stop never changes foreign DNS to a direct upstream
 //
 // Plain UDP/53 is never an upstream: networks like this one intercept it.
@@ -33,7 +32,7 @@ function unpack(name) {
 	return out;
 }
 
-function smartdns_conf(cfg, proxy_on) {
+function smartdns_conf(cfg) {
 	let d = cfg.dns, yn = (v) => v ? "yes" : "no";
 	let cn_list = unpack("cn"), ad_list = d.ads ? unpack("ad") : null;
 	let tunnel_domains = path(cfg.classify.tunnel_domains);
@@ -74,30 +73,25 @@ function smartdns_conf(cfg, proxy_on) {
 		"audit-enable no",
 	];
 
-	if (proxy_on || !cfg.tunnel.fail_open) {
+	push(conf,
+		"speed-check-mode none",
+		sprintf("server 127.0.0.1:%d", cfg.tunnel.dns_port),
+		sprintf("speed-check-mode %s -group cn", d.speed_check),
+		...doh(" -group cn -exclude-default-group"),
+		"nameserver /cn/cn",
+		"nftset /cn/#4:inet#prism#domestic4_dns");
+	if (cn_list)
 		push(conf,
-			"speed-check-mode none",
-			sprintf("server 127.0.0.1:%d", cfg.tunnel.dns_port),
-			sprintf("speed-check-mode %s -group cn", d.speed_check),
-			...doh(" -group cn -exclude-default-group"),
-			"nameserver /cn/cn",
-			"nftset /cn/#4:inet#prism#domestic4_dns");
-		if (cn_list)
-			push(conf,
-				sprintf("domain-set -name cn-list -type list -file %s", cn_list),
-				"nameserver /domain-set:cn-list/cn",
-				"nftset /domain-set:cn-list/#4:inet#prism#domestic4_dns");
-		// After cn-list on purpose: these names never take the domestic group,
-		// and their answers are pinned so nft tunnels them even inside domestic4.
-		if (fs.stat(tunnel_domains)?.size > 0)
-			push(conf,
-				sprintf("domain-set -name tunnel-list -type list -file %s", tunnel_domains),
-				"nameserver /domain-set:tunnel-list/-",
-				"nftset /domain-set:tunnel-list/#4:inet#prism#tunnel4_dns");
-	}
-	else {
-		push(conf, "speed-check-mode " + d.speed_check, ...doh(""));
-	}
+			sprintf("domain-set -name cn-list -type list -file %s", cn_list),
+			"nameserver /domain-set:cn-list/cn",
+			"nftset /domain-set:cn-list/#4:inet#prism#domestic4_dns");
+	// After cn-list on purpose: these names never take the domestic group,
+	// and their answers are pinned so nft tunnels them even inside domestic4.
+	if (fs.stat(tunnel_domains)?.size > 0)
+		push(conf,
+			sprintf("domain-set -name tunnel-list -type list -file %s", tunnel_domains),
+			"nameserver /domain-set:tunnel-list/-",
+			"nftset /domain-set:tunnel-list/#4:inet#prism#tunnel4_dns");
 
 	if (ad_list)
 		push(conf,
@@ -211,7 +205,7 @@ export function conf_path() {
 // Boot: give SmartDNS something to start with before the first pass.
 export function bootstrap(cfg) {
 	if (!fs.stat(conf_path()))
-		core.write_atomic(conf_path(), smartdns_conf(cfg, false));
+		core.write_atomic(conf_path(), smartdns_conf(cfg));
 };
 
 export function responsive(port) {
@@ -220,7 +214,7 @@ export function responsive(port) {
 
 export function apply(ctx) {
 	delete ctx.dns_responsive;
-	let text = smartdns_conf(ctx.cfg, ctx.tunnel.on);
+	let text = smartdns_conf(ctx.cfg);
 	let file = core.outpath("smartdns.conf");
 	if (core.write_if_changed(file, text)) {
 		ctx.want_service_sync = true;
@@ -247,23 +241,9 @@ export function apply(ctx) {
 	wire_resolver(ctx);
 };
 
-// Service stop: hand dnsmasq the DHCP-provided resolvers so the LAN keeps
-// resolving on a plain router.
+// Keep the local DNS chain through service stops.
 export function teardown(ctx) {
-	// Preserve the local resolver chain when privacy takes precedence. A
-	// stopped SmartDNS must cause DNS failure, not forwarding to the uplink.
-	if (!ctx.cfg.tunnel.fail_open) {
-		wire_dnsmasq(ctx, [ sprintf("127.0.0.1#%d", ctx.cfg.dns.port) ], true);
-		return;
-	}
-	let upstream = [];
-	for (let n in values(ctx.facts.netifd))
-		for (let s in n.upstream_dns ?? [])
-			if (!(s in upstream))
-				push(upstream, s);
-	if (!length(upstream))
-		upstream = [ "223.5.5.5", "119.29.29.29" ];
-	wire_dnsmasq(ctx, upstream, false);
+	wire_dnsmasq(ctx, [ sprintf("127.0.0.1#%d", ctx.cfg.dns.port) ], true);
 };
 
 export function running() {

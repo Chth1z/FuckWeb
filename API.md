@@ -1,4 +1,4 @@
-# Prism 5.0 — Frontend HTTP / ubus API Specification
+# Prism 5.8 — Frontend HTTP / ubus API Specification
 
 This document defines the complete backend API contract exposed by `prismd` (`usr/share/prism/mod/api.uc`) over OpenWrt `uhttpd-mod-ubus` (`POST /ubus`). It is designed as the authoritative reference for the modular `/www/prism/` frontend (`index.html`, `css/`, `js/`).
 
@@ -62,9 +62,9 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
 
 | Category | Methods | Auth Required |
 |---|---|---|
-| **Public Read** | `status`, `series`, `devices`, `tunnel`, `doctor`, `rules`, `events` | No (`0000...0000`) |
+| **Public Read** | `status`, `series`, `devices`, `tunnel`, `doctor`, `rules`, `events`, `led_view` | No (`0000...0000`) |
 | **Private Read** | `config`, `connections` | Yes (`prism-admin`) |
-| **Write Actions** | `reconcile`, `configure`, `device`, `select`, `relogin`, `remember`, `forget` | Yes (`prism-admin`) |
+| **Write Actions** | `reconcile`, `configure`, `device`, `select`, `relogin`, `remember`, `forget`, `claim`, `reload`, `led_demo`, `led_color` | Yes (`prism-admin`) |
 
 ---
 
@@ -72,11 +72,11 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
 
 ### 3.1 `status` — Global Snapshot, 21 Strands, Token Buckets & Weave State
 - **Args**: `{}`
-- **Cadence**: Updated every `1` second by `prismd` (`weave.interval = 1`, historical `series` sampled every `2` seconds), and reconciled every `45` seconds by `prism reconcile`.
+- **Cadence**: Updated every `1` second by `prismd` (`weave.interval = 1`, historical `series` sampled every `2` seconds), with a 45-second reconciliation timer. Device rates, class counters and controller snapshots update every four seconds at the default sampling interval.
 
 ```typescript
 interface PrismStatusResponse {
-  version: string;          // "5.0.0"
+  version: string;          // "5.8.0"
   ts: number;               // Current Unix timestamp (seconds)
   reconciled: number;       // Timestamp of last full `prism reconcile` pass
   ok: boolean;              // True if all `fail`-level doctor checks pass
@@ -165,29 +165,29 @@ interface StrandStatus {
   healthy: boolean;         // True if HTTP 204 probe succeeded within fail_keep window
   parked: boolean;          // True if temporarily parked after repeated portal auth failures
   http: number;             // Last HTTP status code from probe (204 = healthy, 0 = timeout)
-  ttfb: number;             // Pure network RTT (`time_starttransfer - time_namelookup`) in seconds
-  ttfb_ms: number;          // Pure network RTT rounded to integer milliseconds (e.g. 16)
-  loss: number;             // EWMA data-plane TCP/HTTP retransmission & probe-failure loss (0..1)
+  ttfb: number;             // HTTP time to first byte excluding DNS (`time_starttransfer - time_namelookup`) in seconds
+  ttfb_ms: number;          // HTTP TTFB rounded to integer milliseconds (e.g. 16)
+  loss: number;             // EWMA of unsuccessful HTTP probes (0..1)
   loss_pct: number;         // Rounded integer percentage of `loss` (0..100)
 
   // Bandwidth metrics (all in bytes/second unless suffixed with `_bytes`)
   rate: number;             // EWMA-smoothed download rate (bytes/s)
-  now: number;              // Instantaneous 2s download rate (bytes/s)
+  now: number;              // Last sample interval download rate (bytes/s)
   peak: number;             // Decayed peak download rate (bytes/s)
   down_bytes: number;       // Cumulative download bytes on this strand
   up: number;               // EWMA-smoothed upload rate (bytes/s)
-  up_now: number;           // Instantaneous 2s upload rate (bytes/s)
+  up_now: number;           // Last sample interval upload rate (bytes/s)
   up_peak: number;          // Decayed peak upload rate (bytes/s)
   up_bytes: number;         // Cumulative upload bytes on this strand
 
   // Burst-Harvest 2.0 & VIP scheduling state
-  slots: number;            // Number of slots assigned to this strand in `@pattern` (0 for VIP or depleted)
+  slots: number;            // Number of slots assigned to this strand in `@pattern` (VIP excluded with four or more healthy strands)
   vip: boolean;             // True if this strand is the dedicated `@vip_lane` low-latency gaming strand
   bucket: "charged" | "draining" | "depleted" | "cooling";
-  tokens: number;           // Available burst tokens in bytes (0 .. 1,000,000)
+  tokens: number;           // Estimated remaining burst allowance in bytes (0 .. 1,000,000)
   tokens_max: number;       // Maximum burst bucket capacity in bytes (1,000,000)
   tokens_pct: number;       // Available burst tokens as integer percentage (0 .. 100)
-  cooldown_rem: number;     // Remaining policer cooldown time in seconds (0 when not in cooldown)
+  cooldown_rem: number;     // Estimated seconds to refill at the current rate while cooling
 }
 ```
 
@@ -213,11 +213,22 @@ interface PrismSeriesResponse {
 ```typescript
 interface PrismDevicesResponse {
   devices: LanDevice[];
+  quarantine: Array<{
+    mac: string; ip: string; host: string; link: string; online: boolean;
+    signal: number; rand: boolean; os: string; score: number; reason: string;
+    candidates: Array<{uid: string; group_name: string; alias: string; score: number; reasons: string[]}>;
+  }>;
 }
 
 interface LanDevice {
+  uid?: string;             // Enrolled profile ID
+  active_mac?: string;
+  bound_macs?: string[];
+  group_name?: string;
+  port?: number;            // Dedicated Mihomo TProxy listener
+  relay?: string;           // Persisted manual group selection
   mac: string;              // Lowercase MAC address, e.g. "aa:bb:cc:dd:ee:ff"
-  ip: string;               // Current IPv4 address or ""
+  ip: string;               // Observed IPv4 address, last recorded address for offline profiles, or ""
   host: string;             // DHCP hostname or ""
   name: string;             // User-assigned name (falls back to DHCP hostname)
   named: boolean;           // True if explicitly named by the user in UCI
@@ -232,8 +243,8 @@ interface LanDevice {
 }
 ```
 > **Device Policy Semantics**:
-> - `"auto"`: Standard classification (Domestic IP -> Direct, Overseas/Anthropic/Cloudflare -> Taiwan Home Tunnel; UDP gaming/realtime packets automatically use `@vip_lane`).
-> - `"game"`: Forces **all** new connections from this MAC onto `@vip_lane` (the lowest-RTT dedicated strand) and highest HTB priority (`1:10`), with automatic 50 MB bulk-flow eviction.
+> - `"auto"`: Forced-tunnel destinations precede domestic direct destinations. Remaining traffic uses the device’s selected relay group.
+> - `"game"`: Gives new direct connections from this MAC the VIP strand and HTB class `1:10`. At 50 MB the kernel clears the priority bit and preserves the established route.
 > - `"direct"`: Forces all traffic from this MAC to go direct (bypasses `mihomo` tunnel).
 > - `"tunnel"`: Forces all traffic from this MAC into `mihomo` tunnel (even domestic IPs).
 > - `"block"`: Blocks internet access for this MAC while keeping the router LAN UI reachable.
@@ -245,9 +256,10 @@ interface LanDevice {
 ```typescript
 interface PrismTunnelResponse {
   reachable: boolean;       // True if mihomo external-controller answered
-  selected: string;         // Active selection in top-level `PROXY` group (default: "TW-HOME")
-  tw_home: string;          // Active relay inside `TW-HOME` fallback group (e.g. "🇹🇼【亚洲】台湾家宽01丨专线【3x】")
-  auto: string;             // Active relay inside `AUTO` group
+  selected: string;         // Most frequent effective relay across device selectors
+  tw_home: string;          // Manual selection in TW-HOME
+  auto: string;             // Alias for tw_home
+  groups: Array<{ uid: string; group_name: string; anchor_mac: string; port: number; now: string }>;
   dashboard: string;        // URL to Zashboard UI, e.g. "http://192.168.16.1:9090/ui/"
   relays: Array<{
     name: string;           // Group or proxy name
@@ -284,7 +296,7 @@ interface PrismDoctorResponse {
 interface PrismRulesResponse {
   tunnel_on: boolean;
   rules: Array<{
-    tag: "device-block" | "relay" | "quic" | "device-direct" | "device-tunnel" | "tunnel-range" | "tunnel-domain" | "domestic" | "tunnel-port" | "rest-tunnel" | "rest-direct";
+    tag: "device-block" | "unverified-drop" | "relay" | "relay-other-port" | "quic" | "device-direct" | "device-tunnel" | "tunnel-range" | "tunnel-domain" | "domestic" | "domestic-domain" | "tunnel-port" | "rest-tunnel";
     packets: number;
     bytes: number;
   }>;
@@ -347,9 +359,12 @@ interface PrismConfigResponse {
 ---
 
 ### 3.9 `connections` — Active Direct & Tunnelled Flows *(Auth Required)*
+
+Requests return the latest completed samples. When the direct sample is four seconds old or absent, the first reader starts one background conntrack scan. On a cold read, direct rows appear after that scan finishes. Repeated timestamps identify the same sample. Direct rows use admitted client addresses and the original and reply tuples to identify the WAN strand.
 - **Args**: `{}`
 ```typescript
 interface PrismConnectionsResponse {
+  sampled: { direct: number; tunnel: number }; // Monotonic seconds per source. Zero until its first completed sample.
   connections: Array<{
     key: string;            // Unique flow identifier
     src: string;            // LAN client IPv4, e.g. "192.168.16.178"
@@ -370,14 +385,17 @@ interface PrismConnectionsResponse {
 
 ## 4. Write Endpoints *(All Require Auth)*
 
-All write endpoints return `{ "ok": boolean, "error"?: string }` and automatically trigger a debounced reconcile/reload pass when `ok === true`.
+All write endpoints return `{ "ok": boolean, "error"?: string }` with any additional result fields shown below. Policy writes schedule a reconciler pass. Selector writes take effect in Mihomo immediately.
 
 | Method | Args Schema | Description |
 |---|---|---|
 | `reconcile` | `{}` | Triggers an immediate `prism reconcile` pass. |
 | `configure` | `{ "set": Record<string, string \| number> }` | Validates and commits one or more `TUNABLE` settings to `/etc/config/prism`. Atomic: rejects the entire batch if any key is invalid or out of bounds. |
 | `device` | `{ "mac": string, "name": string, "policy": "auto" \| "game" \| "direct" \| "tunnel" \| "block" }` | Updates a LAN client's display name and/or routing policy. If reset to `name: ""` and `policy: "auto"`, removes the UCI entry cleanly. |
-| `select` | `{ "name": string }` | Switches the active proxy/group in `mihomo`'s `PROXY` selector (e.g. `"TW-HOME"`) and persists it across reboots in `/etc/prism/state/selected.json`. |
+| `select` | `{ "name": string, "group"?: string }` | Selects a member of TW-HOME or the specified device group (UID or group name). Persists the confirmed choice in `/etc/prism/state/device_relays.json`. |
+| `claim` | `{ "mac": string, "action": "new" \| "merge" \| "forget", "target_uid"?: string, "alias"?: string, "policy"?: string, "relay"?: string }` | Enrolls, merges or removes a device identity. |
+| `reload` | `{}` | Refreshes the daemon's UCI settings. |
+| `led_demo`, `led_color` | `{}` or `{ "r": number, "g": number, "b": number, "target"?: string, "ttl"?: number }` | Controls the LEDs. |
 | `relogin` | `{}` | Clears all portal park timers and forces an immediate probe + captive-portal re-authentication across all strands. |
 | `remember` | `{ "name": string, "aggregate": boolean, "portal"?: string }` | Saves the current upstream gateway MAC as a known site in `/etc/config/prism`. |
 | `forget` | `{}` | Removes the current upstream gateway MAC from saved sites in `/etc/config/prism`. |

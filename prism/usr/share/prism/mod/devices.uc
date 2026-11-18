@@ -73,10 +73,9 @@ export function scan(cfg) {
 		push(list, item);
 	};
 
-	for (let lan in cfg.main.lan_dev)
-		for (let n in facts.ip("-4 neigh show dev " + lan))
-			if (n.lladdr)
-				add(lc(n.lladdr), n.dst, "REACHABLE" in n.state || "DELAY" in n.state || "PROBE" in n.state);
+	for (let n in facts.neighbours())
+		if (n.dev in cfg.main.lan_dev)
+			add(lc(n.lladdr), n.dst, facts.active_neighbour(n));
 	for (let mac in keys(radio))
 		add(mac, null, true);
 	for (let mac in keys(known))
@@ -84,13 +83,4 @@ export function scan(cfg) {
 	for (let mac in keys(lease))
 		add(mac, null, false);
 	return list;
-};
-
-// MAC lists for the policy sets.
-export function policy_sets(cfg) {
-	let out = { direct: [], tunnel: [], block: [], game: [] };
-	for (let d in cfg.devices)
-		if (out[d.policy])
-			push(out[d.policy], d.mac);
-	return out;
 };

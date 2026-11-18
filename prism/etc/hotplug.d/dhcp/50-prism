@@ -1,41 +1,6 @@
 #!/bin/sh
-# Captured by procd/dnsmasq dhcp-script -> persist per-MAC DHCP fingerprint in /tmp/prism
-# and immediately notify prismd over local ubus for <10ms @verified_pairs sync.
-
-[ -n "$MACADDR" ] || exit 0
 case "$ACTION" in
-	add|update|remove) ;;
-	*) exit 0 ;;
+	add|update|remove)
+		[ -z "$MACADDR" ] || /usr/bin/ucode -S /usr/share/prism/bin/dhcp.uc
+		;;
 esac
-
-clean() {
-	printf '%s' "$1" | tr -cd "$2"
-}
-
-ACT=$(clean "$ACTION" 'a-z')
-MAC=$(printf '%s' "$MACADDR" | tr 'A-Z' 'a-z' | tr -cd '0-9a-f:')
-IP=$(clean "$IPADDR" '0-9.')
-HOST=$(clean "${HOSTNAME:-$DNSMASQ_SUPPLIED_HOSTNAME}" 'A-Za-z0-9._-')
-OPT55=$(clean "$DNSMASQ_REQUESTED_OPTIONS" '0-9,')
-VENDOR=$(clean "$DNSMASQ_VENDOR_CLASS" 'A-Za-z0-9 ._/-')
-CID=$(clean "$DNSMASQ_CLIENT_ID" '0-9A-Za-z:._-')
-IFACE=$(clean "${DNSMASQ_INTERFACE:-br-lan}" 'A-Za-z0-9._-')
-NOW=$(date +%s)
-
-[ -n "$MAC" ] || exit 0
-
-PAYLOAD=$(printf '{"action":"%s","mac":"%s","ip":"%s","host":"%s","opt55":"%s","vendor":"%s","cid":"%s","iface":"%s","ts":%s}' \
-	"$ACT" "$MAC" "$IP" "$HOST" "$OPT55" "$VENDOR" "$CID" "$IFACE" "$NOW")
-
-# Notify prismd synchronously over local Unix ubus socket (~1ms) so on_dhcp_event
-# updates dhcp_obs atomically without double-write races; only fall back to
-# direct file write at early boot before prismd starts.
-if ! /bin/ubus -t 1 call prism dhcp_event "$PAYLOAD" >/dev/null 2>&1; then
-	DIR="/tmp/prism/dhcp_obs"
-	mkdir -p "$DIR" 2>/dev/null
-	SLUG=$(printf '%s' "$MAC" | tr -d ':')
-	if [ "$ACT" = "add" ] || [ ! -s "$DIR/${SLUG}.json" ]; then
-		TMP="$DIR/${SLUG}.tmp.$$"
-		printf '%s\n' "$PAYLOAD" > "$TMP" 2>/dev/null && mv -f "$TMP" "$DIR/${SLUG}.json" 2>/dev/null
-	fi
-fi

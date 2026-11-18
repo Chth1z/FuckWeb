@@ -86,7 +86,7 @@ function snapshot(ctx, report, led_color) {
 			enabled: ctx.tunnel.enabled, running: ctx.tunnel.running, on: ctx.tunnel.on,
 			restored: !!ctx.tunnel.restored, pid: ctx.tunnel.pid ?? "",
 			mixed_port: ctx.cfg.tunnel.mixed_port,
-			relays: ctx.tunnel.relays, fail_open: !!st.tunnel?.open,
+			relays: ctx.tunnel.relays, fail_open: false,
 			canary_ms: st.tunnel?.delay ?? 0, canary_fails: st.tunnel?.fails ?? 0,
 		},
 		dns: { smartdns: dns.running(), port: ctx.cfg.dns.port },
@@ -110,14 +110,17 @@ function reconcile(ctx) {
 	ctx.site = strands.site(ctx);
 	strands.steer(ctx);
 	ctx.strands = strands.discover(ctx);
-	kernel.plumb(ctx);
+	assert(kernel.plumb(ctx), "strand routing setup failed");
 	ctx.health = strands.check(ctx);
-	ctx.cfg = config.load();
 	ctx.identity = identity.reconcile(ctx);
 	ctx.tunnel = tunnel.observe(ctx);
+	ctx.relay_ports = guard.relay_ports(ctx.cfg, ctx);
+	ctx.mptcp_eps = facts.ip("mptcp endpoint show");
+	ctx.mptcp_ids = {};
+	for (let e in ctx.mptcp_eps)
+		ctx.mptcp_ids[e.id] = true;
 	ctx.weave = weave.plan(ctx);
-	kernel.apply(ctx);
-	guard.apply(ctx);
+	assert(kernel.apply(ctx), "datapath update failed");
 	dns.apply(ctx);
 	host.apply(ctx);
 	wifi.apply(ctx);
@@ -218,7 +221,7 @@ const COMMANDS = {
 			core.set_mode({ dry: true });
 			let report = reconcile(context({ force: "--full" in args }));
 			print(doctor.text(report));
-			return 0;
+			return report.ok ? 0 : 1;
 		},
 	},
 	prepare: {

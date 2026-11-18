@@ -17,7 +17,7 @@ import * as facts from "../lib/facts.uc";
 import { path } from "../lib/config.uc";
 import * as linkbroad from "../portal/linkbroad.uc";
 
-// Portal plugins by name. A plugin exports login_cmd(dev, secret).
+// Portal plugins by name. Resolve the portal once before building the per-strand login commands.
 const PORTALS = { linkbroad };
 const BACKUP_BASE = 200;
 
@@ -106,6 +106,8 @@ export function discover(ctx) {
 	let cfg = ctx.cfg.strands, f = ctx.facts, strands = [];
 	let add = (devs, role, base) => {
 		for (let i, dev in devs) {
+			if (!(dev in f.links))
+				continue;
 			let a = f.addr4[dev], n = f.netifd[dev];
 			push(strands, {
 				dev, role,
@@ -117,17 +119,16 @@ export function discover(ctx) {
 			});
 		}
 	};
-	let primary = facts.expand([ ...cfg.uplink, ...(ctx.site.aggregate ? cfg.identity : []) ], f.links);
+	let names = uniq([ ...f.configured, ...f.links ]);
+	let primary = facts.expand([ ...cfg.uplink, ...(ctx.site.aggregate ? cfg.identity : []) ], names);
 	add(primary, "primary", 0);
-	add(filter(facts.expand(cfg.backup, f.links), (d) => !(d in primary)), "backup", BACKUP_BASE);
+	add(filter(facts.expand(cfg.backup, names), (d) => !(d in primary)), "backup", BACKUP_BASE);
 	return strands;
 };
 
 // --- health ----------------------------------------------------------------
 
-// Stagger HTTP 204 probes across small waves to avoid gateway ARP/DNS thundering
-// herds, and measure real data-plane TCP SYN/HTTP retransmit loss instead of
-// gateway control-plane ICMP echo (which upstream switches rate-limit).
+// Bound concurrent requests and measure time to first byte after DNS resolution.
 function probe(set, cfg) {
 	let res = {};
 	if (!length(set))
@@ -135,34 +136,18 @@ function probe(set, cfg) {
 	let cmds = [];
 	const WAVE_SIZE = 7;
 	for (let i = 0; i < length(set); i++) {
-		if (i > 0 && i % WAVE_SIZE == 0)
-			push(cmds, "ucode -e 'sleep(60)'");
 		let s = set[i];
 		push(cmds, sprintf(
-			"curl -4 --interface %s -m %d --connect-timeout 3 -sS -o /dev/null -w '%s %%{http_code} %%{time_connect} %%{time_starttransfer} %%{time_namelookup}\\n' %s 2>/dev/null &",
-			s.dev, cfg.probe_timeout, s.dev, core.shq(cfg.probe_url)));
+			"curl -4 --noproxy '*' --interface %s -m %d --connect-timeout 3 -s -o /dev/null -w '%s %%{http_code} %%{time_starttransfer} %%{time_namelookup}\\n' %s &",
+			core.shq(s.dev), cfg.probe_timeout, s.dev, core.shq(cfg.probe_url)));
+		if ((i + 1) % WAVE_SIZE == 0 || i + 1 == length(set))
+			push(cmds, "wait");
 	}
-	push(cmds, "wait");
 	for (let line in split(core.sh(join("\n", cmds)).out, "\n")) {
-		let m = match(line, /^(\S+) ([0-9]+) ([0-9.]+) ([0-9.]+) ([0-9.]+)$/);
-		if (m && !res[m[1]]) {
-			let code = int(m[2]);
-			let tcp_rtt = code > 0 ? max(0.005, (+m[3]) - (+m[5])) : 0;
-			let pure = code > 0 ? max(0.005, (+m[4]) - (+m[5])) : 0;
-			let sloss = 0.0;
-			if (code != cfg.probe_expect)
-				sloss = 1.0;
-			else if (tcp_rtt >= 0.90)
-				sloss = 0.50;
-			else if (tcp_rtt >= 0.35 || pure - tcp_rtt >= 0.50)
-				sloss = 0.20;
-			else if (tcp_rtt >= 0.18 || pure - tcp_rtt >= 0.22)
-				sloss = 0.08;
-			res[m[1]] = { code, ttfb: pure, tcp_rtt, loss: sloss };
-		}
+		let m = match(line, /^([^ ]+) ([0-9]+) ([0-9.]+) ([0-9.]+)$/);
+		if (m)
+			res[m[1]] = { code: int(m[2]), ttfb: max(0, +m[3] - +m[4]) };
 	}
-	for (let s in set)
-		res[s.dev] ??= { code: 0, ttfb: 0, tcp_rtt: 0, loss: 1.0 };
 	return res;
 }
 
@@ -175,9 +160,10 @@ function portal_login(devs, here, cfg) {
 		warn("would log in to portal '", here.portal, "' on: ", join(" ", devs), "\n");
 		return false;
 	}
+	let ip = plugin.address();
 	for (let i = 0; i < length(devs); i += cfg.auth_batch) {
 		let batch = slice(devs, i, i + cfg.auth_batch);
-		let cmds = map(batch, (d) => "( " + plugin.login_cmd(d, secret) + "\n) >/dev/null 2>&1 &");
+		let cmds = map(batch, (d) => "( " + plugin.login_cmd(d, secret, ip) + "\n) >/dev/null 2>&1 &");
 		push(cmds, "wait");
 		core.sh(join("\n", cmds));
 	}
@@ -200,31 +186,25 @@ export function check(ctx) {
 		for (let s in routed)
 			state(s).probed = state(s).parked = state(s).logins = 0;
 
+	for (let s in routed) {
+		let h = state(s), lease = s.ip + "/" + s.gw;
+		if (h.lease != lease) {
+			h.lease = lease;
+			h.confirmed = false;
+			h.probed = h.code = h.ttfb = h.strikes = h.logins = h.parked = 0;
+		}
+	}
 	let due = filter(routed, (s) => !good(s) || now - state(s).probed >= cfg.probe_interval);
 	let run = (set) => {
 		let res = probe(set, cfg);
 		for (let s in set) {
-			let h = state(s), r = res[s.dev] ?? { code: 0, ttfb: 0, loss: h.loss ?? 0 };
+			let h = state(s), r = res[s.dev] ?? { code: 0, ttfb: 0 };
 			h.code = r.code;
-			let sloss = r.loss ?? 0.0;
-			if (!h.probed || h.loss == null)
-				h.loss = (r.code == cfg.probe_expect) ? min(sloss, 0.15) : sloss;
-			else if (r.code != cfg.probe_expect)
-				h.loss = max(0.45 * sloss + 0.55 * h.loss, sloss * 0.7);
-			else if (sloss >= 0.5)
-				h.loss = 0.22 * sloss + 0.78 * h.loss;
-			else if (sloss > 0)
-				h.loss = 0.35 * sloss + 0.65 * h.loss;
-			else
-				h.loss = h.loss * 0.35;
-			if (h.loss < 0.002)
-				h.loss = 0.0;
-			if (r.code == cfg.probe_expect && r.ttfb > 0) {
-				let sample = (h.ttfb > 0 && h.ttfb < 0.45 && r.ttfb > h.ttfb * 1.8) ? (h.ttfb * 1.25) : r.ttfb;
-				h.ttfb = (h.ttfb > 0 && h.ttfb < 0.45) ? (0.35 * sample + 0.65 * h.ttfb) : sample;
-			}
-			else {
-				h.ttfb = max(0.45, (h.ttfb ?? 0.20) * 1.5);
+			let missed = r.code == cfg.probe_expect ? 0.0 : 1.0;
+			h.loss = h.probed ? 0.25 * missed + 0.75 * h.loss : missed;
+			if (r.code == cfg.probe_expect) {
+				h.ttfb = h.ttfb > 0 ? 0.35 * r.ttfb + 0.65 * h.ttfb : r.ttfb;
+				h.confirmed = true;
 			}
 			h.probed = now;
 		}
@@ -236,7 +216,8 @@ export function check(ctx) {
 	let login = [], backlog = false;
 	for (let s in filter(due, (s) => !good(s))) {
 		let h = state(s);
-		if (h.parked && now - h.parked < cfg.park_sec)
+		if ((!h.code && h.confirmed && h.strikes + 1 < cfg.fail_keep && !ctx.request?.relogin) ||
+		    (h.parked && now - h.parked < cfg.park_sec))
 			continue;
 		if (length(login) >= cfg.auth_batch * 3) {
 			backlog = true;
@@ -277,11 +258,13 @@ export function check(ctx) {
 			h.strikes = h.logins = h.parked = 0;
 		else if (s in due)
 			h.strikes = (failed_login[s.dev] || captive) ? max(h.strikes + 1, cfg.fail_keep) : h.strikes + 1;
-		if (h.strikes < cfg.fail_keep)
+		if (h.strikes >= cfg.fail_keep)
+			h.confirmed = false;
+		if (h.confirmed && h.strikes < cfg.fail_keep)
 			push(healthy, s);
 	}
 	for (let dev in keys(st.strands))
-		if (!length(filter(strands, (s) => s.dev == dev)))
+		if (!length(filter(routed, (s) => s.dev == dev)))
 			delete st.strands[dev];
 
 	let primary = filter(healthy, (s) => s.role == "primary");

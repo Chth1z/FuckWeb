@@ -1,6 +1,6 @@
 // prismd — the long-lived half of Prism. Three small jobs:
 //
-//   weave      every 2 seconds: read per-strand download and upload counters,
+//   weave      each sample interval: read per-strand download and upload counters,
 //              update each strand's virtual token-bucket credit, keep the
 //              dedicated @vip_lane pinned to the lowest-TTFB strand, and
 //              re-lay @pattern so new flows harvest charged burst buckets.
@@ -22,24 +22,22 @@ import * as api from "./mod/api.uc";
 
 const PRISM = "/usr/sbin/prism";
 const STATUS = core.RUN + "/status.json";
-const MIHOMO_STAT = core.RUN + "/mihomo.stat.json";
-const MIHOMO_STAT_TMP = core.RUN + "/mihomo.stat.tmp";
 const QOS_BANDS = [ "1:10", "1:20", "1:30" ];
 const DEBOUNCE_MS = 2000;
 const HISTORY = 720;                    // samples kept (2s cadence -> 24 min window)
 const SERIES_CADENCE = 1.9;
 const PEAK_DECAY_PER_SEC = 0.999;       // ~0.998 per 2s
 const SETTLE = 2;                       // slot changes needed to trigger an update
-const DEVICE_SCAN = 6;                  // look for devices every ~6s (~1s/sample * 6)
+const TELEMETRY_INTERVAL = 4;           // seconds between dashboard/accounting snapshots
 
 let cfg = config.load();
 let snapshot = core.load_json(STATUS, null);
 let pattern = weave.current();
 let vip_lane = weave.current_vip();
 let history = series.create(HISTORY);
-let load = {};                          // dev -> { down, up, bucket, flows }
-let flow_counts = {};                   // strand id -> ESTABLISHED flow count
-let lan = { list: [], rate: {}, samples: 0, ts: 0 };
+let load = {};                          // dev -> { down, up, bucket }
+let slow_at = 0, tunnel_flows = [], classify_rules = [];
+let lan = { list: [], rate: {}, samples: 0, ts: {} };
 let acct = {
 	nft: {},
 	nft_ts: 0,
@@ -49,7 +47,7 @@ let acct = {
 	qos_ts: 0,
 	mihomo: { reachable: false, down_bytes: 0, up_bytes: 0, down_bps: 0, up_bps: 0, conns: 0, ts: 0 },
 };
-let mstats_busy = false;
+let controller_busy = {}, proxies = null, selection_epoch = 0;
 let sampled = 0, series_at = 0, pattern_at = 0, last_rate = 0, last_down = 0;
 let running = false, again = false, first = true, tunnel_ready_for_sync = false;
 let demo_active = false, demo_step = 0, demo_timer = null;
@@ -58,7 +56,7 @@ let kick_pending = false, kick, reconcile;
 
 function monotonic() {
 	let c = clock(true);
-	return c[0] + c[1] / 1000000000;
+	return c[0] + c[1] / 1000000000.0;
 }
 
 function healthy() {
@@ -89,12 +87,12 @@ function pattern_diff(a, b) {
 
 function relay(now) {
 	let strands = healthy(), n = snapshot?.weave?.slots ?? 0;
-	if (!length(strands) || n <= 0)
+	if (running || !length(strands) || n <= 0)
 		return;
 	let mptcp_ids = {};
 	for (let e in snapshot?.mptcp?.endpoints ?? [])
 		mptcp_ids[e.id] = true;
-	let next_vip = weave.select_vip(strands, load, mptcp_ids);
+	let next_vip = weave.select_vip(strands, load, mptcp_ids, vip_lane);
 	let next = weave.compose(cfg.weave, strands, load, n, next_vip);
 	let vip_changed = (next_vip[0] ?? 0) != (vip_lane[0] ?? 0);
 	let d = pattern_diff(pattern, next);
@@ -104,41 +102,39 @@ function relay(now) {
 		if (d.moved < 10 && pattern_at && now - pattern_at < 5)
 			return;
 	}
+	let lock = core.lock("reconcile");
+	if (!lock)
+		return;
 	if (weave.program(next, vip_changed ? next_vip : null)) {
 		pattern = next;
 		vip_lane = next_vip;
 		pattern_at = now;
 	}
+	lock.close();
 }
 
 function sample_devices(now) {
-	let dt = lan.ts > 0 ? now - lan.ts : 0;
-	lan.ts = now;
 	for (let dir in [ "up", "down" ]) {
 		let cur = weave.counters("dev_" + dir);
 		if (!cur)
 			continue;
+		let dt = lan.ts[dir] ? now - lan.ts[dir] : 0;
+		lan.ts[dir] = now;
 		for (let ip, bytes in cur) {
 			let r = (lan.rate[ip] ??= {}), prev = r[dir + "_bytes"];
 			r[dir] = (prev != null && bytes >= prev && dt > 0) ? (bytes - prev) / dt : 0;
 			r[dir + "_bytes"] = bytes;
 		}
 		for (let ip, r in lan.rate)
-			if (cur[ip] == null)
+			if (cur[ip] == null) {
+				delete r[dir + "_bytes"];
 				r[dir] = 0;
+				if (r.up_bytes == null && r.down_bytes == null)
+					delete lan.rate[ip];
+			}
 	}
-	if (lan.samples % DEVICE_SCAN == 0)
+	if (lan.samples % 2 == 0)
 		lan.list = devices.scan(cfg);
-	if (tunnel_ready_for_sync && !running && (lan.samples % 4 == 1)) {
-		let cur_pid = trim(core.sh("pidof mihomo").out);
-		if (!length(cur_pid) || cur_pid != (snapshot?.tunnel?.pid ?? "")) {
-			tunnel_ready_for_sync = false;
-			kick(100);
-		}
-		else {
-			tunnel.sync_selected(cfg, snapshot?.lan_ip ?? "192.168.16.1");
-		}
-	}
 	lan.samples++;
 }
 
@@ -215,7 +211,7 @@ function acc_delta(slot, bytes, packets, dt) {
 function read_tc_htb(dev) {
 	if (!length(dev))
 		return null;
-	let r = core.sh("tc -j -s class show dev " + core.shq(dev));
+	let r = core.sh("exec tc -j -s class show dev " + core.shq(dev) + " parent 1:");
 	if (r.code != 0 || !length(trim(r.out)))
 		return null;
 	try {
@@ -235,9 +231,18 @@ function read_tc_htb(dev) {
 				};
 			}
 		}
-		return length(keys(out.bands)) ? out : null;
+		if (!length(keys(out.bands)))
+			return null;
+		let leaves = core.sh("exec tc -j -s qdisc show dev " + core.shq(dev));
+		if (leaves.code != 0)
+			return null;
+		for (let q in json(leaves.out))
+			if (out.bands[q.parent])
+				out.bands[q.parent].drops = q.drops;
+		return out;
 	}
 	catch (e) {
+		core.err("tc statistics for %s: %s", dev, e.message);
 		return null;
 	}
 }
@@ -270,6 +275,7 @@ function sample_counters_and_qos(now) {
 	}
 	let rules = weave.classify_counters();
 	if (length(rules)) {
+		classify_rules = rules;
 		let dt_cls = acct.cls_ts > 0 ? now - acct.cls_ts : 0;
 		acct.cls_ts = now;
 		let b = 0, p = 0;
@@ -303,51 +309,67 @@ function sample_counters_and_qos(now) {
 	}
 }
 
+function poll_controller(resource, callback) {
+	if (controller_busy[resource])
+		return;
+	let file = fs.mkstemp();
+	assert(file, fs.error());
+	let path = fs.realpath("/proc/self") + "/fd/" + file.fileno();
+	let url = sprintf("http://%s:%d/%s", snapshot.lan_ip, cfg.tunnel.controller_port, resource);
+	controller_busy[resource] = true;
+	let child = uloop.process("/usr/bin/curl", [ "-4", "--noproxy", "*", "-fsS", "-m", "2",
+		"-H", "Authorization: Bearer " + core.read(core.ETC + "/controller.secret"), "-o", path, url ], {}, (code) => {
+		delete controller_busy[resource];
+		let payload = null;
+		if (code == 0) {
+			try { payload = json(file); }
+			catch (e) { core.err("controller /%s: %s", resource, e.message); }
+		}
+		file.close();
+		callback(payload);
+	});
+	if (!child) {
+		core.err("cannot start controller /%s poll: %s", resource, uloop.error());
+		delete controller_busy[resource];
+		file.close();
+		callback(null);
+	}
+}
+
 function poll_mihomo_stats() {
 	if (!snapshot?.tunnel?.running) {
+		proxies = null;
+		tunnel_flows = [];
+		acct.mihomo.conns = 0;
 		acct.mihomo.reachable = false;
 		acct.mihomo.down_bps = 0;
 		acct.mihomo.up_bps = 0;
 		return;
 	}
-	if (mstats_busy)
-		return;
-	let sec = trim(core.read(core.ETC + "/controller.secret") ?? "");
-	let lip = snapshot?.lan_ip ?? "192.168.16.1";
-	let url = sprintf("http://%s:%d/connections", lip, cfg.tunnel.controller_port);
-	let cmd = sprintf("curl -4 --noproxy '*' --connect-timeout 1 -m 1 -sS -H %s %s -o %s && mv -f %s %s",
-		core.shq("Authorization: Bearer " + sec), core.shq(url),
-		core.shq(MIHOMO_STAT_TMP), core.shq(MIHOMO_STAT_TMP), core.shq(MIHOMO_STAT));
-	mstats_busy = true;
-	uloop.process("/bin/sh", [ "-c", cmd ], {}, (code) => {
-		mstats_busy = false;
-		if (code != 0) {
-			acct.mihomo.reachable = false;
-			acct.mihomo.down_bps = 0;
-			acct.mihomo.up_bps = 0;
-			return;
-		}
-		let raw = fs.readfile(MIHOMO_STAT);
-		if (!raw)
-			return;
-		let dl = null, ul = null, conns = 0;
-		try {
-			if (length(raw) < 524288) {
-				let j = json(raw);
-				dl = j?.downloadTotal;
-				ul = j?.uploadTotal;
-				conns = length(j?.connections ?? []);
-			}
-		}
-		catch (e) {}
-		if (dl == null || ul == null) {
-			let md = match(raw, /"downloadTotal":([0-9]+)/);
-			let mu = match(raw, /"uploadTotal":([0-9]+)/);
-			if (!md || !mu)
+	let epoch = selection_epoch, pid = snapshot.tunnel.pid;
+	if (!running && tunnel_ready_for_sync)
+		poll_controller("proxies", (j) => {
+			if (running || epoch != selection_epoch)
 				return;
-			dl = +md[1];
-			ul = +mu[1];
+			if (core.read("/proc/" + pid + "/comm") != "mihomo") {
+				proxies = null;
+				tunnel_ready_for_sync = false;
+				kick(100);
+				return;
+			}
+			proxies = j?.proxies;
+			if (proxies)
+				tunnel.persist_selected(proxies);
+		});
+	poll_controller("connections", (j) => {
+		if (j?.downloadTotal == null || j?.uploadTotal == null) {
+			acct.mihomo.reachable = false;
+			acct.mihomo.down_bps = acct.mihomo.up_bps = acct.mihomo.conns = 0;
+			tunnel_flows = [];
+			return;
 		}
+		let dl = j.downloadTotal, ul = j.uploadTotal, conns = length(j.connections);
+		tunnel_flows = api.tunnel_flows(j.connections);
 		let now_ts = monotonic(), prev_ts = acct.mihomo.ts, dt = prev_ts > 0 ? now_ts - prev_ts : 0;
 		if (dt > 0) {
 			acct.mihomo.down_bps = dl >= acct.mihomo.down_bytes ? (dl - acct.mihomo.down_bytes) / dt : 0;
@@ -452,29 +474,23 @@ function telemetry_view() {
 function sample() {
 	sample_timer.set(max(1, cfg.weave.interval) * 1000);
 	let counted = { down: weave.counters("strands"), up: weave.counters("strands_up") }, now = monotonic();
-	if (!counted.down) {
+	if (!slow_at || now - slow_at >= TELEMETRY_INTERVAL) {
+		slow_at = now;
+		sample_counters_and_qos(now);
+		sample_devices(now);
 		poll_mihomo_stats();
+	}
+	if (!counted.down || !counted.up)
 		return;
-	}
 	let dt = sampled ? now - sampled : 0, alpha = cfg.weave.smoothing;
-	sample_counters_and_qos(now);
-	sample_devices(now);
-	poll_mihomo_stats();
 	let record_series = !series_at || (now - series_at >= SERIES_CADENCE);
-	if (record_series) {
-		flow_counts = weave.active_flows();
-	}
-	let id_by_dev = {};
-	for (let s in snapshot?.strands ?? [])
-		id_by_dev[s.dev] = s.id;
 	let decay = dt > 0 ? max(0.90, 1.0 - (1.0 - PEAK_DECAY_PER_SEC) * dt) : PEAK_DECAY_PER_SEC;
 	let total = { down: 0, up: 0 }, per = {}, per_up = {};
 	for (let dev in keys(counted.down)) {
 		let l = (load[dev] ??= {
 			down: { bytes: null, now: 0, rate: 0, peak: 0 },
 			up: { bytes: null, now: 0, rate: 0, peak: 0 },
-			bucket: { tokens: weave.BURST_MAX, state: "charged", cooldown_until: 0 },
-			flows: 0,
+			bucket: { tokens: weave.BURST_MAX, state: "charged" },
 		});
 		for (let dir in [ "down", "up" ]) {
 			let d = l[dir], bytes = counted[dir]?.[dev] ?? 0;
@@ -482,18 +498,20 @@ function sample() {
 				d.now = (bytes - d.bytes) / dt;
 				d.rate = alpha * d.now + (1 - alpha) * d.rate;
 			}
+			else {
+				d.now = d.rate = 0;
+			}
 			d.bytes = bytes;
 			d.peak = max(d.rate, d.peak * decay);
 			total[dir] += d.now;
 		}
-		l.flows = flow_counts[id_by_dev[dev]] ?? 0;
 		per[dev] = l.down.now;
 		per_up[dev] = l.up.now;
 	}
 	for (let dev in keys(load))
 		if (counted.down[dev] == null)
 			delete load[dev];
-	weave.update_buckets(load, dt, now);
+	weave.update_buckets(load, dt, cfg.weave.strand_kbit > 0 ? cfg.weave.strand_kbit * 125 : weave.CIR_BYTES_S);
 	sampled = now;
 	last_down = total.down;
 	last_rate = total.down + total.up;
@@ -517,29 +535,37 @@ kick = function(delay_ms) {
 };
 
 reconcile = function() {
-	reconcile_timer.set(max(10, cfg.main.tick) * 1000);
 	if (running) {
 		again = true;
 		return;
 	}
 	running = true;
+	selection_epoch++;
 	let args = first ? [ "reconcile", "--boot" ] : [ "reconcile" ];
-	first = false;
-	uloop.process(PRISM, args, {}, () => {
+	let child = uloop.process(PRISM, args, {}, (code) => {
 		running = false;
 		cfg = config.load();
-		snapshot = core.load_json(STATUS, snapshot);
-		tunnel_ready_for_sync = !!(snapshot?.tunnel?.running && snapshot?.tunnel?.restored);
-		pattern = weave.current();
-		vip_lane = weave.current_vip();
-		relay(monotonic());
-		if (!demo_active)
-			led.tick(cfg, { rate_bytes: last_rate });
+		reconcile_timer.set(max(10, cfg.main.tick) * 1000);
+		if (code == 0) {
+			first = false;
+			snapshot = core.load_json(STATUS, snapshot);
+			tunnel_ready_for_sync = !!(snapshot?.tunnel?.running && snapshot?.tunnel?.restored);
+			pattern = weave.current();
+			vip_lane = weave.current_vip();
+			relay(monotonic());
+			if (!demo_active)
+				led.tick(cfg, { rate_bytes: last_rate });
+		}
+		else {
+			tunnel_ready_for_sync = false;
+			core.err("reconcile exited %d", code);
+		}
 		if (again) {
 			again = false;
 			kick(DEBOUNCE_MS);
 		}
 	});
+	assert(child, "cannot start reconciler: " + uloop.error());
 };
 
 core.init_dirs();
@@ -582,6 +608,15 @@ let published = bus.publish("prism", api.methods({
 	},
 	interval: () => cfg.weave.interval,
 	series_interval: () => max(2, cfg.weave.interval),
+	proxies: () => proxies,
+	selected: (group, name) => {
+		selection_epoch++;
+		if (proxies?.[group])
+			proxies[group].now = name;
+	},
+	rules: () => classify_rules,
+	tunnel_flows: () => tunnel_flows,
+	tunnel_sampled: () => acct.mihomo.ts,
 	now: monotonic,
 	kick: () => kick(DEBOUNCE_MS / 4),
 	reload: sync_lan_cfg,
@@ -604,14 +639,6 @@ let published = bus.publish("prism", api.methods({
 		if (res.ok) {
 			sync_lan_cfg();
 			kick(100);
-		}
-		return res;
-	},
-	dhcp_event: (a) => {
-		let res = identity.on_dhcp_event(a);
-		if (res.kick) {
-			lan.list = devices.scan(cfg);
-			kick(150);
 		}
 		return res;
 	},

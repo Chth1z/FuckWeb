@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as ulog from "log";
 import { md5 } from "digest";
 
-export const VERSION = "5.7.0";
+export const VERSION = "5.8.0";
 export const SHARE = fs.dirname(sourcepath(0, true));
 export const RUN = getenv("PRISM_RUN") ?? "/tmp/prism";
 export const ETC = getenv("PRISM_ETC") ?? "/etc/prism";
@@ -87,8 +87,22 @@ export function sh(cmd) {
 	let p = fs.popen("{ " + cmd + "\n} 2>&1", "r");
 	if (!p)
 		return { code: -1, out: "" };
-	let out = p.read("all") ?? "";
-	return { code: p.close(), out };
+	let chunks = [];
+	for (;;) {
+		let chunk = p.read(8192);
+		if (chunk == null) {
+			let error = fs.error();
+			if (error == "Interrupted system call")
+				continue;
+			p.close();
+			return { code: -1, out: error };
+		}
+		if (!length(chunk))
+			break;
+		push(chunks, chunk);
+	}
+	let code = p.close();
+	return { code: code ?? -1, out: join("", chunks) };
 };
 
 export function ok(cmd) {
@@ -132,12 +146,15 @@ export function lines(path) {
 export function write_atomic(path, data, mode) {
 	let c = clock(true);
 	let tmp = sprintf("%s.tmp.%d.%d", path, c[0], c[1]);
-	if (fs.writefile(tmp, data) == null) {
-		err("cannot write %s: %s", tmp, fs.error());
+	if (fs.writefile(tmp, data) !== length(data)) {
+		err("incomplete write to %s", tmp);
+		fs.unlink(tmp);
 		return false;
 	}
-	if (mode != null)
-		fs.chmod(tmp, mode);
+	if (mode != null && !fs.chmod(tmp, mode)) {
+		fs.unlink(tmp);
+		return false;
+	}
 	if (fs.rename(tmp, path) != true) {
 		fs.unlink(tmp);
 		return false;
@@ -158,7 +175,7 @@ export function utf8_trunc(s, max_bytes) {
 export function write_if_changed(path, data, mode) {
 	if (fs.readfile(path) == data)
 		return false;
-	write_atomic(path, data, mode);
+	assert(write_atomic(path, data, mode), "cannot replace " + path);
 	return true;
 };
 
@@ -205,7 +222,10 @@ export function lock(name) {
 	let f = fs.open(RUN + "/" + name + ".lock", "w");
 	if (!f)
 		return null;
-	return f.lock("xn") ? f : null;
+	if (f.lock("xn"))
+		return f;
+	f.close();
+	return null;
 };
 
 export function init_dirs() {
@@ -221,9 +241,8 @@ export function with_lock(name, wait_s, fn) {
 		sleep(100);
 		h = lock(name);
 	}
-	if (!h)
-		return fn(false);
-	let res = fn(true);
+	assert(h, "timed out waiting for " + name + " lock");
+	let res = fn();
 	h.close();
 	return res;
 };

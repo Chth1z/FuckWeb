@@ -12,8 +12,8 @@ DNS 全程防劫持。运行在 ImmortalWrt（fw4 / nftables / procd / ucode）�
 | **site 站点** | 一个被记住的上游网络，凭网关的 MAC 地址识别。聚合与否、用哪个 portal 都跟着站点走 |
 | **strand 线路** | 上游网络里一个有独立地址的三层设备（`wan`、macvlan `vwan*`）。它的编号（1..250）同时是 fwmark 低 8 位、conntrack mark 和路由表 `1000+id` |
 | **weave 编织** | 新连接落到哪条线路。内核按**槽位**取号，查 `@vip_lane`（低延迟 VIP 专线）或 `@pattern`（脉冲收割池）得到线路编号 |
-| **vip_lane 专线** | 2 个槽位，动态锁定首包 RTT 最低且零拥塞的 1 条独立线路（`ct mark | 0x100`），专供电竞/UDP/SSH/高优 DSCP 流量，与大流下载物理隔离 |
-| **pattern 图样** | 槽位 → 线路，按 1.0 MB 硬件令牌桶余量加权（`harvest`），每 2 秒重排。回答"下一个连接去哪" |
+| **vip_lane 专线** | 2 个槽位按探测质量和负载选同一条健康线路（`ct mark | 0x100`）。线路充足时普通新流避开它，各线路共用同一物理 WAN |
+| **pattern 图样** | 槽位 → 线路，按估算的 1.0 MB 令牌桶余量加权（`harvest`），每秒采样，份额变化达到门槛时重排。回答"下一个连接去哪" |
 | **anchor 锚** | 槽位 → 线路，均匀且稳定。回答"这一对地址总是去哪" |
 | **device 设备** | LAN 上的一个 MAC。可以命名，可以单独决定去向（`auto` / `game` / `direct` / `tunnel` / `block`） |
 | **classify 分类** | 一个包走隧道还是直连 |
@@ -27,7 +27,7 @@ DNS 全程防劫持。运行在 ImmortalWrt（fw4 / nftables / procd / ucode）�
    ┌──────────────────────────────┐      ┌──────────────────────────────┐
    │ prism reconcile  (一次性进程) │      │ prismd  (守护进程)            │
    │  发现线路 → 探测 → portal 登录 │◀─启动─│  每 1s 读线路计数 → 负载       │
-   │  路由/规则 → nft 原子事务      │      │  → 重排图样（只动 @pattern）   │
+   │  路由/规则 → nft 原子事务      │      │  → 重排图样（更新流量与 VIP 槽位）   │
    │  隧道/DNS 配置 → 体检         │─快照─▶│  定时/按需拉起 reconcile       │
    └──────────────────────────────┘      │  发布 ubus 对象 prism（API）   │
                                          └──────────────────────────────┘
@@ -52,7 +52,7 @@ DNS 全程防劫持。运行在 ImmortalWrt（fw4 / nftables / procd / ucode）�
 1. `strands.discover`  找出当前存在的线路，网关/网段取自各自的 DHCP 租约
 2. `kernel.plumb`      每条线路的路由表与策略规则（必须先于探测：绑定线路的探测要靠它出得去）
 3. `strands.check`     到期的线路做 HTTP 探测 → 失败的走 portal 登录 → 得出健康集合
-4. `tunnel.observe`    渲染并校验 mihomo 配置 → 存活 / 金丝雀 → 是否承载流量
+4. `identity.reconcile` 核对设备和地址配对，再由 `tunnel.observe`    渲染并校验 mihomo 配置 → 存活 / 金丝雀 → 是否承载流量
 5. `weave.plan`        图样与锚对当前健康集合是否仍有效，无效则重排；只剩一条线路时不编织
 6. `kernel.apply`      默认路由覆盖 + nft（一个原子事务，只含变化的单元）
 7. `dns.apply` `host.apply` `wifi.apply`
@@ -62,20 +62,18 @@ DNS 全程防劫持。运行在 ImmortalWrt（fw4 / nftables / procd / ucode）�
 
 ```
 LAN 包
- │ dns_hijack (nat)         53/853 → 本机解析器
+ │ DNS 53 → 本机解析器；DoT 853 在 guard 拒绝
  ▼
- prerouting (mangle)
- ├─ jump classify           每条规则带计数器和标签，页面"分流"页读的就是它
- │    @dev_block  drop      设备：禁网
- │    @dev_direct return    设备：直连
- │    @relay4 return        中继地址不套娃
- │    @dev_tunnel → divert  设备：全部进隧道
- │    @tunnel4 / @tunnel4_dns → divert   强制进隧道（Cloudflare/Anthropic、SmartDNS 钉住的答案）
- │    udp/123 → divert      NTP 进隧道
- │    @domestic4 return     国内 IP 直连，隧道根本看不到
- │    其余 → divert         （divert = tproxy 交给隧道，到此结束）
- └─ jump weave              直连流量：选槽位 → 查 @anchor 或 @pattern → 线路编号写入 ct mark
-                            同一连接此后始终走同一条线路
+ prerouting → classify
+     dev_block / 未认证 MAC . IPv4 → drop
+     已配置的中继 IP . 协议 . 端口 → direct_ok
+     拒绝的 QUIC → reject
+     dev_direct → direct_ok；dev_tunnel → divert
+     中继其他端口 / tunnel4 / tunnel4_dns → divert
+     domestic4 / domestic4_dns → direct_ok
+     其余 → divert
+ direct_ok → weave → packet mark 加 0x20000000
+ divert → 按 MAC 投递独立的 TProxy 端口，未匹配设备丢弃
 
 隧道自己发出的包 (routing-mark 0x8000)
    output (route) → jump weave   隧道流量同样编织到所有线路
@@ -108,28 +106,21 @@ LAN 包
 
 上游网关对每个 MAC 身份使用双参数令牌桶整形（`CIR = 10 Mbps` 稳态承诺速率，`Bc = 1.0 MB` 突发令牌容量）：任何闲置满桶线路在新连接前 `0.8s–1.0s` 内可释放 `18–20+ Mbps` 脉冲带宽，桶空后触发丢包式尾丢弃（Tail-Drop）。
 
-**@vip_lane：电竞与实时流物理隔离专线**
+**VIP 与线路调度**
 
-- 动态选举当前纯网络首包 RTT（`time_starttransfer - time_namelookup`）最低且零拥塞的 1 条健康线路（如 `vwan4`），写入 `@vip_lane`（`ct mark = id | 0x100`）。
-- 命中条件：标记为 `game` 的设备、非 QUIC 的短包 UDP（`< 800B`）、高优 DSCP（`EF/CS4-CS7`）、SSH（`TCP/22`）。
-- 驱逐机制：若某条 VIP 连接累计传输超过 `50 MB`（如游戏更新下载），内核自动剥离 `0x100` 标记并重映射回 `@pattern` 普通收割池，严防大流污染 VIP 专线。
+每秒从 nft 线路集合分别读取收发字节。每个方向的余量按 `clamp(旧余量 + CIR × 实际间隔 − 已传字节, 0, 1000000)` 更新，CIR 默认 1,250,000 B/s，可由 `strand_kbit` 指定。两个方向取较小余量。按平滑速率计算的剩余带宽、余量及 HTTP 探测成功率决定新连接份额。历史曲线保留 720 个样本，约每两秒更新一次。
 
-**@pattern：Burst-Harvest 2.0 脉冲令牌桶调度**
+VIP 选举考虑首字节时间、探测失败及收发负载。有其他健康候选时避开 MPTCP 端点。至少四条健康线路时，普通流的槽位排除 VIP。VIP 连接达到 50 MB 时只清除优先级位，原 NAT 线路保留。
 
-- `harvest`（锁定默认）：由 `prismd` 每 1 秒追踪其余 20 条线路的虚拟令牌桶状态（`charged` 满桶脉冲 → `draining` 脉冲释放 → `depleted` 限速压制 → `cooling` 冷却回血），并结合 `nf_conntrack` `ESTABLISHED` 活跃流数加权：
-  - `charged` 满桶线路赋予 `10.0 * ratio^2` 平方级高权重，优先承接一切新连接的首秒脉冲；
-  - `depleted` 耗尽线路或真实 TCP/HTTP 探测丢包 `>= 14%` 线路权重直接归零（`0 slots`），在进入冷却回血前不再分配任何新连接，彻底规避网关尾丢弃导致的 TCP 拥塞窗口腰斩。
-- 槽位用平滑加权轮转（SWRR）交错排列，连续到来的连接均匀散布在不同满桶线路上。
-
-**MPTCP 池与 VIP 物理隔离**
-
-- `plan_mptcp` 挑选最多 6 条洁净的非 VIP `vwan*` 主线路注册为 `ip mptcp endpoint`（带 RTT 滞回保护，避免每轮 45s 探测抖动导致拆建端點）；`chain weave_out` 对 `MP_JOIN` 子流保持 `mark=0` 由 `PREF_FROM` 各自送出，严防多路径大流踏入 `@vip_lane`。
+地址与邻居通过 ucode 的 rtnl 模块读取。健康探测每批最多七个并发请求。首次获得或更换租约须先探测成功。HTTP 探测失败率与移除 DNS 时间后的首字节延迟分开计算。内核选用最多六个 MPTCP 端点、最多五个额外子流，MP_JOIN 走源地址规则。
 
 **亲和性**
 
-- 锁定 `flow`（按流铺开）：由于境外流量统一经由 `mihomo` 台湾家宽（`TW-HOME`）出站，对外恒定呈现单一台湾中华电信家宽 IP，无多 IP 会话跳变问题；直连与代理底层子流全部按流铺开以最大化并发吞吐与脉冲收割效率。
+- 锁定 `flow`（按流铺开）：每个新流选择一条线路，已建立连接沿用 conntrack 线路。代理出口由客户端手动选择的设备组及 `TW-HOME` 决定。
 
 ## 设备（`mod/devices.uc`）
+
+首次建立档案时导入已配置及在线设备，以后使用持久档案认领。当前 DHCP 租约优先，同 IP 即使被未知设备租走，也不能沿用旧配对。无租约时使用已登记 MAC 的活动邻居，或由无线关联、近期 FDB 活动佐证的邻居。开机缺少邻居记录时，只向已连接设备上次使用的本地地址查询，并依照内核实际学到的 MAC 放行。DHCP 热插拔先写 tmpfs 观察记录，再请求调谐。两张 nft 表的 admission 集合在同一事务生效。
 
 设备就是 MAC。地址、主机名、接入方式每次现查（DHCP 租约 + 邻居表 + hostapd），
 所以换了地址，名字和策略都还在。
@@ -243,9 +234,9 @@ prism provision [--dry]
 | 上行 | 上联口 `wan` 出口 | 链路的 95% | 队列本来就在我们这里，交给 fq_codel 管 |
 | 下行 | LAN 桥 `br-lan` 出口 | 链路的 90% | 队列本来会堆在上游交换机里，我们管不到。把转发给 LAN 的流量压到略低于线速，发送方会在那条队列堆起来之前先慢下来 |
 
-这台固件没有 ifb；只有一个 LAN 桥时，桥的出口等价于入口整形。
+每个方向按 20/50/30 分配 HTB 保底份额，各类均可借到该方向的总速率。HTB 信用约为四毫秒。fq_codel 的目标延迟为 2/5/5 ms，队列内存上限为 256 KiB / 1 MiB / 1 MiB。四秒采集一次 class 的字节与 overlimits，以及叶子队列的 drops。LAN 桥整形只覆盖实际发往该桥的包。
 
-实测（下载占满铜线时，另一条空闲线路上新建连接的延迟）：
+此前版本在此站点的实测（下载占满铜线时，从空闲线路新建连接）：
 
 | | 握手 | 首包 |
 |---|---|---|
@@ -280,33 +271,9 @@ prism provision [--dry]
 5. **隧道流量走 QUIC 类中继（Hysteria2）时只能用到一条线路**：所有流量复用在一条
    UDP 连接里。Trojan / VLESS 每个连接独立，可以叠加。
 
-## 终极形态：从"按连接分流"到"按包聚合"
+## 当前 MPTCP 边界
 
-上面第 3 条是唯一还没有被拿掉的上限。要拿掉它，一个连接的包必须能同时走多条线路，
-这需要对端配合把它们拼回去——也就是多路径传输。
-
-**路由器这一侧已经具备条件**：内核开着 MPTCP（`net.mptcp.enabled = 1`），mihomo
-的出站支持 `mptcp: true`，每条线路都有按源地址的路由表（`from 线路地址 → 表`），
-子流绑定哪条线路的地址，就从哪条线路出去。
-
-**缺的是对端**：
-
-- 走自己的服务器的隧道流量：在服务器上给入站开 MPTCP（内核 5.6+，
-  `net.mptcp.enabled=1`，代理的监听 socket 开 multipath），路由器上给这个中继写
-  `mptcp: true`，再用 `ip mptcp endpoint add <线路地址> dev <线路> subflow` 把线路
-  登记成端点。之后一条隧道连接 = 多条子流 = 多个身份，单流不再受 10.5 的限制。
-- 国内直连流量：对端是别人的服务器，不会配合。要聚合它们，只能再放一台国内的
-  汇聚服务器，让所有流量先多路径到它再出去。那是另一种东西了（多一跳、多一份
-  流量费），不是这套系统该默认做的。
-
-所以终极形态是两层：**直连流量按连接编织（现在这样），隧道流量按包多路径**。这一步
-没有做，因为它需要改动服务器，而且在服务器配好之前没法在这里验证；路由器这一侧
-要加的东西不多：中继上一个开关，`kernel.uc` 里登记端点，`output` 链里让绑定了线路
-地址的子流跟着自己的地址走而不是进编织。
-
-另一条抬高总量的路是把酒店 Wi-Fi 也当上联（配置里的 `backup` 角色现在只在铜线断
-开时启用）。它不受那根铜线限制，但和自己的 AP 抢同一个无线信道，得失要实测，不
-适合默认开。
+JP-Lightsail-VLESS 开启 MPTCP。直接访问的普通 TCP 对端及 HY2 的单条 UDP 会话受其所属线路的限制。所有子流仍共用同一条 100 Mbit/s 全双工铜线。
 
 ## 考虑过但没采用的
 

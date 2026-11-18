@@ -2,7 +2,7 @@
  * PRISM 5.0 — Central State Store, DSOTM Spectral Color Math & Formatters
  * ============================================================================ */
 
-export const UI_VERSION = '5.7.0';
+export const UI_VERSION = '5.8.0';
 
 export const S = {
   tab: 'overview',
@@ -24,7 +24,6 @@ export const S = {
   devSort: 'stable',
   connFilter: { route: 'all', q: '' },
   flowSnapshot: {},
-  flowSnapshotTs: 0,
   hitBoxes: [],
   topoPointer: { x: -1, y: -1 },
   // Smoothly interpolated visual state per strand index for zero-jitter rendering

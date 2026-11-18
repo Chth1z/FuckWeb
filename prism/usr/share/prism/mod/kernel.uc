@@ -11,8 +11,8 @@ import * as core from "../lib/core.uc";
 import * as facts from "../lib/facts.uc";
 import { path } from "../lib/config.uc";
 import * as weave from "./weave.uc";
-import * as devices from "./devices.uc";
 import * as identity from "./identity.uc";
+import * as guard from "./guard.uc";
 
 export const MARK_DIVERTED = 0x4000;    // packet was handed to the tunnel
 export const MARK_TUNNEL_OUT = 0x8000;  // the tunnel's own sockets (routing-mark)
@@ -91,48 +91,40 @@ function build(ctx) {
 	// then per-device choices, then forced-tunnel ranges before domestic sets.
 	let idp = ctx.identity;
 	let classify = [ rule("ether saddr @dev_block", "drop", "device-block") ];
-	if (idp != null)
-		push(classify, rule("ether saddr . ip saddr != @verified_pairs", "drop", "unverified-drop"));
+	push(classify, rule("ether saddr . ip saddr != @verified_pairs", "drop", "unverified-drop"));
 	if (tun.on)
-		push(classify, rule("ip daddr @relay4", "goto direct_ok", "relay"));
+		push(classify, rule("ip daddr . meta l4proto . th dport @relay_ports", "goto direct_ok", "relay"));
 	if (c.quic == "reject")
 		push(classify, rule("udp dport 443", "reject with icmpx type admin-prohibited", "quic"));
 	if (tun.on) {
 		push(classify, rule("ether saddr @dev_direct", "goto direct_ok", "device-direct"));
 		push(classify, rule("ether saddr @dev_tunnel", "goto divert", "device-tunnel"));
+		push(classify, rule("ip daddr @relay4", "goto divert", "relay-other-port"));
 		push(classify, rule("ip daddr @tunnel4", "goto divert", "tunnel-range"));
 		push(classify, rule("ip daddr @tunnel4_dns", "goto divert", "tunnel-domain"));
 		push(classify, rule("ip daddr @domestic4", "goto direct_ok", "domestic"));
 		push(classify, rule("ip daddr @domestic4_dns", "goto direct_ok", "domestic-domain"));
 		if (length(c.tunnel_udp_port))
 			push(classify, rule(sprintf("udp dport { %s }", join(", ", c.tunnel_udp_port)), "goto divert", "tunnel-port"));
-		push(classify, c.remainder == "tunnel" ? rule("", "goto divert", "rest-tunnel") : rule("", "goto direct_ok", "rest-direct"));
+		push(classify, rule("", "goto divert", "rest-tunnel"));
 	}
 
 	// Per-device TProxy isolation: each enrolled profile goes strictly to its bound listener port.
-	let divert = [ "ether saddr @dev_block counter drop" ];
-	if (idp != null) {
-		push(divert, "ether saddr . ip saddr != @verified_pairs counter drop");
-		let sorted_prof = sort(slice(idp.profiles ?? []), (a, b) => (a.port ?? 0) - (b.port ?? 0));
-		for (let p in sorted_prof) {
-			if (p.policy == "block" || !p.port)
-				continue;
-			if (!core.is_dry() && tun.ready_ports && !tun.ready_ports["" + p.port])
-				continue;
-			let macs = identity.all_profile_macs(p);
-			if (!length(macs))
-				continue;
-			push(divert, sprintf(
-				'ether saddr { %s } meta l4proto { tcp, udp } tproxy ip to %s:%d meta mark set %s ct mark set %s counter name "tun_up" accept comment "dev:%s"',
-				join(", ", macs), cfg.tunnel.listen_addr, p.port, hex(MARK_DIVERTED), hex(MARK_DIVERTED), p.uid));
-		}
-		push(divert, 'counter drop comment "unmapped-divert-drop"');
-	}
-	else {
+	let divert = [];
+	let sorted_prof = sort(slice(idp.profiles ?? []), (a, b) => (a.port ?? 0) - (b.port ?? 0));
+	for (let p in sorted_prof) {
+		if (p.policy == "block" || !p.port)
+			continue;
+		if (!core.is_dry() && tun.ready_ports && !tun.ready_ports["" + p.port])
+			continue;
+		let macs = identity.all_profile_macs(p);
+		if (!length(macs))
+			continue;
 		push(divert, sprintf(
-			'meta l4proto { tcp, udp } tproxy ip to %s:%d meta mark set %s ct mark set %s counter name "tun_up" accept',
-			cfg.tunnel.listen_addr, cfg.tunnel.tproxy_port, hex(MARK_DIVERTED), hex(MARK_DIVERTED)));
+			'ether saddr { %s } meta l4proto { tcp, udp } tproxy ip to %s:%d meta mark set %s ct mark set %s counter name "tun_up" accept comment "dev:%s"',
+			join(", ", macs), cfg.tunnel.listen_addr, p.port, hex(MARK_DIVERTED), hex(MARK_DIVERTED), p.uid));
 	}
+	push(divert, 'counter drop comment "unmapped-divert-drop"');
 
 	// See weave.uc for what the maps mean.
 	// Low byte of conntrack mark = strand ID (1..21); bit 0x100 = VIP realtime lane.
@@ -176,18 +168,23 @@ function build(ctx) {
 		];
 	}
 
-	let dev = idp?.sets ?? devices.policy_sets(cfg);
+	let dev = idp.sets;
 	return [
 		unit("base", base),
 		file_set_unit("domestic4", path(c.domestic4)),
 		set_unit("set", "tunnel4", core.lines(path(c.tunnel4))),
-		set_unit("set", "relay4", tun.relay_ips ?? []),
+		set_unit("set", "relay_ports", ctx.relay_ports),
+		set_unit("set", "relay4", uniq([ ...tun.relay_ips, ...cfg.tunnel.guard_ssh4 ])),
 		set_unit("set", "dev_direct", dev.direct),
 		set_unit("set", "dev_tunnel", dev.tunnel),
 		set_unit("set", "dev_block", dev.block),
 		set_unit("set", "dev_game", dev.game),
-		set_unit("set", "verified_pairs", idp?.pairs ?? []),
-		unit("anchor", weave.script("anchor", w.anchor)),
+		set_unit("set", "verified_pairs", idp.pairs),
+		{
+			name: "anchor",
+			digest: join(",", w.anchor_ids),
+			text: () => weave.script("anchor", weave.anchor(w.anchor_ids)),
+		},
 		chain_unit("classify", classify),
 		chain_unit("divert", divert),
 		chain_unit("weave", lay),
@@ -199,18 +196,12 @@ function build(ctx) {
 // entries across a skeleton rebuild.
 function carry_dynamic_set(name) {
 	let r = core.sh("nft -j list set " + NFT + " " + name);
-	if (r.code != 0)
-		return "";
+	assert(r.code == 0, "cannot carry live DNS set " + name + ": " + r.out);
 	let elems = [];
-	try {
-		for (let item in json(r.out).nftables)
-			for (let e in item.set?.elem ?? [])
-				if (e.elem?.expires > 0)
-					push(elems, sprintf("%s timeout %ds", e.elem.val, e.elem.expires));
-	}
-	catch (e) {
-		return "";
-	}
+	for (let item in json(r.out).nftables)
+		for (let e in item.set?.elem ?? [])
+			if (e.elem?.expires != null)
+				push(elems, sprintf("%s timeout %ds", e.elem.val, max(1, e.elem.expires)));
 	return length(elems) ? sprintf("add element %s %s { %s }\n", NFT, name, join(", ", elems)) : "";
 }
 
@@ -244,11 +235,13 @@ function apply_nft(ctx) {
 		script += weave.script("pattern", ctx.weave.pattern);
 		script += weave.script("vip_lane", ctx.weave.vip);
 	}
+	let guard_text = guard.plan(ctx);
+	script += guard_text;
 	if (!length(script))
 		return true;
 
 	let file = core.outpath("ruleset.nft");
-	fs.writefile(file, script);
+	assert(core.write_atomic(file, script), "cannot stage nft transaction");
 	let r = core.sh((core.is_dry() ? "nft -c -f " : "nft -f ") + file);
 	if (r.code != 0) {
 		core.err("nft rejected %s: %s", file, trim(r.out));
@@ -257,6 +250,10 @@ function apply_nft(ctx) {
 	if (core.is_dry()) {
 		warn(sprintf("nft: %s valid (%s) -> %s\n", full ? "full rebuild" : "update", join(" ", changed), file));
 		return true;
+	}
+	if (length(guard_text)) {
+		assert(core.write_atomic(core.RUN + "/guard.nft", guard_text), "cannot record applied guard");
+		core.event("GUARD updated (fail_open=0)");
 	}
 	ctx.st.nft = digests;
 	if (lay_pattern)
@@ -446,7 +443,7 @@ export function mptcp_candidates(ctx, current_eps) {
 function plan_mptcp(ctx, cmds) {
 	if (!fs.stat("/proc/sys/net/mptcp/enabled"))
 		return;
-	let cur_eps = facts.ip("mptcp endpoint show");
+	let cur_eps = ctx.mptcp_eps;
 	let eps = mptcp_candidates(ctx, cur_eps);
 	let want_subflows = length(eps) >= 2 ? min(5, length(eps) - 1) : 0;
 
@@ -506,9 +503,11 @@ function run(what, cmds) {
 		warn(sprintf("%s: %d changes\n  %s\n", what, length(cmds), join("\n  ", cmds)));
 		return true;
 	}
-	let r = core.sh(join("\n", cmds));
-	if (r.code != 0 || length(trim(r.out)))
+	let r = core.sh("set -e\n" + join("\n", cmds));
+	if (r.code != 0) {
 		core.err("%s: %s", what, trim(r.out));
+		return false;
+	}
 	core.event("%s %d changes", uc(what), length(cmds));
 	return r.code == 0;
 }
@@ -538,11 +537,11 @@ export function plumb(ctx) {
 export function apply(ctx) {
 	let cmds = [];
 	plan_default(ctx, cmds);
-	run("default route", cmds);
+	if (!run("default route", cmds))
+		return false;
 	let mcmds = [];
 	plan_mptcp(ctx, mcmds);
-	run("mptcp", mcmds);
-	return apply_nft(ctx);
+	return run("mptcp", mcmds) && apply_nft(ctx);
 };
 
 // Back to a plain router: fw4 NAT through netifd's default route.
