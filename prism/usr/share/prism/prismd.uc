@@ -17,6 +17,7 @@ import * as weave from "./mod/weave.uc";
 import * as devices from "./mod/devices.uc";
 import * as tunnel from "./mod/tunnel.uc";
 import * as identity from "./mod/identity.uc";
+import * as host from "./mod/host.uc";
 import * as led from "./mod/led.uc";
 import * as api from "./mod/api.uc";
 
@@ -25,6 +26,8 @@ const STATUS = core.RUN + "/status.json";
 const QOS_BANDS = [ "1:10", "1:20", "1:30" ];
 const DEBOUNCE_MS = 2000;
 const HISTORY = 720;                    // samples kept (2s cadence -> 24 min window)
+const METRICS_CAP = 1440;               // 1-minute rollup ring buffer (24h window)
+const METRICS_CADENCE = 60;             // seconds per rollup sample
 const SERIES_CADENCE = 1.9;
 const PEAK_DECAY_PER_SEC = 0.999;       // ~0.998 per 2s
 const SETTLE = 2;                       // slot changes needed to trigger an update
@@ -53,6 +56,24 @@ let running = false, again = false, first = true, tunnel_ready_for_sync = false;
 let demo_active = false, demo_step = 0, demo_timer = null;
 let reconcile_timer, sample_timer;
 let kick_pending = false, kick, reconcile;
+let cpu_prev = null;
+let host_sys = null;
+let alerts = { thermal: false, mem: false, ct: false, wan_down: false, wan_flaps: null };
+let mihomo_down_strikes = 0, mihomo_alarm = false;
+let daemon_stats = {
+	started_ts: time(),
+	sampled_ts: 0,
+	reconcile_ms: 0,
+	reconcile_max_ms: 0,
+	reconcile_ok_ts: 0,
+	reconcile_fails: 0,
+	reconcile_total_fails: 0,
+	reconcile_last_rc: 0,
+	reconcile_count: 0,
+};
+let metrics_ring = { next: 0, rows: [] };
+let minute_acc = null;
+let prev_qos_drops = null;
 
 function monotonic() {
 	let c = clock(true);
@@ -107,6 +128,16 @@ function relay(now) {
 		return;
 	try {
 		if (weave.program(next, vip_changed ? next_vip : null)) {
+			if (vip_changed) {
+				let prev_id = (vip_lane[0] ?? 0) & 0xff;
+				let next_id = (next_vip[0] ?? 0) & 0xff;
+				if (prev_id > 0 && next_id > 0 && prev_id != next_id) {
+					let find_s = (id) => filter(snapshot?.strands ?? [], (s) => s.id == id)[0];
+					let ps = find_s(prev_id), ns = find_s(next_id);
+					let nms = int(((ns?.ttfb ?? 0) * 1000) + 0.5);
+					core.event("VIP %s -> %s (%dms)", ps?.dev ?? ("#" + prev_id), ns?.dev ?? ("#" + next_id), nms);
+				}
+			}
 			pattern = next;
 			vip_lane = next_vip;
 			pattern_at = now;
@@ -376,7 +407,19 @@ function poll_mihomo_stats() {
 			acct.mihomo.reachable = false;
 			acct.mihomo.down_bps = acct.mihomo.up_bps = acct.mihomo.conns = 0;
 			tunnel_flows = [];
+			if (snapshot?.tunnel?.running && !running) {
+				mihomo_down_strikes++;
+				if (mihomo_down_strikes == 3 && !mihomo_alarm) {
+					mihomo_alarm = true;
+					core.event("MIHOMO controller unreachable");
+				}
+			}
 			return;
+		}
+		mihomo_down_strikes = 0;
+		if (mihomo_alarm) {
+			mihomo_alarm = false;
+			core.event("MIHOMO controller restored");
 		}
 		let dl = j.downloadTotal, ul = j.uploadTotal, conns = length(j.connections);
 		tunnel_flows = api.tunnel_flows(j.connections);
@@ -481,15 +524,316 @@ function telemetry_view() {
 	};
 }
 
+function qos_drops_now() {
+	let out = { "1:10": 0, "1:20": 0, "1:30": 0, total: 0 };
+	if (acct.qos.mode != "htb")
+		return out;
+	for (let b in QOS_BANDS) {
+		let d = (acct.qos.down[b]?.drops ?? 0) + (acct.qos.up[b]?.drops ?? 0);
+		out[b] = d;
+		out.total += d;
+	}
+	return out;
+}
+
+function sample_host() {
+	let la = host.loadavg();
+	let mem = host.mem_info();
+	let ct = host.conntrack();
+	let tc = host.temp_c();
+	let cs = host.cpu_sample();
+	let cpu_pct = host_sys?.cpu_pct ?? 0;
+	let softirq_pct = host_sys?.softirq_pct ?? 0;
+	if (cs && cpu_prev) {
+		let dt = cs.total - cpu_prev.total;
+		if (dt > 0) {
+			let busy = max(0, dt - max(0, cs.idle - cpu_prev.idle));
+			let sirq = max(0, cs.softirq - cpu_prev.softirq);
+			cpu_pct = +(sprintf("%.1f", min(100.0, busy * 100.0 / dt)));
+			softirq_pct = +(sprintf("%.1f", min(100.0, sirq * 100.0 / dt)));
+		}
+	}
+	if (cs)
+		cpu_prev = cs;
+
+	let wan_dev = cfg.shaper?.device ?? cfg.strands?.uplink?.[0] ?? "wan";
+	let wan = host.wan_stats(wan_dev);
+	let now_ts = time();
+
+	host_sys = {
+		conntrack: ct,
+		load1: la.load1,
+		load5: la.load5,
+		load15: la.load15,
+		mem_available_kb: mem.available_kb,
+		mem_total_kb: mem.total_kb,
+		mem_free_kb: mem.free_kb,
+		mem_cached_kb: mem.cached_kb,
+		cpu_pct,
+		softirq_pct,
+		temp_c: tc,
+		uptime: core.uptime(),
+		wan,
+		sampled_ts: now_ts,
+	};
+
+	// Hysteresis-guarded anomaly edge alerts (logs only on state transitions).
+	if (tc != null) {
+		if (!alerts.thermal && tc >= 78.0) {
+			alerts.thermal = true;
+			core.event("SYS thermal high %.1fC", tc);
+		}
+		else if (alerts.thermal && tc <= 72.0) {
+			alerts.thermal = false;
+			core.event("SYS thermal normal %.1fC", tc);
+		}
+	}
+	let mem_mb = int((mem.available_kb ?? 0) / 1024);
+	if (mem.total_kb > 0) {
+		if (!alerts.mem && mem_mb < 40) {
+			alerts.mem = true;
+			core.event("SYS memory low %dMB free", mem_mb);
+		}
+		else if (alerts.mem && mem_mb >= 56) {
+			alerts.mem = false;
+			core.event("SYS memory normal %dMB free", mem_mb);
+		}
+	}
+	if (ct.max > 0) {
+		let ct_pct = int(ct.count * 100 / ct.max);
+		if (!alerts.ct && ct_pct >= 80) {
+			alerts.ct = true;
+			core.event("SYS conntrack high %d%% (%d/%d)", ct_pct, ct.count, ct.max);
+		}
+		else if (alerts.ct && ct_pct <= 70) {
+			alerts.ct = false;
+			core.event("SYS conntrack normal %d%%", ct_pct);
+		}
+	}
+	if (wan) {
+		if (!alerts.wan_down && !wan.carrier) {
+			alerts.wan_down = true;
+			core.event("WAN link down (%s)", wan.dev);
+		}
+		else if (alerts.wan_down && wan.carrier) {
+			alerts.wan_down = false;
+			core.event("WAN link up (%s %dM)", wan.dev, wan.speed);
+		}
+		if (alerts.wan_flaps != null && wan.carrier_changes > alerts.wan_flaps)
+			core.event("WAN carrier flap #%d (%s %dM)", wan.carrier_changes, wan.dev, wan.speed);
+		alerts.wan_flaps = wan.carrier_changes;
+	}
+}
+
+function mean_healthy_rtt_ms() {
+	let sum = 0, n = 0;
+	for (let s in snapshot?.strands ?? []) {
+		if (s.healthy && (s.ttfb ?? 0) > 0) {
+			sum += s.ttfb * 1000.0;
+			n++;
+		}
+	}
+	return n > 0 ? int(sum / n + 0.5) : 0;
+}
+
+function make_minute_row(acc, now_ts) {
+	let n = max(1, acc.samples);
+	let qd = qos_drops_now().total;
+	let drop_delta = (prev_qos_drops != null && qd >= prev_qos_drops) ? (qd - prev_qos_drops) : 0;
+	prev_qos_drops = qd;
+	return {
+		ts: now_ts,
+		down_avg: int(acc.down_sum / n),
+		down_peak: int(acc.down_peak),
+		up_avg: int(acc.up_sum / n),
+		up_peak: int(acc.up_peak),
+		healthy: acc.healthy_min,
+		rtt_ms: mean_healthy_rtt_ms(),
+		canary_ms: snapshot?.tunnel?.canary_ms ?? 0,
+		cpu_pct: +(sprintf("%.1f", acc.cpu_sum / max(1, acc.host_samples))),
+		cpu_max: acc.cpu_max,
+		softirq_max: acc.softirq_max,
+		temp_c: acc.temp_max,
+		mem_min_mb: acc.mem_min_mb,
+		ct_max: acc.ct_max,
+		qos_drops: drop_delta,
+	};
+}
+
+function record_minute(now_mono, down_now, up_now) {
+	let now_ts = time();
+	let h_cnt = length(healthy());
+	let hs = host_sys;
+	let mem_mb = hs ? int((hs.mem_available_kb ?? 0) / 1024) : 0;
+	let ct_cnt = hs?.conntrack?.count ?? 0;
+	if (!minute_acc) {
+		minute_acc = {
+			started_mono: now_mono,
+			samples: 0, host_samples: 0,
+			down_sum: 0, up_sum: 0, down_peak: 0, up_peak: 0,
+			healthy_min: h_cnt,
+			cpu_sum: 0, cpu_max: 0, softirq_max: 0,
+			temp_max: hs?.temp_c,
+			mem_min_mb: mem_mb,
+			ct_max: ct_cnt,
+		};
+	}
+	let a = minute_acc;
+	a.samples++;
+	a.down_sum += down_now;
+	a.up_sum += up_now;
+	if (down_now > a.down_peak) a.down_peak = down_now;
+	if (up_now > a.up_peak) a.up_peak = up_now;
+	if (h_cnt < a.healthy_min) a.healthy_min = h_cnt;
+	if (hs) {
+		a.host_samples++;
+		a.cpu_sum += hs.cpu_pct ?? 0;
+		if ((hs.cpu_pct ?? 0) > a.cpu_max) a.cpu_max = hs.cpu_pct;
+		if ((hs.softirq_pct ?? 0) > a.softirq_max) a.softirq_max = hs.softirq_pct;
+		if (hs.temp_c != null && (a.temp_max == null || hs.temp_c > a.temp_max)) a.temp_max = hs.temp_c;
+		if (mem_mb > 0 && (a.mem_min_mb == 0 || mem_mb < a.mem_min_mb)) a.mem_min_mb = mem_mb;
+		if (ct_cnt > a.ct_max) a.ct_max = ct_cnt;
+	}
+	if (now_mono - a.started_mono >= METRICS_CADENCE) {
+		let row = make_minute_row(a, now_ts);
+		metrics_ring.rows[metrics_ring.next] = row;
+		metrics_ring.next = (metrics_ring.next + 1) % METRICS_CAP;
+		minute_acc = null;
+	}
+}
+
+function dump_metrics(window_sec) {
+	let n = length(metrics_ring.rows), now_ts = time(), cutoff = now_ts - window_sec;
+	let out = [];
+	if (n > 0) {
+		let start = n < METRICS_CAP ? 0 : metrics_ring.next;
+		for (let i = 0; i < n; i++) {
+			let r = metrics_ring.rows[(start + i) % n];
+			if (r && r.ts >= cutoff)
+				push(out, r);
+		}
+	}
+	if (minute_acc && minute_acc.samples > 0) {
+		let a = minute_acc, s = max(1, a.samples);
+		push(out, {
+			ts: now_ts,
+			down_avg: int(a.down_sum / s),
+			down_peak: int(a.down_peak),
+			up_avg: int(a.up_sum / s),
+			up_peak: int(a.up_peak),
+			healthy: a.healthy_min,
+			rtt_ms: mean_healthy_rtt_ms(),
+			canary_ms: snapshot?.tunnel?.canary_ms ?? 0,
+			cpu_pct: +(sprintf("%.1f", a.cpu_sum / max(1, a.host_samples))),
+			cpu_max: a.cpu_max,
+			softirq_max: a.softirq_max,
+			temp_c: a.temp_max,
+			mem_min_mb: a.mem_min_mb,
+			ct_max: a.ct_max,
+			qos_drops: 0,
+		});
+	}
+	return out;
+}
+
+function summarize_window(window_sec) {
+	let rows = dump_metrics(window_sec);
+	if (!length(rows))
+		return { samples: 0, span_sec: 0 };
+	let down_peak = 0, up_peak = 0, rtt_sum = 0, rtt_n = 0, rtt_max = 0;
+	let can_sum = 0, can_n = 0, can_max = 0;
+	let cpu_sum = 0, cpu_max = 0, softirq_max = 0;
+	let temp_sum = 0, temp_n = 0, temp_max = null;
+	let mem_min = 0, ct_max = 0, healthy_min = null, qos_drops = 0;
+	for (let r in rows) {
+		if (r.down_peak > down_peak) down_peak = r.down_peak;
+		if (r.up_peak > up_peak) up_peak = r.up_peak;
+		if (r.rtt_ms > 0) {
+			rtt_sum += r.rtt_ms;
+			rtt_n++;
+			if (r.rtt_ms > rtt_max) rtt_max = r.rtt_ms;
+		}
+		if (r.canary_ms > 0) {
+			can_sum += r.canary_ms;
+			can_n++;
+			if (r.canary_ms > can_max) can_max = r.canary_ms;
+		}
+		cpu_sum += r.cpu_pct ?? 0;
+		if ((r.cpu_max ?? 0) > cpu_max) cpu_max = r.cpu_max;
+		if ((r.softirq_max ?? 0) > softirq_max) softirq_max = r.softirq_max;
+		if (r.temp_c != null) {
+			temp_sum += r.temp_c;
+			temp_n++;
+			if (temp_max == null || r.temp_c > temp_max) temp_max = r.temp_c;
+		}
+		if (r.mem_min_mb > 0 && (mem_min == 0 || r.mem_min_mb < mem_min)) mem_min = r.mem_min_mb;
+		if ((r.ct_max ?? 0) > ct_max) ct_max = r.ct_max;
+		if (healthy_min == null || r.healthy < healthy_min) healthy_min = r.healthy;
+		qos_drops += r.qos_drops ?? 0;
+	}
+	let n = length(rows);
+	return {
+		samples: n,
+		span_sec: max(0, rows[n - 1].ts - rows[0].ts),
+		down_peak,
+		up_peak,
+		rtt_avg_ms: rtt_n > 0 ? int(rtt_sum / rtt_n + 0.5) : 0,
+		rtt_max_ms: rtt_max,
+		canary_avg_ms: can_n > 0 ? int(can_sum / can_n + 0.5) : 0,
+		canary_max_ms: can_max,
+		cpu_avg: +(sprintf("%.1f", cpu_sum / n)),
+		cpu_max,
+		softirq_max,
+		temp_avg: temp_n > 0 ? +(sprintf("%.1f", temp_sum / temp_n)) : null,
+		temp_max,
+		mem_min_mb: mem_min,
+		ct_max,
+		healthy_min: healthy_min ?? 0,
+		qos_drops,
+	};
+}
+
+function daemon_health() {
+	return {
+		version: core.VERSION,
+		started_ts: daemon_stats.started_ts,
+		uptime: max(0, time() - daemon_stats.started_ts),
+		sampled_ts: daemon_stats.sampled_ts,
+		reconcile_ms: daemon_stats.reconcile_ms,
+		reconcile_max_ms: daemon_stats.reconcile_max_ms,
+		reconcile_ok_ts: daemon_stats.reconcile_ok_ts,
+		reconcile_fails: daemon_stats.reconcile_fails,
+		reconcile_total_fails: daemon_stats.reconcile_total_fails,
+		reconcile_last_rc: daemon_stats.reconcile_last_rc,
+		reconcile_count: daemon_stats.reconcile_count,
+		mihomo_reachable: !!acct.mihomo.reachable,
+		samples_1m: length(metrics_ring.rows),
+	};
+}
+
+function diagnostics_view() {
+	return {
+		ts: time(),
+		host: host_sys ?? snapshot?.sys ?? {},
+		daemon: daemon_health(),
+		window_1h: summarize_window(3600),
+		window_24h: summarize_window(86400),
+		qos_drops: qos_drops_now(),
+		events: core.events_summary(86400),
+	};
+}
+
 function sample() {
 	sample_timer.set(max(1, cfg.weave.interval) * 1000);
 	let counted = { down: weave.counters("strands"), up: weave.counters("strands_up") }, now = monotonic();
 	if (!slow_at || now - slow_at >= TELEMETRY_INTERVAL) {
 		slow_at = now;
+		sample_host();
 		sample_counters_and_qos(now);
 		sample_devices(now);
 		poll_mihomo_stats();
 	}
+	daemon_stats.sampled_ts = time();
 	if (!counted.down || !counted.up)
 		return;
 	let dt = sampled ? now - sampled : 0, alpha = cfg.weave.smoothing;
@@ -535,6 +879,7 @@ function sample() {
 		series_at = now;
 		series.add(history, time(), total.down, total.up, per, per_up);
 	}
+	record_minute(now, total.down, total.up);
 	relay(now);
 }
 
@@ -555,12 +900,26 @@ reconcile = function() {
 	}
 	running = true;
 	selection_epoch++;
+	let started = monotonic();
 	let args = first ? [ "reconcile", "--boot" ] : [ "reconcile" ];
 	let child = uloop.process(PRISM, args, {}, (code) => {
 		running = false;
+		let dur_ms = int((monotonic() - started) * 1000);
+		daemon_stats.reconcile_ms = dur_ms;
+		if (dur_ms > daemon_stats.reconcile_max_ms)
+			daemon_stats.reconcile_max_ms = dur_ms;
+		daemon_stats.reconcile_last_rc = code;
+		daemon_stats.reconcile_count++;
 		cfg = config.load();
 		reconcile_timer.set(max(10, cfg.main.tick) * 1000);
 		if (code == 0) {
+			let prev_fails = daemon_stats.reconcile_fails;
+			daemon_stats.reconcile_fails = 0;
+			daemon_stats.reconcile_ok_ts = time();
+			if (prev_fails > 0)
+				core.event("RECONCILE recovered (%dms after %df)", dur_ms, prev_fails);
+			else if (dur_ms >= 20000)
+				core.event("RECONCILE slow %.1fs", dur_ms / 1000.0);
 			first = false;
 			snapshot = core.load_json(STATUS, snapshot);
 			tunnel_ready_for_sync = !!(snapshot?.tunnel?.running && snapshot?.tunnel?.restored);
@@ -571,8 +930,12 @@ reconcile = function() {
 				led.tick(cfg, { rate_bytes: last_rate });
 		}
 		else {
+			daemon_stats.reconcile_fails++;
+			daemon_stats.reconcile_total_fails++;
 			tunnel_ready_for_sync = false;
-			core.err("reconcile exited %d", code);
+			core.err("reconcile exited %d (%dms)", code, dur_ms);
+			if (daemon_stats.reconcile_fails == 1 || daemon_stats.reconcile_fails % 5 == 0)
+				core.event("RECONCILE failed rc=%d (%dms, #%d)", code, dur_ms, daemon_stats.reconcile_fails);
 		}
 		if (again) {
 			again = false;
@@ -583,6 +946,9 @@ reconcile = function() {
 };
 
 core.init_dirs();
+if (!core.is_dry())
+	core.event("DAEMON started v%s", core.VERSION);
+sample_host();
 uloop.init();
 
 reconcile_timer = uloop.timer(1, reconcile);
@@ -600,6 +966,9 @@ let published = bus.publish("prism", api.methods({
 	vip: () => vip_lane,
 	history: () => history,
 	telemetry: telemetry_view,
+	host_sys: () => host_sys,
+	daemon_health,
+	diagnostics: diagnostics_view,
 	rate_peak: () => {
 		let pk = int(last_down);
 		for (let v in history.total)

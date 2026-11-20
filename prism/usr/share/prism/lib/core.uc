@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as ulog from "log";
 import { md5 } from "digest";
 
-export const VERSION = "5.8.1";
+export const VERSION = "5.9.0";
 export const SHARE = fs.dirname(sourcepath(0, true));
 export const RUN = getenv("PRISM_RUN") ?? "/tmp/prism";
 export const ETC = getenv("PRISM_ETC") ?? "/etc/prism";
@@ -74,6 +74,83 @@ export function event(fmt, ...args) {
 		f.write(sprintf("%d %s\n", time(), msg));
 		f.close();
 	}
+};
+
+function parse_event_line(line) {
+	let m = match(line, /^([0-9]+) (.*)$/);
+	if (!m)
+		return null;
+	let msg = m[2];
+	let sp = index(msg, " ");
+	let tag = sp > 0 ? lc(substr(msg, 0, sp)) : lc(msg);
+	let body = sp > 0 ? substr(msg, sp + 1) : msg;
+	return { ts: int(m[1]), tag, body, msg };
+}
+
+export function read_events(limit, tag_filter) {
+	let raw = fs.readfile(RUN + "/events.log");
+	if (!raw)
+		return [];
+	let lines = split(trim(raw), "\n");
+	let want = length(tag_filter ?? "") ? lc(tag_filter) : "";
+	let lim = int(limit ?? 60) || 60;
+	let out = [];
+	for (let i = length(lines) - 1; i >= 0 && length(out) < lim; i--) {
+		let ev = parse_event_line(lines[i]);
+		if (!ev)
+			continue;
+		if (length(want) && ev.tag != want)
+			continue;
+		push(out, { ts: ev.ts, msg: ev.msg });
+	}
+	return out;
+};
+
+export function events_summary(window_sec) {
+	let now_ts = time();
+	let win = int(window_sec ?? 86400) || 86400;
+	let cut_1h = now_ts - 3600, cut_24h = now_ts - 86400, cut_win = now_ts - win;
+	let raw = fs.readfile(RUN + "/events.log");
+	let by = {}, total = 0, count_1h = 0, count_24h = 0, count_window = 0;
+	let oldest_ts = 0, newest_ts = 0;
+	if (raw) {
+		for (let line in split(raw, "\n")) {
+			if (!length(line))
+				continue;
+			let ev = parse_event_line(line);
+			if (!ev)
+				continue;
+			total++;
+			if (!oldest_ts || ev.ts < oldest_ts)
+				oldest_ts = ev.ts;
+			if (ev.ts > newest_ts)
+				newest_ts = ev.ts;
+			let in1h = ev.ts >= cut_1h;
+			let in24h = ev.ts >= cut_24h;
+			let inwin = ev.ts >= cut_win;
+			if (in1h)
+				count_1h++;
+			if (in24h)
+				count_24h++;
+			if (inwin)
+				count_window++;
+			let rec = (by[ev.tag] ??= { tag: ev.tag, c1h: 0, c24h: 0, cwin: 0, total: 0, last_ts: 0, last_msg: "" });
+			rec.total++;
+			if (in1h)
+				rec.c1h++;
+			if (in24h)
+				rec.c24h++;
+			if (inwin)
+				rec.cwin++;
+			if (ev.ts >= rec.last_ts) {
+				rec.last_ts = ev.ts;
+				rec.last_msg = ev.body;
+			}
+		}
+	}
+	let by_tag = values(by);
+	sort(by_tag, (a, b) => (b.cwin - a.cwin) || (b.c24h - a.c24h) || (b.total - a.total) || (a.tag < b.tag ? -1 : 1));
+	return { now: now_ts, window_sec: win, total, count_1h, count_24h, count_window, oldest_ts, newest_ts, by_tag };
 };
 
 // --- shell -----------------------------------------------------------------

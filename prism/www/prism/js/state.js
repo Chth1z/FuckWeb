@@ -2,7 +2,7 @@
  * PRISM 5.0 — Central State Store, DSOTM Spectral Color Math & Formatters
  * ============================================================================ */
 
-export const UI_VERSION = '5.8.1';
+export const UI_VERSION = '5.9.0';
 
 export const S = {
   tab: 'overview',
@@ -11,12 +11,21 @@ export const S = {
   status: null,
   series: null,
   events: null,
+  diagnostics: null,
   doctor: null,
   tunnel: null,
   devices: null,
   rules: null,
   config: null,
   connections: null,
+  logTagFilter: 'all',
+  heartbeat: {
+    lastOkAt: 0,
+    failCount: 0,
+    state: 'live',
+    serverTs: 0,
+    lastError: ''
+  },
   hoverStrand: null,
   pinnedStrandId: null,
   selectedDeviceMac: 'all',
@@ -156,4 +165,15 @@ export function fmtClock(ts) {
   const d = new Date(ts * 1000);
   const pad = (n) => String(n).padStart(2, '0');
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+export function fmtDuration(sec) {
+  const s = Math.max(0, Math.floor(sec || 0));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
 }

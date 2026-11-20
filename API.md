@@ -1,4 +1,4 @@
-# Prism 5.8 — Frontend HTTP / ubus API Specification
+# Prism 5.9 — Frontend HTTP / ubus API Specification
 
 This document defines the complete backend API contract exposed by `prismd` (`usr/share/prism/mod/api.uc`) over OpenWrt `uhttpd-mod-ubus` (`POST /ubus`). It is designed as the authoritative reference for the modular `/www/prism/` frontend (`index.html`, `css/`, `js/`).
 
@@ -62,7 +62,7 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
 
 | Category | Methods | Auth Required |
 |---|---|---|
-| **Public Read** | `status`, `series`, `devices`, `tunnel`, `doctor`, `rules`, `events`, `led_view` | No (`0000...0000`) |
+| **Public Read** | `status`, `series`, `devices`, `tunnel`, `doctor`, `rules`, `events`, `diagnostics`, `led_view` | No (`0000...0000`) |
 | **Private Read** | `config`, `connections` | Yes (`prism-admin`) |
 | **Write Actions** | `reconcile`, `configure`, `device`, `select`, `relogin`, `remember`, `forget`, `claim`, `reload`, `led_demo`, `led_color` | Yes (`prism-admin`) |
 
@@ -76,7 +76,7 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
 
 ```typescript
 interface PrismStatusResponse {
-  version: string;          // "5.8.1"
+  version: string;          // "5.9.0"
   ts: number;               // Current Unix timestamp (seconds)
   reconciled: number;       // Timestamp of last full `prism reconcile` pass
   ok: boolean;              // True if all `fail`-level doctor checks pass
@@ -188,13 +188,43 @@ interface PrismStatusResponse {
     };
   } | null;
 
-  // Host system resources
+  // Live host system resources (refreshed every ~4s in prismd)
   sys: {
     conntrack: { count: number; max: number };
     load1: number;          // 1-minute load average
+    load5?: number;         // 5-minute load average
+    load15?: number;        // 15-minute load average
     mem_available_kb: number;
+    mem_total_kb?: number;
+    mem_free_kb?: number;
+    mem_cached_kb?: number;
+    cpu_pct?: number;       // Total CPU utilization (%) over 4s window
+    softirq_pct?: number;   // SoftIRQ CPU utilization (%) over 4s window
+    temp_c?: number | null; // SoC thermal zone temperature (°C)
+    wan?: {
+      dev: string; carrier: boolean; speed: number; carrier_changes: number;
+      rx_errors: number; tx_errors: number; rx_dropped: number; tx_dropped: number;
+    } | null;
     uptime: number;         // Router uptime in seconds
+    sampled_ts?: number;
   };
+
+  // Daemon liveness & reconciler metrics
+  daemon: {
+    version: string;
+    started_ts: number;
+    uptime: number;
+    sampled_ts: number;
+    reconcile_ms: number;
+    reconcile_max_ms: number;
+    reconcile_ok_ts: number;
+    reconcile_fails: number;
+    reconcile_total_fails: number;
+    reconcile_last_rc: number;
+    reconcile_count: number;
+    mihomo_reachable: boolean;
+    samples_1m: number;
+  } | null;
 
   // Current effective values of all keys in TUNABLE (readable without login)
   settings: Record<string, string | number>;
@@ -360,14 +390,70 @@ interface PrismRulesResponse {
 
 ---
 
-### 3.7 `events` — Recent State Transition Log
-- **Args**: `{ "limit"?: number }` (default `60`)
+### 3.7 `events` — Recent State Transition Log & Summary
+- **Args**: `{ "limit"?: number, "tag"?: string, "window"?: number }` (defaults: `limit=60`, `tag=""`, `window=86400`)
 ```typescript
 interface PrismEventsResponse {
   events: Array<{
     ts: number;             // Unix timestamp (seconds)
-    msg: string;            // e.g. "STRANDS 21 of 21 healthy: 1 2 3 ..."
+    msg: string;            // e.g. "STRANDS 21/21 healthy (+vwan15)" or "MPTCP +vwan5 -vwan12 (6ep 5sub)"
   }>;
+  summary: {
+    now: number;
+    window_sec: number;
+    total: number;
+    count_1h: number;
+    count_24h: number;
+    count_window: number;
+    oldest_ts: number;
+    newest_ts: number;
+    by_tag: Array<{
+      tag: string;          // Lowercase event category (mptcp, vip, strands, nft, guard, sys, wan, ...)
+      c1h: number;
+      c24h: number;
+      cwin: number;
+      total: number;
+      last_ts: number;
+      last_msg: string;
+    }>;
+  };
+}
+```
+
+---
+
+### 3.7b `diagnostics` — Router & Network Observability Rollup (Live / 1H / 24H)
+- **Args**: `{}`
+- **Notes**: Public read-only aggregate telemetry (no LAN client PII). Draws from `prismd`'s 1440-entry (24-hour, 1-minute resolution) RAM ring buffer, live host `/proc` + `/sys` samplers, HTB drop counters, and `events.log` summary.
+```typescript
+interface PrismDiagnosticsResponse {
+  ts: number;
+  host: PrismStatusResponse["sys"];
+  daemon: PrismStatusResponse["daemon"];
+  qos_drops: { "1:10": number; "1:20": number; "1:30": number; total: number };
+  window_1h: DiagnosticsWindow;
+  window_24h: DiagnosticsWindow;
+  events: PrismEventsResponse["summary"];
+}
+
+interface DiagnosticsWindow {
+  samples: number;
+  span_sec: number;
+  down_peak?: number;
+  up_peak?: number;
+  rtt_avg_ms?: number;
+  rtt_max_ms?: number;
+  canary_avg_ms?: number;
+  canary_max_ms?: number;
+  cpu_avg?: number;
+  cpu_max?: number;
+  softirq_max?: number;
+  temp_avg?: number | null;
+  temp_max?: number | null;
+  mem_min_mb?: number;
+  ct_max?: number;
+  healthy_min?: number;
+  qos_drops?: number;
 }
 ```
 

@@ -688,10 +688,13 @@ export function observe(ctx) {
 	}
 
 	if (!core.is_dry() && now - st.checked >= c.canary_interval) {
+		let prev_fails = st.fails ?? 0;
 		st.checked = now;
 		st.delay = canary(cfg, ctx.facts.lan_ip);
-		st.fails = st.delay > 0 ? 0 : st.fails + 1;
-		if (st.fails == c.canary_fails)
+		st.fails = st.delay > 0 ? 0 : prev_fails + 1;
+		if (st.delay > 0 && prev_fails >= c.canary_fails)
+			core.event("TUNNEL canary recovered (%dms after %df)", st.delay, prev_fails);
+		else if (st.fails == c.canary_fails)
 			core.event("TUNNEL canary failed %d times", st.fails);
 	}
 	plan.on = true;

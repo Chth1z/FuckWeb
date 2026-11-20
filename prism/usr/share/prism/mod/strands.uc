@@ -272,10 +272,22 @@ export function check(ctx) {
 	let primary = filter(healthy, (s) => s.role == "primary");
 	healthy = length(primary) ? primary : filter(healthy, (s) => s.role == "backup");
 
+	let devs = map(healthy, (s) => s.dev);
 	let ids = join(" ", map(healthy, (s) => s.id));
 	if (ids != st.healthy_ids) {
-		core.event("STRANDS %d of %d healthy: %s", length(healthy), length(strands), ids);
+		let prev = st.healthy_devs;
+		let detail = "";
+		if (type(prev) == "array" && length(prev)) {
+			let lost = map(filter(prev, (d) => !(d in devs)), (d) => "-" + d);
+			let added = map(filter(devs, (d) => !(d in prev)), (d) => "+" + d);
+			let diff = [ ...lost, ...added ];
+			if (length(diff) > 0 && length(diff) <= 6)
+				detail = " (" + join(" ", diff) + ")";
+		}
+		core.event("STRANDS %d/%d healthy%s", length(healthy), length(strands),
+			length(detail) ? detail : (length(healthy) ? " (" + (healthy[0]?.role ?? "none") + ")" : " (none)"));
 		st.healthy_ids = ids;
+		st.healthy_devs = devs;
 	}
 	return { routed, healthy, role: healthy[0]?.role ?? "none" };
 };

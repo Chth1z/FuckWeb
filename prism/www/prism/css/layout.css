@@ -388,6 +388,25 @@
   border-radius: 0;
   background: var(--c-mint);
   box-shadow: 0 0 6px var(--c-mint), 0 0 11px rgba(87, 209, 146, 0.42);
+  flex-shrink: 0;
+}
+
+.pulse-dot-live.stale {
+  background: var(--c-amber);
+  box-shadow: 0 0 6px var(--c-amber), 0 0 11px rgba(var(--c-amber-rgb), 0.50);
+}
+
+.pulse-dot-live.offline {
+  background: var(--c-crimson);
+  box-shadow: 0 0 6px var(--c-crimson), 0 0 12px rgba(var(--c-crimson-rgb), 0.58);
+}
+
+.ft-link {
+  display: inline-block;
+  min-width: 32px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 #cli-policy,

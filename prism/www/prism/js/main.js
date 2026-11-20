@@ -2,14 +2,14 @@
  * PRISM 5.0 — Bootstrap, 4-Tab Router & Differential Polling Engine
  * ============================================================================ */
 
-import { S, UI_VERSION, fmtRate } from './state.js?v=5.8.1';
-import { $, $$, toast, setTxt, setCls } from './dom.js?v=5.8.1';
-import { callBatch, call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.8.1';
-import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.js?v=5.8.1';
-import { renderOverview } from './views/overview.js?v=5.8.1';
-import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.8.1';
-import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.8.1';
-import { renderClients, bindClientsEvents } from './views/clients.js?v=5.8.1';
+import { S, UI_VERSION, fmtRate, fmtClock } from './state.js?v=5.9.0';
+import { $, $$, toast, setTxt, setCls, setTitle } from './dom.js?v=5.9.0';
+import { callBatch, call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.9.0';
+import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.js?v=5.9.0';
+import { renderOverview } from './views/overview.js?v=5.9.0';
+import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.9.0';
+import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.9.0';
+import { renderClients, bindClientsEvents } from './views/clients.js?v=5.9.0';
 
 let fastTimer = null;
 let slowTimer = null;
@@ -22,8 +22,102 @@ let pendingSlow = false;
 let pendingConn = false;
 let connWarmupTimer = null;
 let lastFastTab = '';
+let booted = false;
+
+const STALE_AFTER_SEC = 8;
+const OFFLINE_AFTER_SEC = 20;
+
+function computeHeartbeat() {
+  const hb = S.heartbeat;
+  const now = Date.now();
+  const ageSec = hb.lastOkAt > 0 ? Math.max(0, Math.floor((now - hb.lastOkAt) / 1000)) : 0;
+  const st = S.status;
+  const dmSampled = st?.daemon?.sampled_ts || 0;
+  const backendLagSec = (st?.ts && dmSampled) ? Math.max(0, st.ts - dmSampled) : 0;
+
+  let state = 'live';
+  if (hb.failCount >= 6 || (booted && hb.lastOkAt > 0 && ageSec >= OFFLINE_AFTER_SEC)) {
+    state = 'offline';
+  } else if (hb.failCount >= 3 || (booted && hb.lastOkAt > 0 && ageSec >= STALE_AFTER_SEC) || backendLagSec >= 15) {
+    state = 'stale';
+  }
+  hb.state = state;
+  return { state, ageSec, backendLagSec, failCount: hb.failCount, lastError: hb.lastError };
+}
+
+function renderHeartbeat() {
+  const info = computeHeartbeat();
+  const st = S.status;
+  const dot = $('#link-dot');
+  const ft = $('#ft-link');
+  const pill = $('#health-pill');
+
+  if (dot) {
+    setCls(dot, info.state === 'live' ? 'pulse-dot-live' : `pulse-dot-live ${info.state}`);
+  }
+  if (ft) {
+    if (info.state === 'offline') {
+      setTxt(ft, `offline · ${info.ageSec}s`);
+      setCls(ft, 'ft-link c-crimson t-strong');
+      setTitle(ft, `路由器心跳中斷 ${info.ageSec}s（連續失敗 ${info.failCount} 次${info.lastError ? ' · ' + info.lastError : ''}）`);
+    } else if (info.state === 'stale') {
+      const lag = info.backendLagSec >= 15 && info.ageSec < STALE_AFTER_SEC ? `daemon ${info.backendLagSec}s` : `${info.ageSec}s`;
+      setTxt(ft, `stale · ${lag}`);
+      setCls(ft, 'ft-link c-amber t-strong');
+      setTitle(ft, `心跳逾時 ${lag}（連續失敗 ${info.failCount} 次 · 上次同步 ${fmtClock(Math.floor(S.heartbeat.lastOkAt / 1000))}）`);
+    } else {
+      setTxt(ft, 'live');
+      setCls(ft, 'ft-link c-mint');
+      const recMs = st?.daemon?.reconcile_ms;
+      setTitle(ft, `路由器心跳正常 · 上次同步 ${S.heartbeat.lastOkAt ? fmtClock(Math.floor(S.heartbeat.lastOkAt / 1000)) : '—'}${recMs != null ? ` · reconcile ${recMs}ms` : ''}`);
+    }
+  }
+
+  if (pill) {
+    if (info.state === 'offline') {
+      setTxt(pill, `LINK · OFFLINE ${info.ageSec}s`);
+      setCls(pill, 'st-badge depleted clickable');
+      setTitle(pill, `無法連線路由器（${info.ageSec}s 未回應 · 失敗 ${info.failCount} 次），點擊前往折射頁`);
+    } else if (info.state === 'stale') {
+      const lag = info.backendLagSec >= 15 && info.ageSec < STALE_AFTER_SEC ? `${info.backendLagSec}s` : `${info.ageSec}s`;
+      setTxt(pill, `LINK · STALE ${lag}`);
+      setCls(pill, 'st-badge draining clickable');
+      setTitle(pill, `心跳延遲 ${lag}，數據可能已過期`);
+    } else if (st) {
+      const ok = st.ok;
+      const warn = (st.warn || []).length;
+      setTxt(pill, ok
+        ? (warn > 0 ? `DOCTOR · OK (${warn} WARN)` : 'DOCTOR · ALL OK')
+        : `DOCTOR · ${st.fail?.length || 1} FAIL`);
+      setCls(pill, 'st-badge ' + (ok ? (warn > 0 ? 'draining' : 'charged') : 'depleted') + ' clickable');
+      setTitle(pill, '查看折射與體檢');
+    }
+  }
+}
+
+function noteHeartbeatOk(st) {
+  const hb = S.heartbeat;
+  const wasDegraded = hb.state !== 'live';
+  hb.lastOkAt = Date.now();
+  hb.failCount = 0;
+  hb.serverTs = st?.ts || 0;
+  hb.lastError = '';
+  if (wasDegraded) {
+    hb.state = 'live';
+    toast('路由器心跳已恢復');
+    pollSlow(true);
+  }
+}
+
+function noteHeartbeatFail(err) {
+  const hb = S.heartbeat;
+  hb.failCount++;
+  hb.lastError = err?.message || 'network error';
+  renderHeartbeat();
+}
 
 function renderChrome() {
+  renderHeartbeat();
   const st = S.status;
   if (!st) return;
 
@@ -42,18 +136,6 @@ function renderChrome() {
   setTxt('#site-badge', st.site?.known
     ? `SITE · ${st.site.name}`
     : (st.site?.aggregate ? 'SITE · AGGREGATE' : 'SITE · SINGLE'));
-
-  const pill = $('#health-pill');
-  if (pill) {
-    const ok = st.ok;
-    const warn = (st.warn || []).length;
-    const nextPillTxt = ok
-      ? (warn > 0 ? `DOCTOR · OK (${warn} WARN)` : 'DOCTOR · ALL OK')
-      : `DOCTOR · ${st.fail?.length || 1} FAIL`;
-    const nextPillCls = 'st-badge ' + (ok ? (warn > 0 ? 'draining' : 'charged') : 'depleted');
-    if (pill.textContent !== nextPillTxt) pill.textContent = nextPillTxt;
-    if (pill.className !== nextPillCls) pill.className = nextPillCls;
-  }
 
   // Persistent CLI Footer
   const w = st.weave || {};
@@ -200,14 +282,19 @@ async function pollFast(force = false) {
     ];
 
     const [st, dv, ser, rl] = await callBatch(jobs);
-    if (st) S.status = st;
+    if (st) {
+      S.status = st;
+      noteHeartbeatOk(st);
+    } else {
+      noteHeartbeatFail(new Error('empty status'));
+    }
     if (dv) S.devices = dv;
     if (ser) mergeSeriesDelta(ser);
     if (rl) S.rules = rl;
     renderActiveTab();
-    saveBootSnapshot();
+    if (st) saveBootSnapshot();
   } catch (e) {
-    // Keep last snapshot cleanly without UI glitch
+    noteHeartbeatFail(e);
   } finally {
     fastInFlight = false;
     if (pendingFast) {
@@ -227,16 +314,18 @@ async function pollSlow(force = false) {
   try {
     const reqs = [
       { method: 'tunnel' },
-      S.tab === 'blueprint' ? { method: 'events', args: { limit: 40 } } : null,
+      S.tab === 'blueprint' ? { method: 'events', args: { limit: 80 } } : null,
       S.tab === 'blueprint' ? { method: 'doctor' } : null,
+      S.tab === 'blueprint' ? { method: 'diagnostics' } : null,
       S.tab === 'blueprint' && S.session ? { method: 'config' } : null,
       S.tab !== 'overview' && S.tab !== 'clients' ? { method: 'devices' } : null
     ];
 
-    const [tun, ev, doc, cfg, dv] = await callBatch(reqs);
+    const [tun, ev, doc, diag, cfg, dv] = await callBatch(reqs);
     if (tun) S.tunnel = tun;
     if (ev) S.events = ev;
     if (doc) S.doctor = doc;
+    if (diag) S.diagnostics = diag;
     if (cfg) S.config = cfg;
     if (dv) S.devices = dv;
     renderActiveTab();
@@ -296,6 +385,9 @@ function bindGlobalEvents() {
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
+      if (S.heartbeat.state === 'live' && S.heartbeat.lastOkAt > 0) {
+        S.heartbeat.lastOkAt = Date.now();
+      }
       pollFast(true);
       if (S.tab === 'clients' && S.session) pollConnections(true);
       pollSlow(true);
@@ -411,28 +503,36 @@ async function init() {
   if (S.tab === 'clients' && S.session) pollConnections(true);
 
   try {
-    const [st, dv, tun, ser, rul, ev, doc, cfg] = await callBatch([
+    const [st, dv, tun, ser, rul, ev, doc, diag, cfg] = await callBatch([
       { method: 'status' },
       { method: 'devices' },
       { method: 'tunnel' },
       S.tab === 'spectrum' ? { method: 'series', args: { limit: 720 } } : null,
       { method: 'rules' },
-      { method: 'events', args: { limit: 40 } },
+      { method: 'events', args: { limit: 80 } },
       { method: 'doctor' },
+      S.tab === 'blueprint' ? { method: 'diagnostics' } : null,
       S.tab === 'blueprint' && S.session ? { method: 'config' } : null
     ]);
-    if (st) S.status = st;
+    if (st) {
+      S.status = st;
+      noteHeartbeatOk(st);
+    }
     if (dv) S.devices = dv;
     if (tun) S.tunnel = tun;
     if (ser) mergeSeriesDelta(ser);
     if (rul) S.rules = rul;
     if (ev) S.events = ev;
     if (doc) S.doctor = doc;
+    if (diag) S.diagnostics = diag;
     if (cfg) S.config = cfg;
+    booted = true;
     renderActiveTab();
     if (S.tab === 'overview') renderPrismNow();
     saveBootSnapshot(true);
-  } catch (_) {
+  } catch (e) {
+    booted = true;
+    noteHeartbeatFail(e);
   } finally {
     releaseBootClasses();
   }
@@ -452,6 +552,7 @@ async function init() {
   }
 
   fastTimer = setInterval(() => {
+    renderHeartbeat();
     pollFast();
   }, 1000);
   slowTimer = setInterval(() => {

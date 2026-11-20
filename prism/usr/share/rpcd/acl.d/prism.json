@@ -3,7 +3,7 @@
 		"description": "Prism dashboard: read-only status for anyone on the LAN",
 		"read": {
 			"ubus": {
-				"prism": [ "status", "series", "events", "doctor", "tunnel", "devices", "rules", "led_view" ]
+				"prism": [ "status", "series", "events", "diagnostics", "doctor", "tunnel", "devices", "rules", "led_view" ]
 			}
 		}
 	},
@@ -11,7 +11,7 @@
 		"description": "Prism management",
 		"read": {
 			"ubus": {
-				"prism": [ "status", "series", "events", "doctor", "tunnel", "devices", "rules", "config", "connections", "led_view" ]
+				"prism": [ "status", "series", "events", "diagnostics", "doctor", "tunnel", "devices", "rules", "config", "connections", "led_view" ]
 			}
 		},
 		"write": {

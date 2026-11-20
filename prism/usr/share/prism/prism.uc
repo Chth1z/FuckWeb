@@ -91,12 +91,21 @@ function snapshot(ctx, report, led_color) {
 		},
 		dns: { smartdns: dns.running(), port: ctx.cfg.dns.port },
 		mptcp: kernel.mptcp_state(ctx),
-		sys: {
-			conntrack: host.conntrack(),
-			load1: host.load(),
-			mem_available_kb: host.mem_available_kb(),
-			uptime: ctx.facts.uptime,
-		},
+		sys: (() => {
+			let la = host.loadavg(), mem = host.mem_info();
+			let wan_dev = ctx.cfg.shaper?.device ?? ctx.cfg.strands?.uplink?.[0] ?? "wan";
+			return {
+				conntrack: host.conntrack(),
+				load1: la.load1,
+				load5: la.load5,
+				load15: la.load15,
+				mem_available_kb: mem.available_kb,
+				mem_total_kb: mem.total_kb,
+				temp_c: host.temp_c(),
+				wan: host.wan_stats(wan_dev),
+				uptime: ctx.facts.uptime,
+			};
+		})(),
 		led: led_color,
 	};
 }
@@ -199,6 +208,43 @@ function live(method) {
 
 function kbit(bytes_per_s) {
 	return bytes_per_s * 8 / 1000;
+}
+
+function fmt_ts(ts) {
+	if (!ts)
+		return "-";
+	let t = localtime(ts);
+	return sprintf("%02d-%02d %02d:%02d:%02d", t.mon, t.mday, t.hour, t.min, t.sec);
+}
+
+function fmt_dur(sec) {
+	let s = max(0, int(sec ?? 0));
+	let d = int(s / 86400), h = int((s % 86400) / 3600), m = int((s % 3600) / 60);
+	if (d > 0)
+		return sprintf("%dd %dh %dm", d, h, m);
+	if (h > 0)
+		return sprintf("%dh %dm", h, m);
+	return sprintf("%dm %ds", m, s % 60);
+}
+
+function fmt_rate_cli(bps) {
+	let b = max(0, (bps ?? 0) * 8);
+	if (b >= 1e9) return sprintf("%.2f Gbps", b / 1e9);
+	if (b >= 1e6) return sprintf("%.1f Mbps", b / 1e6);
+	if (b >= 1e3) return sprintf("%.0f Kbps", b / 1e3);
+	return sprintf("%.0f bps", b);
+}
+
+function parse_window(s) {
+	if (!s || s == "24h" || s == "1d") return 86400;
+	if (s == "1h") return 3600;
+	if (s == "6h") return 21600;
+	if (s == "12h") return 43200;
+	if (s == "all") return 31536000;
+	let m = match(s, /^([0-9]+)([smhd])$/);
+	if (!m) return 86400;
+	let mul = m[2] == "s" ? 1 : (m[2] == "m" ? 60 : (m[2] == "h" ? 3600 : 86400));
+	return max(60, int(m[1]) * mul);
 }
 
 const COMMANDS = {
@@ -348,10 +394,136 @@ const COMMANDS = {
 		},
 	},
 	events: {
-		help: "recent state transitions",
+		help: "recent state transitions ([N] [--tag <t>] [--summary [1h|24h|all]] [--raw])",
 		run: (args) => {
-			let f = core.RUN + "/events.log";
-			return fs.stat(f) ? system(sprintf("tail -n %d %s", int(args[0] ?? "40") || 40, core.shq(f))) : 0;
+			let show_summary = false, raw_mode = false, tag = "", limit = 40, win_arg = "24h";
+			for (let i = 0; i < length(args); i++) {
+				let a = args[i];
+				if (a == "--summary" || a == "-s") {
+					show_summary = true;
+					if (i + 1 < length(args) && substr(args[i + 1], 0, 1) != "-")
+						win_arg = args[++i];
+				}
+				else if (a == "--raw") {
+					raw_mode = true;
+				}
+				else if (a == "--tag" && i + 1 < length(args)) {
+					tag = args[++i];
+				}
+				else if (match(a, /^[0-9]+$/)) {
+					limit = max(1, int(a));
+				}
+			}
+			if (show_summary) {
+				let win = parse_window(win_arg);
+				let sum = core.events_summary(win);
+				printf("EVENTS SUMMARY  total=%d  1h=%d  24h=%d  window(%s)=%d  span=%s .. %s\n",
+					sum.total, sum.count_1h, sum.count_24h, win_arg, sum.count_window,
+					fmt_ts(sum.oldest_ts), fmt_ts(sum.newest_ts));
+				if (!length(sum.by_tag)) {
+					print("(no events recorded)\n");
+					return 0;
+				}
+				printf("%-12s %6s %6s %7s  %-14s  %s\n", "TAG", "1H", "24H", "TOTAL", "LAST", "LATEST MESSAGE");
+				for (let r in sum.by_tag) {
+					if (length(tag) && r.tag != lc(tag))
+						continue;
+					printf("%-12s %6d %6d %7d  %-14s  %s\n",
+						r.tag, r.c1h, r.c24h, r.total, fmt_ts(r.last_ts), r.last_msg);
+				}
+				return 0;
+			}
+			let rows = reverse(core.read_events(limit, tag));
+			for (let ev in rows) {
+				if (raw_mode)
+					printf("%d %s\n", ev.ts, ev.msg);
+				else
+					printf("%s  %s\n", fmt_ts(ev.ts), ev.msg);
+			}
+			return 0;
+		},
+	},
+	report: {
+		help: "router & network observability report (json | text)",
+		run: (args) => {
+			let diag = live("diagnostics");
+			let st = live("status") ?? {};
+			let doc = live("doctor") ?? core.load_json(DOCTOR, { ok: false, checks: [], fail: [], warn: [] });
+			if (!diag) {
+				let la = host.loadavg(), mem = host.mem_info();
+				let cfg = config.load();
+				let wan_dev = cfg.shaper?.device ?? cfg.strands?.uplink?.[0] ?? "wan";
+				diag = {
+					ts: time(),
+					host: {
+						conntrack: host.conntrack(),
+						load1: la.load1, load5: la.load5, load15: la.load15,
+						mem_available_kb: mem.available_kb, mem_total_kb: mem.total_kb,
+						temp_c: host.temp_c(), wan: host.wan_stats(wan_dev),
+						uptime: core.uptime(),
+					},
+					daemon: null,
+					window_1h: { samples: 0, span_sec: 0 },
+					window_24h: { samples: 0, span_sec: 0 },
+					qos_drops: { "1:10": 0, "1:20": 0, "1:30": 0, total: 0 },
+					events: core.events_summary(86400),
+				};
+			}
+			if ("json" in args) {
+				printf("%.2J\n", {
+					version: core.VERSION,
+					diagnostics: diag,
+					doctor: { ok: doc.ok, checks: length(doc.checks ?? []), fail: doc.fail ?? [], warn: doc.warn ?? [] },
+					site: st.site ?? null,
+					strands: { healthy: st.healthy_count ?? 0, total: st.strand_count ?? 0 },
+				});
+				return 0;
+			}
+			let h = diag.host ?? {}, dm = diag.daemon, ev = diag.events ?? {};
+			let ct = h.conntrack ?? {}, mem_a = int((h.mem_available_kb ?? 0) / 1024), mem_t = int((h.mem_total_kb ?? 0) / 1024);
+			printf("PRISM %s · ROUTER & NETWORK OBSERVABILITY REPORT (%s)\n", core.VERSION, fmt_ts(diag.ts ?? time()));
+			printf("------------------------------------------------------------------------\n");
+			printf("HOST     uptime=%s  cpu=%.1f%% (softirq=%.1f%%)  temp=%s  load=%.2f/%.2f/%.2f\n",
+				fmt_dur(h.uptime), h.cpu_pct ?? 0, h.softirq_pct ?? 0,
+				h.temp_c != null ? sprintf("%.1fC", h.temp_c) : "n/a",
+				h.load1 ?? 0, h.load5 ?? 0, h.load15 ?? 0);
+			printf("MEM/CT   mem=%d/%d MB free  conntrack=%d/%d (%.1f%%)\n",
+				mem_a, mem_t, ct.count ?? 0, ct.max ?? 0,
+				(ct.max ?? 0) > 0 ? (ct.count ?? 0) * 100.0 / ct.max : 0);
+			if (h.wan)
+				printf("WAN PHY  dev=%s  link=%s  speed=%dM  flaps=%d  err=%d/%d  drop=%d/%d\n",
+					h.wan.dev, h.wan.carrier ? "up" : "down", h.wan.speed ?? 0,
+					h.wan.carrier_changes ?? 0, h.wan.rx_errors ?? 0, h.wan.tx_errors ?? 0,
+					h.wan.rx_dropped ?? 0, h.wan.tx_dropped ?? 0);
+			if (dm)
+				printf("DAEMON   uptime=%s  reconcile=%dms (max %dms, fails=%d/%d, rc=%d)  mihomo=%s  1m_buf=%d\n",
+					fmt_dur(dm.uptime), dm.reconcile_ms ?? 0, dm.reconcile_max_ms ?? 0,
+					dm.reconcile_fails ?? 0, dm.reconcile_total_fails ?? 0, dm.reconcile_last_rc ?? 0,
+					dm.mihomo_reachable ? "ok" : "down", dm.samples_1m ?? 0);
+			else
+				print("DAEMON   prismd offline (disk fallback)\n");
+			let qd = diag.qos_drops ?? {};
+			printf("QOS DROP 1:10=%d  1:20=%d  1:30=%d  total=%d\n",
+				qd["1:10"] ?? 0, qd["1:20"] ?? 0, qd["1:30"] ?? 0, qd.total ?? 0);
+			for (let pair in [ [ "1H ", diag.window_1h ], [ "24H", diag.window_24h ] ]) {
+				let w = pair[1];
+				if (!w || !w.samples)
+					continue;
+				printf("WIN %s  n=%dm  peak=%s↓/%s↑  rtt=%d/%dms  canary=%d/%dms  cpu=%.1f/%.1f%%  temp=%s  mem_min=%dMB  healthy_min=%d  drops=%d\n",
+					pair[0], w.samples, fmt_rate_cli(w.down_peak), fmt_rate_cli(w.up_peak),
+					w.rtt_avg_ms ?? 0, w.rtt_max_ms ?? 0, w.canary_avg_ms ?? 0, w.canary_max_ms ?? 0,
+					w.cpu_avg ?? 0, w.cpu_max ?? 0,
+					w.temp_max != null ? sprintf("%.1fC", w.temp_max) : "n/a",
+					w.mem_min_mb ?? 0, w.healthy_min ?? 0, w.qos_drops ?? 0);
+			}
+			printf("DOCTOR   %s (%d checks, fail=%d, warn=%d)%s\n",
+				doc.ok ? "OK" : "FAIL", length(doc.checks ?? []), length(doc.fail ?? []), length(doc.warn ?? []),
+				length(doc.fail ?? []) ? " -> " + join(", ", doc.fail) : "");
+			printf("EVENTS   total=%d  1h=%d  24h=%d\n", ev.total ?? 0, ev.count_1h ?? 0, ev.count_24h ?? 0);
+			for (let r in slice(ev.by_tag ?? [], 0, 10))
+				printf("  %-10s 1h=%-4d 24h=%-4d tot=%-5d last=%s  %s\n",
+					r.tag, r.c1h, r.c24h, r.total, fmt_ts(r.last_ts), r.last_msg);
+			return 0;
 		},
 	},
 	tunnel: {

@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtPkts, fmtClock } from '../state.js?v=5.8.1';
-import { $, $$, el, renderSegMeter, renderStrandSpectrumBar, renderSessionLog, setTxt, setCls, setTitle, setVar } from '../dom.js?v=5.8.1';
-import { write, call } from '../api.js?v=5.8.1';
+import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtPkts, fmtClock, fmtDuration } from '../state.js?v=5.9.0';
+import { $, $$, el, toast, renderSegMeter, renderStrandSpectrumBar, renderSessionLog, eventTagColor, setTxt, setCls, setTitle, setVar } from '../dom.js?v=5.9.0';
+import { write, call, callBatch } from '../api.js?v=5.9.0';
 
 let drawerOpen = false;
 let rafId = null;
@@ -1233,11 +1233,26 @@ export function bindBlueprintEvents() {
   const openSysModal = async () => {
     drawerOpen = true;
     $('#sys-modal-scrim')?.classList.add('open');
-    if (S.session && !S.config) {
-      try { S.config = await call('config'); } catch (_) {}
-    }
+    renderBlueprintDrawer();
+    try {
+      const [diag, ev, doc, cfg] = await callBatch([
+        { method: 'diagnostics' },
+        { method: 'events', args: { limit: 80 } },
+        { method: 'doctor' },
+        S.session && !S.config ? { method: 'config' } : null
+      ]);
+      if (diag) S.diagnostics = diag;
+      if (ev) S.events = ev;
+      if (doc) S.doctor = doc;
+      if (cfg) S.config = cfg;
+    } catch (_) {}
     renderBlueprintDrawer();
   };
+
+  $('#btn-copy-diag')?.addEventListener('click', () => {
+    const text = buildDiagReportText();
+    copyReportText(text);
+  });
 
   $('#btn-toggle-sys')?.addEventListener('click', openSysModal);
   $('#btn-close-sys')?.addEventListener('click', closeSysModal);
@@ -1383,9 +1398,22 @@ export function renderBlueprint() {
   }
 
   const evList = S.events?.events || [];
-  setTxt('#log-count', `${evList.length} 條`);
+  const evSummary = S.events?.summary || S.diagnostics?.events || null;
+  renderEventSummaryBar(evList, evSummary);
+  const activeTag = S.logTagFilter || 'all';
+  const shownCount = activeTag === 'all'
+    ? evList.length
+    : evList.filter(ev => {
+      const raw = ev.msg || '';
+      const sp = raw.indexOf(' ');
+      return (sp > 0 ? raw.slice(0, sp) : raw).toLowerCase() === activeTag;
+    }).length;
+  setTxt('#log-count', activeTag === 'all' ? `${evList.length} 條` : `${shownCount}/${evList.length}`);
+  if (evSummary) {
+    setTitle('#log-count', `近期 ${evList.length} 條 · 近1h ${evSummary.count_1h ?? 0} 條 · 近24h ${evSummary.count_24h ?? 0} 條 · 累計 ${evSummary.total ?? 0} 條`);
+  }
   setTxt('#log-latest-ts', evList[0]?.ts ? fmtClock(evList[0].ts) : 'live');
-  renderSessionLog($('#ov-session-log'), evList, 60);
+  renderSessionLog($('#ov-session-log'), evList, 80, activeTag);
 
   // Tier 1A: Pre-Gate & SmartDNS
   setTxt('#bp-quic-pkts', `${fmtPkts(liveFlow.quicPkts)} pkts`);
@@ -1709,10 +1737,20 @@ export function renderBlueprint() {
   setSegMeter('#bp-up-ct-bar', ctRatio, 16, ctRatio > 0.8 ? 'amber' : 'spectrum', ctCount > 0);
 
   const memMb = Math.round((st.sys?.mem_available_kb || 0) / 1024);
+  const memTotalMb = Math.round((st.sys?.mem_total_kb || 262144) / 1024);
   const load1 = st.sys?.load1 ?? 0;
-  setTxt('#bp-up-mem-mb', `${memMb} MB`);
-  setTxt('#bp-up-mem-load', `${load1}`);
-  setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / 256)), 16, (load1 > 2.0 || memMb < 48) ? 'amber' : 'spectrum', load1 > 0.5);
+  const cpuPct = st.sys?.cpu_pct;
+  const softirqPct = st.sys?.softirq_pct;
+  const tempC = st.sys?.temp_c;
+  setTxt('#bp-up-mem-mb', `${memMb}M`);
+  setTxt('#bp-up-mem-load', tempC != null
+    ? `${cpuPct != null ? `${Math.round(cpuPct)}% · ` : ''}${Math.round(tempC)}°C`
+    : (cpuPct != null ? `${Math.round(cpuPct)}% · ${load1}` : `load ${load1}`));
+  setTitle('#bp-up-mem-txt',
+    `可用內存 ${memMb}/${memTotalMb} MB · CPU ${cpuPct ?? '—'}% (softirq ${softirqPct ?? '—'}%) · 溫度 ${tempC != null ? tempC + '°C' : '—'} · 負載 ${load1}/${st.sys?.load5 ?? '—'}/${st.sys?.load15 ?? '—'}` +
+    (st.sys?.wan ? ` · ${st.sys.wan.dev} ${st.sys.wan.speed}M (${st.sys.wan.rx_errors + st.sys.wan.tx_errors} err, ${st.sys.wan.carrier_changes} flap)` : ''));
+  const memHot = (tempC != null && tempC >= 75) || load1 > 2.0 || memMb < 48;
+  setSegMeter('#bp-up-mem-bar', Math.max(1 / 16, Math.min(1, memMb / Math.max(128, memTotalMb))), 16, memHot ? 'amber' : 'spectrum', load1 > 0.5 || (cpuPct ?? 0) > 25);
 
   setTxt('#bp-up-down', fmtBytes(st.down_bytes || 0));
   setTxt('#bp-up-up', fmtBytes(st.up_bytes || 0));
@@ -1741,7 +1779,233 @@ export function renderBlueprint() {
   if (drawerOpen) renderBlueprintDrawer();
 }
 
+function renderEventSummaryBar(evList, summary) {
+  const bar = $('#log-summary-bar');
+  if (!bar) return;
+  const active = S.logTagFilter || 'all';
+  const tags = Array.isArray(summary?.by_tag) ? summary.by_tag : [];
+  const activeTags = tags.filter(t => (t.c24h || 0) > 0).slice(0, 7);
+  const picked = activeTags.length ? activeTags : tags.slice(0, 6);
+  const sig = `${active}|${summary?.count_24h ?? evList.length}|` + picked.map(t => `${t.tag}:${t.c24h}:${t.c1h}:${t.total}`).join(',');
+  if (bar.dataset.sig === sig) return;
+  bar.dataset.sig = sig;
+
+  const setFilter = (tag) => {
+    S.logTagFilter = (tag !== 'all' && S.logTagFilter === tag) ? 'all' : tag;
+    renderEventSummaryBar(S.events?.events || [], S.events?.summary || S.diagnostics?.events || null);
+    renderSessionLog($('#ov-session-log'), S.events?.events || [], 80, S.logTagFilter);
+    const list = S.events?.events || [];
+    const shown = S.logTagFilter === 'all'
+      ? list.length
+      : list.filter(ev => {
+        const raw = ev.msg || '';
+        const sp = raw.indexOf(' ');
+        return (sp > 0 ? raw.slice(0, sp) : raw).toLowerCase() === S.logTagFilter;
+      }).length;
+    setTxt('#log-count', S.logTagFilter === 'all' ? `${list.length} 條` : `${shown}/${list.length}`);
+  };
+
+  const frag = document.createDocumentFragment();
+  const total24 = summary?.count_24h ?? evList.length;
+  frag.appendChild(el('button', {
+    type: 'button',
+    class: `log-chip${active === 'all' ? ' on' : ''}`,
+    title: summary
+      ? `全部事件 · 1h: ${summary.count_1h ?? 0} · 24h: ${summary.count_24h ?? 0} · 累計: ${summary.total ?? 0}`
+      : `全部事件 (${evList.length})`,
+    onClick: () => setFilter('all')
+  },
+    el('span', {}, '全部'),
+    el('span', { class: 'log-chip-n' }, String(total24))
+  ));
+
+  for (const r of picked) {
+    const colCls = eventTagColor(r.tag, r.last_msg);
+    const nShow = r.c24h > 0 ? r.c24h : r.total;
+    frag.appendChild(el('button', {
+      type: 'button',
+      class: `log-chip${active === r.tag ? ' on' : ''}`,
+      title: `${r.tag} · 1h: ${r.c1h ?? 0} · 24h: ${r.c24h ?? 0} · 累計: ${r.total ?? 0} · 最近 ${fmtClock(r.last_ts)}\n${r.last_msg || ''}`,
+      onClick: () => setFilter(r.tag)
+    },
+      el('span', { class: colCls }, r.tag),
+      el('span', { class: 'log-chip-n' }, String(nShow))
+    ));
+  }
+  bar.innerHTML = '';
+  bar.appendChild(frag);
+}
+
+function buildDiagReportText() {
+  const st = S.status || {};
+  const diag = S.diagnostics || {};
+  const h = diag.host || st.sys || {};
+  const dm = diag.daemon || st.daemon || {};
+  const doc = S.doctor || {};
+  const ev = diag.events || S.events?.summary || {};
+  const w1 = diag.window_1h || {};
+  const w24 = diag.window_24h || {};
+  const qd = diag.qos_drops || {};
+  const ct = h.conntrack || {};
+  const memA = Math.round((h.mem_available_kb || 0) / 1024);
+  const memT = Math.round((h.mem_total_kb || 0) / 1024);
+  const lines = [
+    `PRISM v${st.version || UI_VERSION} · Router & Network Diagnostic Report`,
+    `Time: ${new Date().toLocaleString()} | Link: ${S.heartbeat.state} (fails=${S.heartbeat.failCount})`,
+    `Site: ${st.site?.name || 'unknown'} (aggregate=${st.site?.aggregate ? 'on' : 'off'}) | Strands: ${st.healthy_count ?? 0}/${st.strand_count ?? 0} | VIP: ${st.weave?.vip_dev || '—'}`,
+    `Host: up ${fmtDuration(h.uptime)} | CPU ${h.cpu_pct ?? '—'}% (softirq ${h.softirq_pct ?? '—'}%) | Temp ${h.temp_c != null ? h.temp_c + '°C' : '—'} | Load ${h.load1 ?? 0}/${h.load5 ?? 0}/${h.load15 ?? 0}`,
+    `Mem/CT: RAM ${memA}/${memT} MB free | Conntrack ${ct.count ?? 0}/${ct.max ?? 0}` +
+      (h.wan ? ` | WAN ${h.wan.dev} ${h.wan.carrier ? 'up' : 'down'} ${h.wan.speed}M err=${h.wan.rx_errors}/${h.wan.tx_errors} drop=${h.wan.rx_dropped}/${h.wan.tx_dropped} flaps=${h.wan.carrier_changes}` : ''),
+    `Daemon: up ${fmtDuration(dm.uptime)} | reconcile ${dm.reconcile_ms ?? 0}ms (max ${dm.reconcile_max_ms ?? 0}ms, fails ${dm.reconcile_fails ?? 0}/${dm.reconcile_total_fails ?? 0}) | mihomo=${dm.mihomo_reachable ? 'ok' : 'down'} | 1m_buf=${dm.samples_1m ?? 0}`,
+    `QoS Drops: 1:10=${qd['1:10'] ?? 0} 1:20=${qd['1:20'] ?? 0} 1:30=${qd['1:30'] ?? 0} total=${qd.total ?? 0}`,
+  ];
+  for (const [label, w] of [['1H ', w1], ['24H', w24]]) {
+    if (!w || !w.samples) continue;
+    lines.push(`Window ${label} (${w.samples}m): peak ↓${fmtRate(w.down_peak || 0).full}/↑${fmtRate(w.up_peak || 0).full} | RTT ${w.rtt_avg_ms ?? 0}/${w.rtt_max_ms ?? 0}ms | Canary ${w.canary_avg_ms ?? 0}/${w.canary_max_ms ?? 0}ms | CPU ${w.cpu_avg ?? 0}/${w.cpu_max ?? 0}% | Temp max ${w.temp_max ?? '—'}°C | Mem min ${w.mem_min_mb ?? 0}MB | Healthy min ${w.healthy_min ?? 0} | Drops ${w.qos_drops ?? 0}`);
+  }
+  lines.push(`Doctor: ${doc.ok ? 'OK' : 'FAIL'} (${(doc.checks || []).length} checks, fail=${(doc.fail || []).length}, warn=${(doc.warn || []).length})${doc.fail?.length ? ' -> ' + doc.fail.join(', ') : ''}`);
+  lines.push(`Events: total=${ev.total ?? 0} 1h=${ev.count_1h ?? 0} 24h=${ev.count_24h ?? 0}`);
+  for (const r of (ev.by_tag || []).slice(0, 12)) {
+    lines.push(`  - ${r.tag}: 1h=${r.c1h} 24h=${r.c24h} total=${r.total} last=${fmtClock(r.last_ts)} | ${r.last_msg}`);
+  }
+  return lines.join('\n');
+}
+
+function copyReportText(text) {
+  const done = (ok) => toast(ok ? '已複製診斷報告至剪貼簿' : '複製失敗，請手動選取', !ok);
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => done(true)).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+
+function fallbackCopy(text, done) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    done(ok);
+  } catch (_) {
+    done(false);
+  }
+}
+
+function renderDiagnosticsPanel() {
+  const panel = $('#diag-panel');
+  if (!panel) return;
+  const st = S.status || {};
+  const diag = S.diagnostics || {};
+  const h = diag.host || st.sys || {};
+  const dm = diag.daemon || st.daemon || {};
+  const qd = diag.qos_drops || {};
+  const w1 = diag.window_1h || {};
+  const w24 = diag.window_24h || {};
+  const ev = diag.events || S.events?.summary || {};
+  const byTag = Array.isArray(ev.by_tag) ? ev.by_tag : [];
+
+  const sig = JSON.stringify([
+    h.cpu_pct, h.softirq_pct, h.temp_c, h.load1, h.mem_available_kb,
+    h.conntrack?.count, h.wan?.speed, h.wan?.rx_errors, h.wan?.carrier_changes,
+    dm.uptime ? Math.floor(dm.uptime / 10) : 0, dm.reconcile_ms, dm.reconcile_fails, dm.samples_1m,
+    qd.total, w1.samples, w24.samples, w24.down_peak, w24.temp_max,
+    ev.total, ev.count_1h, ev.count_24h, byTag.slice(0, 8).map(r => `${r.tag}:${r.c1h}:${r.c24h}:${r.last_ts}`)
+  ]);
+  if (panel.dataset.sig === sig) return;
+  panel.dataset.sig = sig;
+
+  const ct = h.conntrack || {};
+  const ctPct = ct.max > 0 ? ((ct.count || 0) * 100 / ct.max).toFixed(1) : '0.0';
+  const memA = Math.round((h.mem_available_kb || 0) / 1024);
+  const memT = Math.round((h.mem_total_kb || 0) / 1024);
+  const wan = h.wan;
+
+  const kpi = (k, v, cls = 'c-bright', tip = '') => el('div', { class: 'diag-kpi', title: tip || undefined },
+    el('span', { class: 'diag-k' }, k),
+    el('span', { class: `diag-v t-num ${cls}` }, v)
+  );
+
+  const kpiGrid = el('div', { class: 'diag-kpi-grid' },
+    kpi('CPU / SoftIRQ', `${h.cpu_pct != null ? h.cpu_pct + '%' : '—'} · ${h.softirq_pct != null ? h.softirq_pct + '%' : '—'}`,
+      (h.cpu_pct ?? 0) >= 80 ? 'c-amber' : 'c-bright', `總 CPU ${h.cpu_pct ?? '—'}% · 軟中斷 ${h.softirq_pct ?? '—'}%`),
+    kpi('SoC 溫度', h.temp_c != null ? `${h.temp_c}°C` : '—',
+      h.temp_c != null && h.temp_c >= 75 ? 'c-crimson' : (h.temp_c != null && h.temp_c >= 65 ? 'c-amber' : 'c-mint')),
+    kpi('系統負載 1/5/15m', `${h.load1 ?? 0} / ${h.load5 ?? 0} / ${h.load15 ?? 0}`, (h.load1 ?? 0) > 2 ? 'c-amber' : 'c-bright'),
+    kpi('可用內存', memT > 0 ? `${memA} / ${memT} MB` : `${memA} MB`, memA > 0 && memA < 48 ? 'c-crimson' : 'c-bright'),
+    kpi('Conntrack', `${(ct.count ?? 0).toLocaleString()} (${ctPct}%)`, Number(ctPct) >= 80 ? 'c-crimson' : 'c-bright', `${ct.count ?? 0} / ${ct.max ?? 65536}`),
+    kpi('WAN 物理層', wan ? `${wan.dev} ${wan.carrier ? wan.speed + 'M' : 'DOWN'} · ${wan.carrier_changes}f` : '—',
+      wan && (!wan.carrier || wan.rx_errors + wan.tx_errors > 0) ? 'c-amber' : 'c-mint',
+      wan ? `err rx/tx=${wan.rx_errors}/${wan.tx_errors} · drop rx/tx=${wan.rx_dropped}/${wan.tx_dropped} · carrier_changes=${wan.carrier_changes}` : ''),
+    kpi('Reconcile / 守護', dm.reconcile_ms != null ? `${dm.reconcile_ms}ms · ${dm.reconcile_fails || 0}f` : '—',
+      (dm.reconcile_fails || 0) > 0 ? 'c-crimson' : 'c-violet',
+      `最大 ${dm.reconcile_max_ms ?? 0}ms · 總失敗 ${dm.reconcile_total_fails ?? 0} · prismd 運行 ${fmtDuration(dm.uptime)}`),
+    kpi('HTB 累計丟包', `${qd.total ?? 0} (10:${qd['1:10'] ?? 0})`,
+      (qd['1:10'] ?? 0) > 0 ? 'c-amber' : 'c-mint', `1:10=${qd['1:10'] ?? 0} · 1:20=${qd['1:20'] ?? 0} · 1:30=${qd['1:30'] ?? 0}`)
+  );
+
+  const winLine = (label, w) => {
+    if (!w || !w.samples) {
+      return el('div', { class: 'diag-win-row' },
+        el('span', { class: 'diag-win-tag c-muted' }, label),
+        el('span', { class: 'c-muted' }, '累積樣本中...')
+      );
+    }
+    return el('div', { class: 'diag-win-row' },
+      el('span', { class: 'diag-win-tag c-spectrum' }, `${label} (${w.samples}m)`),
+      el('span', { class: 't-num' }, `峰值 ↓${fmtRateCompact(w.down_peak || 0)} / ↑${fmtRateCompact(w.up_peak || 0)}`),
+      el('span', { class: 't-num' }, `RTT ${w.rtt_avg_ms ?? 0}/${w.rtt_max_ms ?? 0}ms`),
+      el('span', { class: 't-num' }, `金絲雀 ${w.canary_avg_ms ?? 0}/${w.canary_max_ms ?? 0}ms`),
+      el('span', { class: 't-num' }, `CPU ${w.cpu_avg ?? 0}/${w.cpu_max ?? 0}%`),
+      el('span', { class: 't-num' }, `最高溫 ${w.temp_max != null ? w.temp_max + '°C' : '—'}`),
+      el('span', { class: 't-num' }, `最低內存 ${w.mem_min_mb ?? 0}M`),
+      el('span', { class: 't-num' }, `光脈≥${w.healthy_min ?? 0} · 丟包 ${w.qos_drops ?? 0}`)
+    );
+  };
+
+  const evGrid = el('div', { class: 'diag-ev-grid' });
+  if (!byTag.length) {
+    evGrid.appendChild(el('div', { class: 'c-muted fs-sm' }, '暫無事件記錄'));
+  } else {
+    for (const r of byTag.slice(0, 10)) {
+      const cls = eventTagColor(r.tag, r.last_msg);
+      evGrid.appendChild(el('div', {
+        class: 'diag-ev-item clickable',
+        title: `${r.tag} · 最近 ${fmtClock(r.last_ts)}\n${r.last_msg || ''}\n點擊在 SESSION LOG 中篩選此類事件`,
+        onClick: () => {
+          S.logTagFilter = r.tag;
+          closeSysModal();
+          renderBlueprint();
+          toast(`已篩選 SESSION LOG：${r.tag}`);
+        }
+      },
+        el('div', { class: 'diag-ev-top' },
+          el('span', { class: `t-bold ${cls}` }, r.tag),
+          el('span', { class: 'c-sec t-num fs-xs' }, `1h:${r.c1h} · 24h:${r.c24h} · 總:${r.total}`)
+        ),
+        el('div', { class: 'diag-ev-msg text-clip' }, `${fmtClock(r.last_ts)}  ${r.last_msg || ''}`)
+      ));
+    }
+  }
+
+  panel.innerHTML = '';
+  panel.appendChild(el('div', { class: 'diag-head' },
+    el('span', { class: 'sys-card-head c-spectrum' }, '路由器與網路狀態監測 (LIVE / 1H / 24H)'),
+    el('span', { class: 'c-sec fs-xs t-num' },
+      `prismd up ${fmtDuration(dm.uptime)} · 事件 1h:${ev.count_1h ?? 0} / 24h:${ev.count_24h ?? 0} / 總:${ev.total ?? 0}`)
+  ));
+  panel.appendChild(kpiGrid);
+  panel.appendChild(el('div', { class: 'diag-win-box' }, winLine('近 1H', w1), winLine('近 24H', w24)));
+  panel.appendChild(evGrid);
+}
+
 export function renderBlueprintDrawer() {
+  renderDiagnosticsPanel();
   const doc = S.doctor;
   const dl = $('#doctor-list');
   if (doc && dl) {

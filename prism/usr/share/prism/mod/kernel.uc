@@ -443,7 +443,7 @@ export function mptcp_candidates(ctx, current_eps) {
 
 function plan_mptcp(ctx, cmds) {
 	if (!fs.stat("/proc/sys/net/mptcp/enabled"))
-		return;
+		return null;
 	let cur_eps = ctx.mptcp_eps;
 	let eps = mptcp_candidates(ctx, cur_eps);
 	let want_subflows = length(eps) >= 2 ? min(5, length(eps) - 1) : 0;
@@ -451,27 +451,38 @@ function plan_mptcp(ctx, cmds) {
 	let lr = core.sh("ip mptcp limits show");
 	let cur_sub = int(match(lr.out, /subflows\s+([0-9]+)/)?.[1] ?? "-1");
 	let cur_acc = int(match(lr.out, /add_addr_accepted\s+([0-9]+)/)?.[1] ?? "-1");
-	if (cur_sub != want_subflows || cur_acc != 0)
+	let lim_chg = cur_sub != want_subflows || cur_acc != 0;
+	if (lim_chg)
 		push(cmds, sprintf("ip mptcp limits set subflows %d add_addr_accepted 0", want_subflows));
 
 	let want = {};
 	for (let l in eps)
 		want[l.id] = { ip: l.ip, dev: l.dev };
 
-	let have = {};
+	let have = {}, added = [], removed = [];
 	for (let e in cur_eps) {
 		if (e.id == null)
 			continue;
 		have["" + e.id] = e;
 		let w = want[e.id];
-		if (!w || e.address != w.ip || e.dev != w.dev || !e.subflow)
+		if (!w || e.address != w.ip || e.dev != w.dev || !e.subflow) {
 			push(cmds, "ip mptcp endpoint delete id " + e.id);
+			push(removed, "-" + (e.dev ?? ("#" + e.id)));
+		}
 	}
 	for (let l in eps) {
 		let cur = have["" + l.id];
-		if (!cur || cur.address != l.ip || cur.dev != l.dev || !cur.subflow)
+		if (!cur || cur.address != l.ip || cur.dev != l.dev || !cur.subflow) {
 			push(cmds, sprintf("ip mptcp endpoint add %s dev %s id %d subflow", l.ip, l.dev, l.id));
+			push(added, "+" + l.dev);
+		}
 	}
+	if (!length(cmds))
+		return null;
+	let parts = [ ...added, ...removed ];
+	if (!length(parts) && lim_chg)
+		return sprintf("limits %dsub (%dep)", want_subflows, length(eps));
+	return sprintf("%s (%dep %dsub)", join(" ", parts), length(eps), want_subflows);
 }
 
 export function mptcp_state(ctx) {
@@ -497,11 +508,11 @@ function strand_sysctl(ctx) {
 	core.knob("/proc/sys/net/ipv4/conf/lo/rp_filter", 0);
 }
 
-function run(what, cmds) {
+function run(what, cmds, detail) {
 	if (!length(cmds))
 		return true;
 	if (core.is_dry()) {
-		warn(sprintf("%s: %d changes\n  %s\n", what, length(cmds), join("\n  ", cmds)));
+		warn(sprintf("%s: %s\n  %s\n", what, detail ?? sprintf("%d changes", length(cmds)), join("\n  ", cmds)));
 		return true;
 	}
 	let r = core.sh("set -e\n" + join("\n", cmds));
@@ -509,7 +520,7 @@ function run(what, cmds) {
 		core.err("%s: %s", what, trim(r.out));
 		return false;
 	}
-	core.event("%s %d changes", uc(what), length(cmds));
+	core.event("%s %s", uc(what), detail ?? sprintf("%d changes", length(cmds)));
 	return r.code == 0;
 }
 
@@ -541,8 +552,8 @@ export function apply(ctx) {
 	if (!run("default route", cmds))
 		return false;
 	let mcmds = [];
-	plan_mptcp(ctx, mcmds);
-	return run("mptcp", mcmds) && apply_nft(ctx);
+	let mdetail = plan_mptcp(ctx, mcmds);
+	return run("mptcp", mcmds, mdetail) && apply_nft(ctx);
 };
 
 // Back to a plain router: fw4 NAT through netifd's default route.

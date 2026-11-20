@@ -2,7 +2,7 @@
  * PRISM 5.0 — DOM Builders, Segmented Block Meters & Log Renderers
  * ============================================================================ */
 
-import { fmtClock, spectralColor, desatObsidianRgb, opticalLoad } from './state.js?v=5.8.1';
+import { fmtClock, spectralColor, desatObsidianRgb, opticalLoad } from './state.js?v=5.9.0';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -192,15 +192,44 @@ export function toast(msg, bad = false) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-export function renderSessionLog(container, events, limit = 6) {
+export function eventTagColor(tag, body = '') {
+  const t = String(tag || '').toLowerCase();
+  const b = String(body || '');
+  if ((t === 'doctor' && b.startsWith('fail')) ||
+      (t === 'portal' && b.includes('still down')) ||
+      (t === 'reconcile' && b.startsWith('fail')) ||
+      (t === 'mihomo' && b.includes('unreachable')) ||
+      (t === 'sys' && (b.includes('high') || b.includes('low'))) ||
+      (t === 'wan' && (b.includes('down') || b.includes('flap')))) {
+    return 'c-crimson';
+  }
+  if (t === 'portal' || t === 'wifi' || t === 'reconcile' || t === 'sys' || t === 'wan') return 'c-amber';
+  if (t === 'vip') return 'c-red';
+  if (t.includes('weave') || t.includes('strand') || t.includes('site') || t === 'mptcp' || t === 'mihomo') return 'c-mint';
+  if (t.includes('guard') || t.includes('doctor') || t === 'identity' || t === 'daemon') return 'c-violet';
+  if (t.includes('config') || t.includes('device') || t.includes('tunnel')) return 'c-gold';
+  return 'c-blue';
+}
+
+export function renderSessionLog(container, events, limit = 6, tagFilter = 'all') {
   if (!container) return;
-  const slice = (events || []).slice(0, limit);
-  const sig = slice.map(e => `${e.ts}:${e.msg}`).join('|');
+  const want = (tagFilter && tagFilter !== 'all') ? String(tagFilter).toLowerCase() : '';
+  const all = events || [];
+  const filtered = want
+    ? all.filter(ev => {
+      const raw = ev.msg || '';
+      const sp = raw.indexOf(' ');
+      const tag = (sp > 0 ? raw.slice(0, sp) : raw).toLowerCase();
+      return tag === want;
+    })
+    : all;
+  const slice = filtered.slice(0, limit);
+  const sig = `${want}|` + slice.map(e => `${e.ts}:${e.msg}`).join('|');
   if (container.dataset.sig === sig) return;
   container.dataset.sig = sig;
   container.innerHTML = '';
   if (!slice.length) {
-    container.appendChild(el('div', { class: 'c-muted' }, '等待狀態轉換事件...'));
+    container.appendChild(el('div', { class: 'c-muted' }, want ? `「${want}」暫無近期事件` : '等待狀態轉換事件...'));
     return;
   }
   for (const ev of slice) {
@@ -208,18 +237,7 @@ export function renderSessionLog(container, events, limit = 6) {
     const spaceIdx = raw.indexOf(' ');
     const tag = spaceIdx > 0 ? raw.slice(0, spaceIdx).toLowerCase() : 'prism';
     const body = spaceIdx > 0 ? raw.slice(spaceIdx + 1) : raw;
-    let colorClass = 'c-blue';
-    if ((tag === 'doctor' && body.startsWith('fail')) || (tag === 'portal' && body.includes('still down'))) {
-      colorClass = 'c-crimson';
-    } else if (tag === 'portal' || tag === 'wifi') {
-      colorClass = 'c-amber';
-    } else if (tag.includes('weave') || tag.includes('strand') || tag.includes('site') || tag === 'mptcp') {
-      colorClass = 'c-mint';
-    } else if (tag.includes('guard') || tag.includes('doctor') || tag === 'identity') {
-      colorClass = 'c-violet';
-    } else if (tag.includes('config') || tag.includes('device') || tag.includes('tunnel')) {
-      colorClass = 'c-gold';
-    }
+    const colorClass = eventTagColor(tag, body);
     container.appendChild(el('div', { class: 'log-row' },
       el('span', { class: 'log-ts' }, fmtClock(ev.ts)),
       el('span', { class: `log-tag ${colorClass}` }, tag),

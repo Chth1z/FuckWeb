@@ -385,6 +385,52 @@ html.prism-cold .main-stage {
   flex-direction: column;
 }
 
+.log-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  flex: 0 0 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+.log-summary-bar::-webkit-scrollbar { display: none; }
+
+.log-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 17px;
+  padding: 0 5px;
+  border: 1px solid var(--rule-hairline);
+  background: var(--tray-bg);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.14s, background-color 0.14s, color 0.14s;
+}
+.log-chip:hover {
+  border-color: rgba(var(--c-blue-rgb), 0.45);
+  color: var(--text-bright);
+}
+.log-chip.on {
+  border-color: rgba(var(--c-blue-rgb), 0.72);
+  background: rgba(var(--c-blue-rgb), 0.16);
+  color: var(--text-bright);
+}
+.log-chip-n {
+  color: rgba(255, 255, 255, 0.54);
+  font-variant-numeric: tabular-nums;
+}
+
 .log-rows {
   flex: 1 1 0;
   height: 0;
@@ -1986,7 +2032,96 @@ html.prism-cold .main-stage {
 .toast-bar.show { opacity: 1; transform: translateY(0); }
 .toast-bar.bad  { border-color: var(--c-crimson); box-shadow: 0 0 20px rgba(var(--c-crimson-rgb), 0.34); color: var(--c-crimson); }
 
-/* Doctor Checks & Tunable Config Grids inside Modal */
+/* Doctor Checks, Diagnostics Observability & Tunable Config Grids inside Modal */
+.diag-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.diag-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.diag-head .sys-card-head { margin-bottom: 0; }
+
+.diag-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.diag-kpi {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--tray-bg);
+  box-shadow: var(--tray-inset);
+  min-width: 0;
+}
+.diag-k { color: var(--text-muted); font-size: var(--fs-xs); white-space: nowrap; }
+.diag-v { font-size: var(--fs-sm); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.diag-win-box {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  background: var(--tray-bg);
+  box-shadow: var(--tray-inset);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.diag-win-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.diag-win-tag {
+  font-weight: 700;
+  min-width: 72px;
+}
+
+.diag-ev-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 6px;
+}
+
+.diag-ev-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--line-window);
+  min-width: 0;
+  transition: border-color 0.14s, background-color 0.14s;
+}
+.diag-ev-item:hover {
+  border-color: rgba(var(--c-blue-rgb), 0.56);
+  background: rgba(var(--c-blue-rgb), 0.08);
+}
+.diag-ev-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: var(--fs-sm);
+}
+.diag-ev-msg {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
 .bp-split-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2049,6 +2184,7 @@ html.prism-cold .main-stage {
   .corner-rate-up { font-size: var(--fs-md); }
   .seg-meter--ov { width: 136px; }
   .bp-split-2 { grid-template-columns: 1fr; }
+  .diag-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .heatmap-stage-wrap { container-type: normal; }
   .heatmap-grid { width: 100%; height: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: none; }
   .heat-tile { aspect-ratio: 1 / 1; }

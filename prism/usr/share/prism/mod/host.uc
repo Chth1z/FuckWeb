@@ -213,11 +213,86 @@ export function conntrack() {
 	};
 };
 
+export function loadavg() {
+	let p = split(core.read("/proc/loadavg") ?? "0 0 0", " ");
+	return {
+		load1: +(p[0] ?? 0),
+		load5: +(p[1] ?? 0),
+		load15: +(p[2] ?? 0),
+	};
+};
+
 export function load() {
-	return +split(core.read("/proc/loadavg") ?? "0", " ")[0];
+	return loadavg().load1;
+};
+
+export function mem_info() {
+	let raw = fs.readfile("/proc/meminfo") ?? "";
+	let get_kb = (name) => {
+		let m = match(raw, regexp(name + ": +([0-9]+)"));
+		return m ? int(m[1]) : 0;
+	};
+	return {
+		total_kb: get_kb("MemTotal"),
+		free_kb: get_kb("MemFree"),
+		available_kb: get_kb("MemAvailable"),
+		cached_kb: get_kb("Cached"),
+	};
 };
 
 export function mem_available_kb() {
-	let m = match(fs.readfile("/proc/meminfo") ?? "", /MemAvailable: +([0-9]+)/);
-	return m ? int(m[1]) : 0;
+	return mem_info().available_kb;
+};
+
+export function cpu_sample() {
+	let line = split(fs.readfile("/proc/stat") ?? "", "\n")[0] ?? "";
+	let p = split(trim(line), / +/);
+	if (p[0] != "cpu" || length(p) < 8)
+		return null;
+	let user = int(p[1]), nice = int(p[2]), sys = int(p[3]), idle = int(p[4]);
+	let iowait = int(p[5]), irq = int(p[6]), softirq = int(p[7]), steal = int(p[8] ?? "0");
+	return {
+		total: user + nice + sys + idle + iowait + irq + softirq + steal,
+		idle: idle + iowait,
+		softirq,
+		iowait,
+	};
+};
+
+export function temp_c() {
+	let fallback = null;
+	for (let z in fs.glob("/sys/class/thermal/thermal_zone*")) {
+		let raw = core.read(z + "/temp");
+		if (raw == null || !length(raw))
+			continue;
+		let v = int(raw);
+		if (v <= 0)
+			continue;
+		let c = +(sprintf("%.1f", v > 1000 ? v / 1000.0 : v * 1.0));
+		let kind = core.read(z + "/type") ?? "";
+		if (index(lc(kind), "cpu") >= 0)
+			return c;
+		fallback ??= c;
+	}
+	return fallback;
+};
+
+export function wan_stats(dev) {
+	if (!length(dev))
+		return null;
+	let base = "/sys/class/net/" + dev;
+	if (!fs.stat(base))
+		return null;
+	let stat_num = (f) => int(core.read(base + "/statistics/" + f) ?? "0");
+	let speed = int(core.read(base + "/speed") ?? "-1");
+	return {
+		dev,
+		carrier: core.read(base + "/carrier") == "1",
+		speed: speed > 0 ? speed : 0,
+		carrier_changes: int(core.read(base + "/carrier_changes") ?? "0"),
+		rx_errors: stat_num("rx_errors"),
+		tx_errors: stat_num("tx_errors"),
+		rx_dropped: stat_num("rx_dropped"),
+		tx_dropped: stat_num("tx_dropped"),
+	};
 };

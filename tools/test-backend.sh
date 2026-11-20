@@ -98,6 +98,8 @@ for i in $(seq 1 10); do
 done
 cat "$tmp/daemon.log"
 ubus -s "$TEST_BUS" call prism status >"$tmp/status"
+ubus -s "$TEST_BUS" call prism diagnostics >"$tmp/diag"
+ubus -s "$TEST_BUS" call prism events '{"limit":20}' >"$tmp/events"
 ubus -s "$TEST_BUS" call prism connections >"$tmp/conns"
 ubus -s "$TEST_BUS" call prism tunnel >"$tmp/tunnel"
 ubus -s "$TEST_BUS" call prism rules >"$tmp/rules"
@@ -106,9 +108,12 @@ ubus -s "$TEST_BUS" call prism connections >"$tmp/repeat"
 ucode -S -e '
 import * as fs from "fs";
 let get = (p) => json(fs.readfile(p));
-let status = get("status"), flows = get("conns");
+let status = get("status"), flows = get("conns"), diag = get("diag"), ev = get("events");
 assert(status.version == trim(fs.readfile(getenv("STAGED_VERSION"))));
 assert(status.telemetry.branches.tunnel.down_bytes == 123456);
+assert(status.daemon && status.daemon.sampled_ts > 0 && status.sys.mem_total_kb > 0, "live host/daemon telemetry missing");
+assert(diag.host && diag.daemon && diag.events && diag.window_24h && diag.qos_drops, "diagnostics payload incomplete");
+assert(type(ev.events) == "array" && type(ev.summary?.by_tag) == "array", "events summary missing");
 assert(flows.connections[0].key == "fixture" && flows.sampled.tunnel > 0 && flows.sampled.direct > 0);
 let repeated = get("repeat").sampled;
 assert(repeated.direct == flows.sampled.direct && repeated.tunnel == flows.sampled.tunnel);

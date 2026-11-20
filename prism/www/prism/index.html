@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>PRISM v5.8.1 · Optical Spectrum &amp; Privacy Router</title>
+  <title>PRISM v5.9.0 · Optical Spectrum &amp; Privacy Router</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 24'%3E%3Crect width='32' height='24' rx='5' fill='%2305070d'/%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23ef4444'/%3E%3Cstop offset='.2' stop-color='%23f97316'/%3E%3Cstop offset='.38' stop-color='%23facc15'/%3E%3Cstop offset='.55' stop-color='%2322c55e'/%3E%3Cstop offset='.72' stop-color='%2306b6d4'/%3E%3Cstop offset='.86' stop-color='%233b82f6'/%3E%3Cstop offset='1' stop-color='%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0 14L11.5 10.2' stroke='%23fff' stroke-width='1.5'/%3E%3Cpolygon points='19.5,8.7 32,10.6 32,16.6 21.8,12.5' fill='url(%23g)'/%3E%3Cpolygon points='16,2.2 25.8,19.2 6.2,19.2' fill='%2304070e' stroke='%239ec8d8' stroke-width='1.1'/%3E%3C/svg%3E">
   <script>
   (function(){
@@ -31,19 +31,19 @@
     r.classList.add('prism-cold');
   })();
   </script>
-  <link rel="stylesheet" href="css/tokens.css?v=5.8.1">
-  <link rel="stylesheet" href="css/layout.css?v=5.8.1">
-  <link rel="stylesheet" href="css/components.css?v=5.8.1">
-  <link rel="modulepreload" href="js/main.js?v=5.8.1">
-  <link rel="modulepreload" href="js/state.js?v=5.8.1">
-  <link rel="modulepreload" href="js/dom.js?v=5.8.1">
-  <link rel="modulepreload" href="js/api.js?v=5.8.1">
-  <link rel="modulepreload" href="js/canvas/prism.js?v=5.8.1">
-  <link rel="modulepreload" href="js/canvas/oscilloscope.js?v=5.8.1">
-  <link rel="modulepreload" href="js/views/overview.js?v=5.8.1">
-  <link rel="modulepreload" href="js/views/spectrum.js?v=5.8.1">
-  <link rel="modulepreload" href="js/views/blueprint.js?v=5.8.1">
-  <link rel="modulepreload" href="js/views/clients.js?v=5.8.1">
+  <link rel="stylesheet" href="css/tokens.css?v=5.9.0">
+  <link rel="stylesheet" href="css/layout.css?v=5.9.0">
+  <link rel="stylesheet" href="css/components.css?v=5.9.0">
+  <link rel="modulepreload" href="js/main.js?v=5.9.0">
+  <link rel="modulepreload" href="js/state.js?v=5.9.0">
+  <link rel="modulepreload" href="js/dom.js?v=5.9.0">
+  <link rel="modulepreload" href="js/api.js?v=5.9.0">
+  <link rel="modulepreload" href="js/canvas/prism.js?v=5.9.0">
+  <link rel="modulepreload" href="js/canvas/oscilloscope.js?v=5.9.0">
+  <link rel="modulepreload" href="js/views/overview.js?v=5.9.0">
+  <link rel="modulepreload" href="js/views/spectrum.js?v=5.9.0">
+  <link rel="modulepreload" href="js/views/blueprint.js?v=5.9.0">
+  <link rel="modulepreload" href="js/views/clients.js?v=5.9.0">
 </head>
 <body>
   <div class="app-shell">
@@ -122,7 +122,7 @@
           </svg>
         </span>
         <span class="brand-name">PRISM</span>
-        <span class="brand-sub"><span id="hdr-ver">v5.8.1</span> · <span id="hdr-ip">192.168.16.1</span></span>
+        <span class="brand-sub"><span id="hdr-ver">v5.9.0</span> · <span id="hdr-ip">192.168.16.1</span></span>
       </div>
 
       <nav class="nav-tabs" aria-label="Primary">
@@ -198,7 +198,7 @@
           <canvas id="topo"></canvas>
 
           <div id="ov-hud-tl" class="corner-hud tl">
-            <div id="ov-ver" class="corner-tag">PRISM v5.8.1 · DISPERSION FLUX</div>
+            <div id="ov-ver" class="corner-tag">PRISM v5.9.0 · DISPERSION FLUX</div>
             <div class="corner-rate-row">
               <span id="ov-down" class="corner-rate-main">0 Mbps</span>
               <span id="ov-up" class="corner-rate-up">↑ 0 Mbps</span>
@@ -380,6 +380,7 @@
                   <span id="log-latest-ts" class="bp-head-sub c-muted">live</span>
                 </div>
               </div>
+              <div id="log-summary-bar" class="log-summary-bar" aria-label="24小時事件分類摘要"></div>
               <div id="ov-session-log" class="log-rows"></div>
             </div>
           </div>
@@ -673,8 +674,8 @@
 
                   <div class="uplink-meter-row">
                     <div class="uplink-meter-head">
-                      <span class="c-sec">可用內存 / CPU 負載</span>
-                      <span id="bp-up-mem-txt" class="c-bright bp-inline-nums t-strong"><span id="bp-up-mem-mb" class="slot-bytes">— MB</span> <span>free · load</span> <span id="bp-up-mem-load" class="slot-4ch">—</span></span>
+                      <span class="c-sec">內存 / CPU · 溫度</span>
+                      <span id="bp-up-mem-txt" class="c-bright bp-inline-nums t-strong"><span id="bp-up-mem-mb" class="slot-4ch">—M</span> <span>·</span> <span id="bp-up-mem-load" class="slot-bytes">—</span></span>
                     </div>
                     <span id="bp-up-mem-bar" class="seg-meter"></span>
                   </div>
@@ -697,7 +698,7 @@
 
                 <div class="bp-node-foot bp-node-foot-rule">
                   <span class="row-inline"><span class="run-dot spectrum"></span><span class="c-sec">fw4 masquerade active</span></span>
-                  <span id="bp-up-ver" class="c-muted shrink-0">PRISM 5.8.1</span>
+                  <span id="bp-up-ver" class="c-muted shrink-0">PRISM 5.9.0</span>
                 </div>
               </div>
             </div>
@@ -810,7 +811,8 @@
     <!-- Edge-to-Edge Telemetry Footer -->
     <footer class="telemetry-footer">
       <div class="footer-left">
-        <span class="pulse-dot-live"></span>
+        <span id="link-dot" class="pulse-dot-live"></span>
+        <span id="ft-link" class="ft-link c-mint" title="路由器即時心跳狀態">live</span>
         <span>policy <strong id="cli-policy" class="c-bright">harvest</strong></span>
         <span>cage <strong id="cli-cage" class="c-violet">tw-home</strong></span>
         <span>vip <strong id="cli-vip" class="c-blue">—</strong></span>
@@ -863,9 +865,13 @@
           <span id="sys-modal-title" class="c-violet sys-modal-title">DOCTOR · LIVE SYSTEM INVARIANTS &amp; UCI PARAMETERS</span>
           <span id="doctor-cap" class="c-sec sys-modal-cap">—</span>
         </div>
-        <button id="btn-close-sys" class="btn-cmd" type="button" aria-label="關閉體檢視窗">✕ 關閉</button>
+        <div class="row-flex">
+          <button id="btn-copy-diag" class="btn-cmd sm mint" type="button" title="複製完整路由器與網路診斷報告">複製診斷報告</button>
+          <button id="btn-close-sys" class="btn-cmd" type="button" aria-label="關閉體檢視窗">✕ 關閉</button>
+        </div>
       </div>
       <div class="sys-modal-body">
+        <div id="diag-panel" class="s-box spectrum diag-panel"></div>
         <div id="doctor-list" class="doctor-grid"></div>
         <div class="bp-split-2">
           <div class="s-box spectrum">
@@ -884,7 +890,7 @@
   <!-- Admin Auth Modal -->
   <div id="scrim" class="modal-scrim" role="dialog" aria-modal="true" aria-labelledby="modal-ver">
     <div class="modal-box">
-      <div id="modal-ver" class="c-spectrum auth-title">PRISM v5.8.1 · 系統管理認證</div>
+      <div id="modal-ver" class="c-spectrum auth-title">PRISM v5.9.0 · 系統管理認證</div>
       <div class="c-sec auth-sub">通過 OpenWrt ubus /rpcd 建立加密管理會話</div>
       <form id="login-form" class="auth-form">
         <div>
@@ -906,6 +912,6 @@
 
   <div id="toast" class="toast-bar"></div>
 
-  <script type="module" src="js/main.js?v=5.8.1"></script>
+  <script type="module" src="js/main.js?v=5.9.0"></script>
 </body>
 </html>

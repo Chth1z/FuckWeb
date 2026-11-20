@@ -1,4 +1,4 @@
-# Prism 5.8
+# Prism 5.9
 
 *one beam, twenty-one wavelengths.*
 
@@ -49,7 +49,7 @@ flowchart TB
 
 ---
 
-## 二、 現行架構重點（5.8.1）
+## 二、 現行架構重點（5.9.0）
 
 1. **單次封包計帳與雙向獨立 Burst-Harvest（[weave.uc](prism/usr/share/prism/mod/weave.uc) & [prism.nft.ut](prism/usr/share/prism/tpl/prism.nft.ut)）**
    - `postrouting` 僅在單一規則 `oifname @strands_up jump acct_wan_up` 累加出站計數，消除重複計帳；每條線路上下行獨立依 `clamp(tokens + (CIR - rate) * dt, 0, 1MB)` 積分，確保低於 CIR 的持續流量不再虛耗突發信用，再依剩餘容量、可用突發信用與 HTTP 探測品質分配 `@pattern` 權重。
@@ -105,6 +105,8 @@ for f in tools/*.sh; do bash -n "$f"; done
 
 ./tools/rsh prism strands                # 檢查 21 條線路健康、TTFB、Burst 額度與槽位
 ./tools/rsh prism doctor                 # 檢查全項關鍵不變量與守護表（非 0 代表存在 fail）
+./tools/rsh prism report                 # 檢視路由器資源、1H/24H 網路滾動指標與事件統計
+./tools/rsh "prism events --summary"     # 依事件類別檢視近 1h / 24h / 累計狀態躍遷次數
 ./tools/rsh "ubus call prism status"     # 檢查運行中版本、健康數、MPTCP 子流數
 ./tools/rsh "logread -l 30"              # 確認無 ucode -S / OOM / nft 錯誤
 ```

@@ -32,17 +32,6 @@ function list_count(file) {
 	return count;
 }
 
-function events(limit) {
-	let lines = split(trim(fs.readfile(core.RUN + "/events.log") ?? ""), "\n");
-	let out = [];
-	for (let line in slice(lines, -limit)) {
-		let m = match(line, /^([0-9]+) (.*)$/);
-		if (m)
-			push(out, { ts: int(m[1]), msg: m[2] });
-	}
-	return reverse(out);
-}
-
 const MAX_FLOWS = 400;
 
 // Keep the largest rows while scanning. Scratch memory is bounded even if
@@ -199,6 +188,11 @@ export function methods(d) {
 				}
 				return {
 					...snap,
+					sys: {
+						...(snap.sys ?? {}),
+						...(d.host_sys ? (d.host_sys() ?? {}) : {}),
+					},
+					daemon: d.daemon_health ? d.daemon_health() : null,
 					settings,
 					led_state: d.led_view ? d.led_view() : led.inspect(cfg),
 					version: core.VERSION,
@@ -245,9 +239,28 @@ export function methods(d) {
 		},
 
 		events: {
-			args: { limit: 0 },
+			args: { limit: 0, tag: "", window: 0 },
 			call: function(req) {
-				return { events: events(req.args?.limit || 60) };
+				return {
+					events: core.read_events(req.args?.limit || 60, req.args?.tag ?? ""),
+					summary: core.events_summary(req.args?.window || 86400),
+				};
+			},
+		},
+
+		diagnostics: {
+			call: function() {
+				if (d.diagnostics)
+					return d.diagnostics();
+				return {
+					ts: time(),
+					host: d.snapshot()?.sys ?? {},
+					daemon: d.daemon_health ? d.daemon_health() : null,
+					window_1h: { samples: 0, span_sec: 0 },
+					window_24h: { samples: 0, span_sec: 0 },
+					qos_drops: { "1:10": 0, "1:20": 0, "1:30": 0, total: 0 },
+					events: core.events_summary(86400),
+				};
 			},
 		},
 

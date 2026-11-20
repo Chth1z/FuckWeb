@@ -2,16 +2,38 @@
  * PRISM 5.0 — OpenWrt ubus JSON-RPC 2.0 Client & Session Auth
  * ============================================================================ */
 
-import { S } from './state.js?v=5.8.1';
-import { $, toast } from './dom.js?v=5.8.1';
+import { S } from './state.js?v=5.9.0';
+import { $, toast } from './dom.js?v=5.9.0';
 
 const ANON_TOKEN = '00000000000000000000000000000000';
+const READ_TIMEOUT_MS = 4500;
+const WRITE_TIMEOUT_MS = 9000;
 let rpcSeq = 1;
 let pendingAction = null;
 let onAuthSuccessCallback = null;
 
 export function setAuthCallback(fn) {
   onAuthSuccessCallback = fn;
+}
+
+async function postUbus(payload, timeoutMs = READ_TIMEOUT_MS) {
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch('/ubus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: ctrl ? ctrl.signal : undefined
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw new Error('RPC timeout');
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function parseUbusResult(data) {
@@ -30,19 +52,14 @@ function parseUbusResult(data) {
   return payload;
 }
 
-export async function ubusCall(object, method, args = {}, token = S.session || ANON_TOKEN) {
-  const res = await fetch('/ubus', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: rpcSeq++,
-      method: 'call',
-      params: [token, object, method, args]
-    })
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  return parseUbusResult(await res.json());
+export async function ubusCall(object, method, args = {}, token = S.session || ANON_TOKEN, timeoutMs = READ_TIMEOUT_MS) {
+  const data = await postUbus({
+    jsonrpc: '2.0',
+    id: rpcSeq++,
+    method: 'call',
+    params: [token, object, method, args]
+  }, timeoutMs);
+  return parseUbusResult(data);
 }
 
 export async function call(method, args = {}) {
@@ -58,18 +75,12 @@ export async function call(method, args = {}) {
 }
 
 async function rawBatch(items, token) {
-  const res = await fetch('/ubus', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(items.map(it => ({
-      jsonrpc: '2.0',
-      id: it.id,
-      method: 'call',
-      params: [token, 'prism', it.method, it.args || {}]
-    })))
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
+  const data = await postUbus(items.map(it => ({
+    jsonrpc: '2.0',
+    id: it.id,
+    method: 'call',
+    params: [token, 'prism', it.method, it.args || {}]
+  })), READ_TIMEOUT_MS);
   const arr = Array.isArray(data) ? data : [data];
   const byId = new Map();
   for (const r of arr) {
@@ -121,7 +132,7 @@ export async function write(method, args = {}, successMsg = '已套用') {
     return null;
   }
   try {
-    const res = await ubusCall('prism', method, args, S.session);
+    const res = await ubusCall('prism', method, args, S.session, WRITE_TIMEOUT_MS);
     if (res && res.ok === false) {
       toast(res.error || '操作失敗', true);
       return null;
@@ -184,7 +195,7 @@ export async function submitLogin(e) {
   goBtn.disabled = true;
   errEl.textContent = '';
   try {
-    const res = await ubusCall('session', 'login', { username, password }, ANON_TOKEN);
+    const res = await ubusCall('session', 'login', { username, password }, ANON_TOKEN, WRITE_TIMEOUT_MS);
     if (!res || !res.ubus_rpc_session) throw new Error('帳號或密碼錯誤');
     S.session = res.ubus_rpc_session;
     S.user = username;
