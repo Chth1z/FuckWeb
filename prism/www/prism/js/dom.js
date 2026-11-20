@@ -2,7 +2,7 @@
  * PRISM 5.0 — DOM Builders, Segmented Block Meters & Log Renderers
  * ============================================================================ */
 
-import { fmtClock, spectralColor, desatObsidianRgb, opticalLoad } from './state.js?v=5.8.0';
+import { fmtClock, spectralColor, desatObsidianRgb, opticalLoad } from './state.js?v=5.8.1';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -209,16 +209,16 @@ export function renderSessionLog(container, events, limit = 6) {
     const tag = spaceIdx > 0 ? raw.slice(0, spaceIdx).toLowerCase() : 'prism';
     const body = spaceIdx > 0 ? raw.slice(spaceIdx + 1) : raw;
     let colorClass = 'c-blue';
-    let meta = 'status -> ok';
-    if (tag.includes('weave') || tag.includes('strand') || tag.includes('site')) {
+    if ((tag === 'doctor' && body.startsWith('fail')) || (tag === 'portal' && body.includes('still down'))) {
+      colorClass = 'c-crimson';
+    } else if (tag === 'portal' || tag === 'wifi') {
+      colorClass = 'c-amber';
+    } else if (tag.includes('weave') || tag.includes('strand') || tag.includes('site') || tag === 'mptcp') {
       colorClass = 'c-mint';
-      meta = 'spectrum -> active';
-    } else if (tag.includes('guard') || tag.includes('doctor')) {
+    } else if (tag.includes('guard') || tag.includes('doctor') || tag === 'identity') {
       colorClass = 'c-violet';
-      meta = 'guard -> verified';
     } else if (tag.includes('config') || tag.includes('device') || tag.includes('tunnel')) {
       colorClass = 'c-gold';
-      meta = 'uci -> committed';
     }
     container.appendChild(el('div', { class: 'log-row' },
       el('span', { class: 'log-ts' }, fmtClock(ev.ts)),

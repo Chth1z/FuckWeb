@@ -27,7 +27,7 @@ function addr4() {
 	assert(!error, error);
 	for (let a in addrs ?? []) {
 		let parts = split(a.address, "/"), ip = a.local ?? parts[0];
-		out[a.dev] ??= { ip, prefix: int(parts[1]), all: [] };
+		out[a.dev] ??= { ip, prefix: a.prefixlen ?? int(parts[1] ?? 32), all: [] };
 		push(out[a.dev].all, ip);
 	}
 	return out;
@@ -89,10 +89,16 @@ export function ip(args) {
 // MAC address of a neighbour, asking for it once if the kernel has not
 // learned it yet. null when it does not answer.
 export function neighbour(dev, addr) {
-	let lookup = () => ip_json(sprintf("neigh show %s dev %s", addr, dev))[0]?.lladdr;
+	let lookup = () => {
+		let entries = rtnl.request(rtnl.const.RTM_GETNEIGH, rtnl.const.NLM_F_DUMP, { family: rtnl.const.AF_INET });
+		for (let n in entries ?? [])
+			if (n.dev == dev && n.dst == addr && n.lladdr)
+				return n.lladdr;
+		return null;
+	};
 	let mac = lookup();
 	if (!mac) {
-		core.ok(sprintf("ping -c 1 -W 1 -I %s %s", dev, addr));
+		core.ok(sprintf("ping -c 1 -W 1 -I %s %s", core.shq(dev), core.shq(addr)));
 		mac = lookup();
 	}
 	return mac ? lc(mac) : null;

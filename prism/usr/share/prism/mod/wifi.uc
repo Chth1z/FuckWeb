@@ -24,7 +24,7 @@ export function ap_forwarding(dev) {
 // means the radio firmware has hung even though the interface looks up.
 function active_time(dev) {
 	let in_use = false;
-	for (let line in split(core.sh("iw dev " + dev + " survey dump").out, "\n")) {
+	for (let line in split(core.sh("iw dev " + core.shq(dev) + " survey dump").out, "\n")) {
 		if (index(line, "[in use]") >= 0)
 			in_use = true;
 		let m = in_use ? match(line, /channel active time:\s+([0-9]+)/) : null;
@@ -75,7 +75,8 @@ function sta_role(ctx) {
 		return;
 	uci.set("wireless", section, "disabled", want);
 	uci.commit("wireless");
-	core.act("wifi reload " + (uci.get("wireless", section, "device") ?? ""));
+	let radio = uci.get("wireless", section, "device") ?? "";
+	core.act(length(radio) ? ("wifi reload " + core.shq(radio)) : "wifi reload");
 }
 
 export function apply(ctx) {

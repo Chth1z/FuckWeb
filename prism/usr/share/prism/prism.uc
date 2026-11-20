@@ -77,7 +77,7 @@ function snapshot(ctx, report, led_color) {
 				dev: s.dev, id: s.id, ip: s.ip ?? "", gw: s.gw ?? "",
 				subnet: s.subnet ?? "", iface: s.iface ?? "", role: s.role,
 				healthy: s.dev in healthy,
-				http: h.code ?? 0, ttfb: h.ttfb ?? 0, loss: h.loss ?? 0,
+				http: h.code ?? 0, ttfb: h.ttfb ?? 0, loss: +(sprintf("%.3f", h.loss ?? 0)),
 				parked: (h.parked ?? 0) > 0,
 			};
 		}),
@@ -178,9 +178,15 @@ function locked(fn, wait_s) {
 			warn("prism: another pass holds the lock\n");
 		return 0;
 	}
-	let rc = fn();
-	lock.close();
-	return rc;
+	try {
+		let rc = fn();
+		lock.close();
+		return rc;
+	}
+	catch (e) {
+		lock.close();
+		die(e);
+	}
 }
 
 // Live view from prismd; the last snapshot on disk when it is not running.
@@ -343,7 +349,10 @@ const COMMANDS = {
 	},
 	events: {
 		help: "recent state transitions",
-		run: (args) => system(sprintf("tail -n %d %s/events.log", int(args[0] ?? "40") || 40, core.RUN)),
+		run: (args) => {
+			let f = core.RUN + "/events.log";
+			return fs.stat(f) ? system(sprintf("tail -n %d %s", int(args[0] ?? "40") || 40, core.shq(f))) : 0;
+		},
 	},
 	tunnel: {
 		help: "tunnel reload | ui",
@@ -438,7 +447,7 @@ const COMMANDS = {
 				warn("usage: prism portal via <strand>\n");
 				return 1;
 			}
-			system(sprintf("ip route replace default via %s dev %s metric 1", s.gw, s.dev));
+			system(sprintf("ip route replace default via %s dev %s metric 1", core.shq(s.gw), core.shq(s.dev)));
 			printf("default route now via %s. Log in from a LAN client, then: ip route del default metric 1\n", s.dev);
 			return 0;
 		},

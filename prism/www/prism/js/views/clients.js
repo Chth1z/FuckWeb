@@ -2,9 +2,9 @@
  * PRISM — View 04: Merged Wide Device Policy Matrix & Live Flows Explorer
  * ============================================================================ */
 
-import { S, desatObsidianRgb, opticalLoad, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.8.0';
-import { $, $$, el, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.8.0';
-import { write, openLoginModal } from '../api.js?v=5.8.0';
+import { S, desatObsidianRgb, opticalLoad, fmtRate, fmtRateCompact, fmtBytes } from '../state.js?v=5.8.1';
+import { $, $$, el, setTxt, setCls, setTitle, setVar, setStyleProp } from '../dom.js?v=5.8.1';
+import { write, openLoginModal } from '../api.js?v=5.8.1';
 
 const POLICIES = ['auto', 'game', 'direct', 'tunnel', 'block'];
 const POLICY_META = {
@@ -108,7 +108,7 @@ function computeFlowDeltas() {
 
   for (const f of conns) {
     const prev = S.flowSnapshot[f.key];
-    const ts = S.connections.sampled[f.route];
+    const ts = S.connections.sampled?.[f.route] || 0;
     const dt = prev ? ts - prev.ts : 0;
     let rDown = 0, rUp = 0;
     if (prev && dt === 0) {
@@ -203,7 +203,6 @@ function createQuarantineCard(q, allDevs) {
   }, '認領建組');
   btnNew.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (!S.session) { openLoginModal(); return; }
     write('claim', { mac: q.mac, action: 'new', alias: q.host || '' }, `已認領 ${hostTxt} 並建立專屬節點組`);
   });
 
@@ -214,7 +213,6 @@ function createQuarantineCard(q, allDevs) {
   }, '併入');
   btnMerge.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (!S.session) { openLoginModal(); return; }
     const uid = sel.value;
     if (!uid) return;
     write('claim', { mac: q.mac, action: 'merge', target_uid: uid }, `已將 ${q.mac} 併入設備組 ${uid}`);
@@ -277,14 +275,18 @@ function createDeviceCard(mac) {
       e.stopPropagation();
       const d = card._dev;
       if (!d) return;
+      if ((d.policy || 'auto') === p) return;
+      const applyPolicy = () => {
+        const cur = card._dev || d;
+        cur.policy = p; // optimistic UI state
+        syncDeviceCard(card, cur, card._dr, S.selectedDeviceMac === mac);
+        write('device', { mac: cur.mac, name: cur.named ? (cur.name || '') : '', policy: p }, `${cur.name || cur.mac} 分流律令已設為 ${POLICY_META[p].label}`);
+      };
       if (!S.session) {
-        openLoginModal();
+        openLoginModal(applyPolicy);
         return;
       }
-      if ((d.policy || 'auto') === p) return;
-      d.policy = p; // optimistic UI state
-      syncDeviceCard(card, d, card._dr, S.selectedDeviceMac === mac);
-      write('device', { mac: d.mac, name: d.named ? (d.name || '') : '', policy: p }, `${d.name || d.mac} 分流律令已設為 ${POLICY_META[p].label}`);
+      applyPolicy();
     });
     pillBtns[p] = b;
     pillBar.appendChild(b);
@@ -345,6 +347,7 @@ function createDeviceCard(mac) {
       const nextName = renameInput.value.trim();
       if (nextName !== (d.name || '')) {
         d.name = nextName;
+        d.named = !!nextName;
         nameEl.textContent = nextName || d.host || d.mac.slice(-8);
         write('device', { mac: d.mac, name: nextName, policy: d.policy || 'auto' }, '終端別名已儲存');
       }

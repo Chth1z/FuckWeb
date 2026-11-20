@@ -201,7 +201,7 @@ function carry_dynamic_set(name) {
 	for (let item in json(r.out).nftables)
 		for (let e in item.set?.elem ?? [])
 			if (e.elem?.expires != null)
-				push(elems, sprintf("%s timeout %ds", e.elem.val, max(1, e.elem.expires)));
+				push(elems, sprintf("%s timeout %ds", e.elem.val, max(1, int(e.elem.expires))));
 	return length(elems) ? sprintf("add element %s %s { %s }\n", NFT, name, join(", ", elems)) : "";
 }
 
@@ -399,11 +399,12 @@ export function mptcp_candidates(ctx, current_eps) {
 		let sa = score(a), sb = score(b);
 		return sa < sb ? -1 : (sa > sb ? 1 : a.id - b.id);
 	});
-	// Separate entry (<12% rel loss) and eviction (<22% rel loss) thresholds
-	// so occasional WAN SYN retransmits do not churn live MP_JOIN subflows.
+	// Separate entry (<12% rel loss) and eviction (<30% rel loss) thresholds
+	// so a single transient HTTP probe timeout (loss=0.25) or normal upstream
+	// CDN wave jitter never churns live MP_JOIN subflows.
 	let clean = filter(sorted, (l) => rel_loss(l) < 0.12);
 	let pool = length(clean) >= 2 ? clean : sorted;
-	let keepable = filter(sorted, (l) => rel_loss(l) < 0.22);
+	let keepable = filter(sorted, (l) => rel_loss(l) < 0.30);
 	let keep_pool = length(keepable) >= 2 ? keepable : sorted;
 	let min_ttfb = 10.0;
 	for (let l in pool) {
@@ -411,7 +412,7 @@ export function mptcp_candidates(ctx, current_eps) {
 		if (t < min_ttfb)
 			min_ttfb = t;
 	}
-	let ttfb_ceil = max(min_ttfb + 0.060, min_ttfb * 1.60);
+	let ttfb_ceil = max(min_ttfb + 0.250, min_ttfb * 3.0);
 
 	let by_id = {};
 	for (let l in keep_pool)

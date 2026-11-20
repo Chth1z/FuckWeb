@@ -2,8 +2,8 @@
  * PRISM 5.0 — OpenWrt ubus JSON-RPC 2.0 Client & Session Auth
  * ============================================================================ */
 
-import { S } from './state.js?v=5.8.0';
-import { $, toast } from './dom.js?v=5.8.0';
+import { S } from './state.js?v=5.8.1';
+import { $, toast } from './dom.js?v=5.8.1';
 
 const ANON_TOKEN = '00000000000000000000000000000000';
 let rpcSeq = 1;
@@ -41,6 +41,7 @@ export async function ubusCall(object, method, args = {}, token = S.session || A
       params: [token, object, method, args]
     })
   });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   return parseUbusResult(await res.json());
 }
 
@@ -67,6 +68,7 @@ async function rawBatch(items, token) {
       params: [token, 'prism', it.method, it.args || {}]
     })))
   });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
   const arr = Array.isArray(data) ? data : [data];
   const byId = new Map();

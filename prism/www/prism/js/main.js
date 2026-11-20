@@ -2,14 +2,14 @@
  * PRISM 5.0 — Bootstrap, 4-Tab Router & Differential Polling Engine
  * ============================================================================ */
 
-import { S, UI_VERSION, fmtRate } from './state.js?v=5.8.0';
-import { $, $$, toast, setTxt, setCls } from './dom.js?v=5.8.0';
-import { callBatch, call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.8.0';
-import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.js?v=5.8.0';
-import { renderOverview } from './views/overview.js?v=5.8.0';
-import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.8.0';
-import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.8.0';
-import { renderClients, bindClientsEvents } from './views/clients.js?v=5.8.0';
+import { S, UI_VERSION, fmtRate } from './state.js?v=5.8.1';
+import { $, $$, toast, setTxt, setCls } from './dom.js?v=5.8.1';
+import { callBatch, call, write, clearSession, openLoginModal, closeLoginModal, submitLogin, updateAuthButton, setAuthCallback } from './api.js?v=5.8.1';
+import { initPrismCanvas, markPrismDirty, renderPrismNow } from './canvas/prism.js?v=5.8.1';
+import { renderOverview } from './views/overview.js?v=5.8.1';
+import { renderBlueprint, bindBlueprintEvents, startBlueprintAnim, stopBlueprintAnim } from './views/blueprint.js?v=5.8.1';
+import { renderSpectrum, bindSpectrumEvents, startSpectrumAnim, stopSpectrumAnim } from './views/spectrum.js?v=5.8.1';
+import { renderClients, bindClientsEvents } from './views/clients.js?v=5.8.1';
 
 let fastTimer = null;
 let slowTimer = null;
@@ -19,6 +19,8 @@ let slowInFlight = false;
 let connInFlight = false;
 let pendingFast = false;
 let pendingSlow = false;
+let pendingConn = false;
+let connWarmupTimer = null;
 let lastFastTab = '';
 
 function renderChrome() {
@@ -144,10 +146,10 @@ function mergeSeriesDelta(delta) {
   }
 }
 
-async function pollConnections(force = false) {
+async function pollConnections(force = false, allowWarmup = true) {
   if (document.visibilityState === 'hidden' || S.tab !== 'clients' || !S.session) return;
   if (connInFlight) {
-    if (force) setTimeout(() => pollConnections(false), 120);
+    if (force) pendingConn = true;
     return;
   }
   connInFlight = true;
@@ -156,10 +158,24 @@ async function pollConnections(force = false) {
     if (cn) {
       S.connections = cn;
       if (S.tab === 'clients') renderClients();
+      // Cold/stale direct conntrack read triggers a ~140ms background task in prismd;
+      // follow up once shortly after so fresh kernel flows render without waiting 4s.
+      const dirTs = cn.sampled?.direct || 0;
+      const tunTs = cn.sampled?.tunnel || 0;
+      if (allowWarmup && (!dirTs || (tunTs > 0 && tunTs - dirTs > 5)) && !connWarmupTimer) {
+        connWarmupTimer = setTimeout(() => {
+          connWarmupTimer = null;
+          pollConnections(false, false);
+        }, 260);
+      }
     }
   } catch (_) {
   } finally {
     connInFlight = false;
+    if (pendingConn) {
+      pendingConn = false;
+      pollConnections(false, allowWarmup);
+    }
   }
 }
 
@@ -210,19 +226,17 @@ async function pollSlow(force = false) {
   slowInFlight = true;
   try {
     const reqs = [
-      S.tab === 'overview' || S.tab === 'blueprint' ? { method: 'tunnel' } : null,
+      { method: 'tunnel' },
       S.tab === 'blueprint' ? { method: 'events', args: { limit: 40 } } : null,
       S.tab === 'blueprint' ? { method: 'doctor' } : null,
-      S.tab === 'spectrum' && (!S.series?.ts || S.series.ts.length < 2) ? { method: 'series', args: { limit: 720 } } : null,
       S.tab === 'blueprint' && S.session ? { method: 'config' } : null,
       S.tab !== 'overview' && S.tab !== 'clients' ? { method: 'devices' } : null
     ];
 
-    const [tun, ev, doc, ser, cfg, dv] = await callBatch(reqs);
+    const [tun, ev, doc, cfg, dv] = await callBatch(reqs);
     if (tun) S.tunnel = tun;
     if (ev) S.events = ev;
     if (doc) S.doctor = doc;
-    if (ser) mergeSeriesDelta(ser);
     if (cfg) S.config = cfg;
     if (dv) S.devices = dv;
     renderActiveTab();

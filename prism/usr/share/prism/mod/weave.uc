@@ -118,7 +118,7 @@ function loss_quality(rel) {
 
 // Pick the lowest-loss, lowest-TTFB, uncongested strand for @vip_lane with
 // tight hysteresis: stays sticky during an active session while loss remains
-// clean, latency stays within max(best + 40ms, 1.45 * best_ttfb), and sustained
+// clean, latency stays within max(best + 120ms, 2.2 * best_ttfb), and sustained
 // stray load stays well below the policer knee (2 Mbps). Prefers non-wan vwan*
 // strands when >= 4 strands are healthy, and gently avoids active MPTCP endpoints
 // when electing a fresh VIP so @vip_lane and MPTCP stay disjoint.
@@ -158,7 +158,7 @@ export function select_vip(healthy, load, mptcp_ids, previous) {
 			let ttfb = (cur.ttfb && cur.ttfb >= 0.008) ? cur.ttfb : 0.25;
 			let cur_now = max(load?.[cur.dev]?.down?.now ?? 0, (load?.[cur.dev]?.up?.now ?? 0) * 1.2);
 			let cur_ewma = max(load?.[cur.dev]?.down?.rate ?? 0, (load?.[cur.dev]?.up?.rate ?? 0) * 1.2);
-			let limit = max(min_ttfb + 0.040, min_ttfb * 1.45);
+			let limit = max(min_ttfb + 0.120, min_ttfb * 2.2);
 			let loss_ok = rel_loss(lb, cur) <= max(0.05, lb.floor * 0.5 + 0.04);
 			let load_ok = !(cur_ewma >= 250000 && cur_now >= 200000) && cur_now < 650000;
 			let role_ok = !prefer_vwan || cur.id != 1 || best.id == 1;

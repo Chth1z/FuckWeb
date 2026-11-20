@@ -108,8 +108,13 @@ restore() {
 	exit 1
 }
 
-prism plan >/tmp/prism-plan.out 2>&1 || true
-grep -q '^prism: ' /tmp/prism-plan.out && { cat /tmp/prism-plan.out >&2; restore "plan reported errors"; }
+plan_rc=0
+prism plan >/tmp/prism-plan.out 2>&1 || plan_rc=$?
+if [ "$plan_rc" -gt 1 ] || grep -Eq '^(prism:|Syntax error|Type error|Reference error|Compile error)' /tmp/prism-plan.out; then
+	cat /tmp/prism-plan.out >&2
+	restore "plan reported errors"
+fi
+rm -rf /tmp/prism/plan /tmp/prism-plan.out
 
 sysctl -qp /etc/sysctl.d/99-prism.conf 2>/dev/null || true
 prism provision

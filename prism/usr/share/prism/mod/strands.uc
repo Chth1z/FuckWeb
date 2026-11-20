@@ -202,6 +202,8 @@ export function check(ctx) {
 			h.code = r.code;
 			let missed = r.code == cfg.probe_expect ? 0.0 : 1.0;
 			h.loss = h.probed ? 0.25 * missed + 0.75 * h.loss : missed;
+			if (h.loss < 0.0005)
+				h.loss = 0.0;
 			if (r.code == cfg.probe_expect) {
 				h.ttfb = h.ttfb > 0 ? 0.35 * r.ttfb + 0.65 * h.ttfb : r.ttfb;
 				h.confirmed = true;

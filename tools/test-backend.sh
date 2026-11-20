@@ -8,6 +8,7 @@ cd "$src"
 ucode -S -e '
 import * as a from "./mod/api.uc";
 import * as w from "./mod/weave.uc";
+import * as k from "./mod/kernel.uc";
 import * as s from "./lib/series.uc";
 import * as id from "./mod/identity.uc";
 import * as fs from "fs";
@@ -19,6 +20,14 @@ lane.up.now=0; w.update_buckets(load,0.25,1250000); assert(lane.bucket.tokens==3
 let strands=[{dev:"a",id:1},{dev:"b",id:2},{dev:"c",id:3}];
 let even=w.compose({policy:"even"},strands,{},7,[]);
 assert(join(",",sort(even))=="1,1,1,2,2,3,3");
+// Verify VIP and MPTCP hysteresis hold through CDN wave jitter & single transient timeout.
+let mpool=[];
+for (let i=1;i<=10;i++) push(mpool,{dev:i==1?"wan":"vwan"+(i-1),id:i,role:"primary",ip:"10.0.0."+i,gw:"10.0.0.1",http:204,ttfb:i<=4?0.19:0.08,loss:i==3?0.25:0});
+let cur_eps=map(slice(mpool,2,8),(x)=>({id:x.id,dev:x.dev,address:x.ip,subflow:true}));
+let kept=k.mptcp_candidates({site:{aggregate:true},weave:{vip:[2|0x100]},health:{healthy:mpool}},cur_eps);
+assert(join(",",map(kept,(x)=>x.id))=="3,4,5,6,7,8","mptcp churned on transient timeout or wave jitter");
+let vip_kept=w.select_vip(mpool,{},{"3":true},[2|0x100]);
+assert(vip_kept[0]==(2|0x100),"vip flapped on 110ms CDN wave jitter");
 let h=s.create(3); for(let i=1;i<=5;i++) s.add(h,i,i*2,i,i>=3?{b:i}:{a:i},{});
 let hist=s.dump(h,2); assert(join(",",hist.ts)=="4,5" && join(",",hist.strands.a)=="0,0" && join(",",hist.strands.b)=="4,5");
 let mac="02:00:00:00:00:01", ip="10.200.0.2", p={anchor_mac:mac,macs:[{mac}],policy:"auto",fp:{last_ip:ip}};
@@ -30,12 +39,14 @@ tel.leases={[mac]:{ip}}; assert(length(pairs())==1); p.policy="block"; assert(!l
 let connections=[];
 for (let i=0; i<1000; i++) push(connections,{id:i,metadata:{sourceIP:"10.200.0.2"},download:i});
 let top=a.tunnel_flows(connections); assert(length(top)==400 && top[0].key==999 && top[-1].key==600);
+let m=a.methods({cfg:()=>({}),snapshot:()=>({}),load:()=>({}),pattern:()=>[],history:()=>h,devices:()=>[],interval:()=>1,proxies:()=>null,selected:()=>{},rules:()=>[],tunnel_flows:()=>[],tunnel_sampled:()=>0,now:()=>1,kick:()=>{},reload:()=>{}});
+assert(m.configure.call({args:{}}).ok==false && m.select.call({args:{name:""}}).ok==false,"empty configure/select must fail cleanly");
 let cfg=json(fs.readfile("/tmp/prism-rehearsal/run/plan/mihomo.yaml")), groups={};
 for(let g in cfg["proxy-groups"]) {groups[g.name]=g;assert(g.type=="select" && !("DIRECT" in g.proxies) && !("REJECT" in g.proxies));}
 assert(groups["TW-HOME"] && cfg.rules[-1]=="MATCH,REJECT");
 let links=filter(cfg.listeners,(l)=>l.type=="tproxy"), ports={};
 for(let l in links){let rs=filter(cfg.rules,(r)=>index(r,"IN-NAME,"+l.name+",")==0); assert(length(rs)==1 && groups[split(rs[0],",")[2]] && !ports[l.port] && l.udp); ports[l.port]=true;}
-print("CONTROL_OK bucket, history wrap, lease reassignment, ",length(links)," isolated listeners\n");
+print("CONTROL_OK bucket, hysteresis, history wrap, lease reassignment, ",length(links)," isolated listeners\n");
 '
 tmp=$(mktemp -d /tmp/prism-daemon-test.XXXXXX)
 ns=prism-test-$$
@@ -56,7 +67,17 @@ ln -s /etc/prism/relays.json "$tmp/etc/relays.json"
 cp "$base/uci/prism" "$tmp/uci/prism"
 ln -s "$src/lib" "$src/mod" "$tmp/"
 printf 'fixture' >"$tmp/etc/controller.secret"
-printf '{"downloadTotal":123456,"uploadTotal":123,"connections":[{"id":"fixture","metadata":{"sourceIP":"10.200.0.2","destinationIP":"203.0.113.10","destinationPort":"443","network":"tcp"},"download":7,"upload":2}]}' > "$tmp/web/connections"
+# Construct a 4097-byte (4096 + trailing newline) /connections fixture to guard
+# against the ucode json(file) chunk-boundary "Trailing garbage" bug.
+ucode -S -e '
+import * as fs from "fs";
+let prefix = "{\"downloadTotal\":123456,\"uploadTotal\":123,\"connections\":[{\"id\":\"fixture\",\"metadata\":{\"sourceIP\":\"10.200.0.2\",\"destinationIP\":\"203.0.113.10\",\"destinationPort\":\"443\",\"network\":\"tcp\",\"host\":\"";
+let suffix = "\"},\"download\":7,\"upload\":2}]}\n";
+let pad = 4097 - length(prefix) - length(suffix);
+let body = prefix + replace(sprintf("%" + pad + "s", ""), / /g, "a") + suffix;
+assert(length(body) == 4097);
+fs.writefile(ARGV[0], body);
+' "$tmp/web/connections"
 printf '{"proxies":{"TW-HOME":{"now":"fixture","all":["fixture"]}}}' > "$tmp/web/proxies"
 printf '{"lan_ip":"127.0.0.1","weave":{"slots":0},"strands":[{"dev":"wan","id":1,"healthy":true}],"tunnel":{"running":true,"restored":true,"pid":"%s"}}' "$(pidof mihomo)" > "$tmp/run/status.json"
 sed -e 's|const PRISM = "/usr/sbin/prism";|const PRISM = "/bin/true";|' -e 's|^let bus = ubus.connect();|let bus = ubus.connect(getenv("TEST_BUS"));|' -e '/^core.init_dirs();/i core.set_mode({ dry: true });' "$src/prismd.uc" > "$tmp/prismd.uc"

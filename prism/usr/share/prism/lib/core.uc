@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as ulog from "log";
 import { md5 } from "digest";
 
-export const VERSION = "5.8.0";
+export const VERSION = "5.8.1";
 export const SHARE = fs.dirname(sourcepath(0, true));
 export const RUN = getenv("PRISM_RUN") ?? "/tmp/prism";
 export const ETC = getenv("PRISM_ETC") ?? "/etc/prism";
@@ -66,8 +66,8 @@ export function event(fmt, ...args) {
 	let path = RUN + "/events.log";
 	let st = fs.stat(path);
 	if (st && st.size > 256000) {
-		let keep = split(fs.readfile(path), "\n");
-		fs.writefile(path, join("\n", slice(keep, length(keep) / 2)));
+		let keep = filter(split(fs.readfile(path) ?? "", "\n"), (l) => length(l));
+		write_atomic(path, join("\n", slice(keep, int(length(keep) / 2))) + "\n");
 	}
 	let f = fs.open(path, "a");
 	if (f) {
@@ -242,7 +242,13 @@ export function with_lock(name, wait_s, fn) {
 		h = lock(name);
 	}
 	assert(h, "timed out waiting for " + name + " lock");
-	let res = fn();
-	h.close();
-	return res;
+	try {
+		let res = fn();
+		h.close();
+		return res;
+	}
+	catch (e) {
+		h.close();
+		die(e);
+	}
 };

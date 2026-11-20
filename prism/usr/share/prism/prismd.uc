@@ -105,12 +105,18 @@ function relay(now) {
 	let lock = core.lock("reconcile");
 	if (!lock)
 		return;
-	if (weave.program(next, vip_changed ? next_vip : null)) {
-		pattern = next;
-		vip_lane = next_vip;
-		pattern_at = now;
+	try {
+		if (weave.program(next, vip_changed ? next_vip : null)) {
+			pattern = next;
+			vip_lane = next_vip;
+			pattern_at = now;
+		}
+		lock.close();
 	}
-	lock.close();
+	catch (e) {
+		lock.close();
+		core.err("weave relay: %s", e.message ?? e);
+	}
 }
 
 function sample_devices(now) {
@@ -310,7 +316,7 @@ function sample_counters_and_qos(now) {
 }
 
 function poll_controller(resource, callback) {
-	if (controller_busy[resource])
+	if (controller_busy[resource] || !snapshot?.lan_ip)
 		return;
 	let file = fs.mkstemp();
 	assert(file, fs.error());
@@ -318,11 +324,15 @@ function poll_controller(resource, callback) {
 	let url = sprintf("http://%s:%d/%s", snapshot.lan_ip, cfg.tunnel.controller_port, resource);
 	controller_busy[resource] = true;
 	let child = uloop.process("/usr/bin/curl", [ "-4", "--noproxy", "*", "-fsS", "-m", "2",
-		"-H", "Authorization: Bearer " + core.read(core.ETC + "/controller.secret"), "-o", path, url ], {}, (code) => {
+		"-H", "Authorization: Bearer " + (core.read(core.ETC + "/controller.secret") ?? ""), "-o", path, url ], {}, (code) => {
 		delete controller_busy[resource];
 		let payload = null;
 		if (code == 0) {
-			try { payload = json(file); }
+			try {
+				file.seek(0);
+				let raw = file.read("all");
+				payload = length(raw) ? json(raw) : null;
+			}
 			catch (e) { core.err("controller /%s: %s", resource, e.message); }
 		}
 		file.close();
@@ -497,12 +507,16 @@ function sample() {
 			if (d.bytes != null && bytes >= d.bytes && dt > 0) {
 				d.now = (bytes - d.bytes) / dt;
 				d.rate = alpha * d.now + (1 - alpha) * d.rate;
+				if (d.rate < 0.5)
+					d.rate = 0;
 			}
 			else {
 				d.now = d.rate = 0;
 			}
 			d.bytes = bytes;
 			d.peak = max(d.rate, d.peak * decay);
+			if (d.peak < 0.5)
+				d.peak = 0;
 			total[dir] += d.now;
 		}
 		per[dev] = l.down.now;

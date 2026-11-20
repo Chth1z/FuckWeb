@@ -217,6 +217,7 @@ function find(uci, stype, test) {
 // Name a device and/or set its policy. A device back at the defaults is
 // forgotten rather than stored.
 export function device_store(mac, name, policy) {
+	mac = lc(mac ?? "");
 	if (!match(mac, /^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/))
 		return { ok: false, error: "bad mac" };
 	if (!(policy in [ "auto", "direct", "tunnel", "block", "game" ]))
@@ -246,8 +247,11 @@ export function site_store(gateway, name, aggregate, portal, portal_secret) {
 	let has = (s) => gateway in map(type(s.gateway) == "array" ? s.gateway : [ s.gateway ?? "" ], lc);
 	let existing = find(uci, "site", has);
 	let id = existing ?? uci.add("prism", "site");
+	let gws = existing ? map(coerce(uci.get("prism", existing, "gateway"), []), lc) : [];
+	if (!(gateway in gws))
+		push(gws, gateway);
 	uci.set("prism", id, "name", clean(name) || "site");
-	uci.set("prism", id, "gateway", [ gateway ]);
+	uci.set("prism", id, "gateway", gws);
 	uci.set("prism", id, "aggregate", aggregate ? "1" : "0");
 	let keep_portal = length(portal) ? portal : (existing ? (uci.get("prism", existing, "portal") ?? "") : "");
 	let keep_secret = length(portal_secret) ? portal_secret : (existing ? (uci.get("prism", existing, "portal_secret") ?? "") : "");

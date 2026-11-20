@@ -328,7 +328,7 @@ export function methods(d) {
 				let now = d.now();
 				if ((!direct_sampled || now - direct_sampled >= 4) && (!direct_task || direct_task.finished())) {
 					direct_task = uloop.task(() => direct_flows(snap), (rows) => {
-						direct = rows;
+						direct = rows ?? [];
 						direct_sampled = d.now();
 					});
 					assert(direct_task, "cannot sample direct flows: " + uloop.error());
@@ -383,9 +383,12 @@ export function methods(d) {
 		configure: {
 			args: { set: {} },
 			call: function(req) {
-				let res = config.store(req.args?.set ?? {});
+				let set = req.args?.set;
+				if (type(set) != "object" || !length(keys(set)))
+					return { ok: false, error: "empty set" };
+				let res = config.store(set);
 				if (res.ok) {
-					core.event("CONFIG %s", join(" ", map(keys(req.args.set), (k) => k + "=" + req.args.set[k])));
+					core.event("CONFIG %s", join(" ", map(keys(set), (k) => k + "=" + set[k])));
 					d.reload();
 					d.kick();
 				}
@@ -459,6 +462,8 @@ export function methods(d) {
 			args: { name: "", group: "" },
 			call: function(req) {
 				let name = req.args?.name ?? "", grp_in = req.args?.group ?? "";
+				if (!length(name))
+					return { ok: false, error: "missing relay name" };
 				let grp = "TW-HOME", save_key = "_tw_home";
 				if (length(grp_in) && grp_in != "TW-HOME") {
 					let profiles = identity.load_store()?.profiles ?? [];

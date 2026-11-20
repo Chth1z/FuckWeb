@@ -387,6 +387,7 @@ html.prism-cold .main-stage {
 
 .log-rows {
   flex: 1 1 0;
+  height: 0;
   min-height: 0;
   overflow-y: auto;
   display: flex;
@@ -477,7 +478,7 @@ html.prism-cold .main-stage {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 2px;
+  gap: 1px;
   flex: 0 0 auto;
   transition: box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -495,6 +496,7 @@ html.prism-cold .main-stage {
   justify-content: space-between;
   gap: 6px;
   font-size: var(--fs-sm);
+  line-height: 1.2;
   text-shadow: var(--ink-shadow-sm);
 }
 
@@ -808,6 +810,10 @@ html.prism-cold .main-stage {
   gap: 5px;
 }
 
+#bp-card-ingress .bp-node-foot-rule {
+  padding-top: 5px;
+}
+
 #bp-card-log {
   display: flex;
   flex-direction: column;
@@ -1077,7 +1083,7 @@ html.prism-cold .main-stage {
   }
   .classify-bar-card {
     padding: 2px 7px;
-    gap: 2px;
+    gap: 1px;
   }
   .guard-invariants-grid {
     min-height: 80px;
@@ -2047,6 +2053,7 @@ html.prism-cold .main-stage {
   .heatmap-grid { width: 100%; height: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: none; }
   .heat-tile { aspect-ratio: 1 / 1; }
   .conn-scroll-wrap { max-height: 440px; }
+  .log-rows { height: auto; max-height: 300px; }
 }
 
 /* Utility */

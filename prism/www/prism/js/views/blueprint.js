@@ -2,9 +2,9 @@
  * PRISM — View 02: Kernel Routing Architecture, Proportional Classify & Ribbons
  * ============================================================================ */
 
-import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtPkts, fmtClock } from '../state.js?v=5.8.0';
-import { $, $$, el, renderSegMeter, renderStrandSpectrumBar, renderSessionLog, setTxt, setCls, setTitle, setVar } from '../dom.js?v=5.8.0';
-import { write, call } from '../api.js?v=5.8.0';
+import { S, UI_VERSION, LOCKED_SPECS, EDITABLE_SPECS, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRate, fmtRateCompact, fmtBytes, fmtPkts, fmtClock } from '../state.js?v=5.8.1';
+import { $, $$, el, renderSegMeter, renderStrandSpectrumBar, renderSessionLog, setTxt, setCls, setTitle, setVar } from '../dom.js?v=5.8.1';
+import { write, call } from '../api.js?v=5.8.1';
 
 let drawerOpen = false;
 let rafId = null;
@@ -63,6 +63,7 @@ const RULE_LABELS = {
   'quic': 'QUIC 阻斷',
   'device-direct': '設備直連',
   'device-tunnel': '設備入籠',
+  'relay-other-port': '中繼他埠入籠',
   'device-game': '極速光道',
   'tunnel-range': '強制IP入籠',
   'tunnel-domain': 'SmartDNS 暗面釘選',
@@ -931,7 +932,7 @@ function updateFlowPhysics(st) {
   const vipS = (st.strands || []).find(s => s.vip);
 
   const rules = S.rules?.rules || [];
-  let totPkts = 0, totBytes = 0, quicPkts = 0, quicBytes = 0, dropPkts = 0;
+  let totPkts = 0, totBytes = 0, quicPkts = 0, quicBytes = 0;
   for (const r of rules) {
     const p = r.packets || 0;
     const b = r.bytes || 0;
@@ -940,9 +941,6 @@ function updateFlowPhysics(st) {
     if (r.tag === 'quic') {
       quicPkts += p;
       quicBytes += b;
-      dropPkts += p;
-    } else if (r.tag === 'device-block' || r.tag === 'unverified-drop') {
-      dropPkts += p;
     }
   }
 
@@ -972,7 +970,6 @@ function updateFlowPhysics(st) {
   liveFlow.totPkts = totPkts;
   liveFlow.totBytes = totBytes;
   liveFlow.quicPkts = quicPkts;
-  liveFlow.dropPkts = dropPkts;
   liveFlow.quicBytes = quicBytes;
   liveFlow.classifyBps = classifyBps;
 
@@ -1068,6 +1065,7 @@ function renderClassifyStrip() {
     'quic',
     'device-direct',
     'device-tunnel',
+    'relay-other-port',
     'tunnel-range',
     'tunnel-domain',
     'domestic',
@@ -1122,7 +1120,7 @@ function renderClassifyStrip() {
     let colorName = 'blue';
     let colorRgb = '100, 174, 245';
     let textCls = 'c-blue';
-    if (r.tag.includes('tunnel') || r.tag === 'rest-tunnel') {
+    if (r.tag.includes('tunnel') || r.tag === 'rest-tunnel' || r.tag === 'relay-other-port') {
       colorName = 'mint';
       colorRgb = '87, 209, 146';
       textCls = 'c-mint';
@@ -1322,7 +1320,7 @@ export function renderBlueprint() {
   }
 
   const ctCount = st.sys?.conntrack?.count ?? 0;
-  const ctMax = Math.max(1, st.sys?.conntrack?.max ?? 131072);
+  const ctMax = Math.max(1, st.sys?.conntrack?.max ?? 65536);
   setTxt('#adv-ct', `${ctCount.toLocaleString()}/${(ctMax / 1024).toFixed(0)}k`);
   setTxt('#adv-strands', `${st.healthy_count ?? 0}/${st.strand_count ?? 21} (${st.role === 'primary' ? '主' : (st.role || '主')})`);
 
@@ -1631,7 +1629,7 @@ export function renderBlueprint() {
   const domByteCompact = fmtBytes(liveFlow.domBytes).replace(/\s+/g, '');
   setTxt('#bp-dom-direct', `${domByteCompact}·${fmtPkts(liveFlow.domPkts, true)}`);
   setTitle('#bp-dom-direct', `直連雙向累計 ↓ ${fmtBytes(liveFlow.domDownBytes)} · ↑ ${fmtBytes(liveFlow.domUpBytes)}`);
-  setTxt('#bp-dom-probe', `${w.interval ?? 2}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`);
+  setTxt('#bp-dom-probe', `${w.interval ?? 1}s / ${st.settings?.['strands.probe_interval'] ?? 45}s`);
   setTxt('#bp-dom-buckets', `${w.charged_count ?? 0}滿/${w.depleted_count ?? 0}耗/${w.cooling_count ?? 0}冷`);
   setTxt('#bp-dom-vip', w.vip_dev ? `${w.vip_dev} (#${w.vip_id ?? '—'})` : 'auto');
   const healthyStrands = strands.filter(s => s.healthy && (s.ttfb_ms || 0) > 0);
@@ -1754,9 +1752,10 @@ export function renderBlueprintDrawer() {
       dl.innerHTML = '';
       for (const c of doc.checks) {
         const cls = c.ok ? '' : (c.level === 'fail' ? 'bad' : 'warn');
+        const valCls = c.ok ? 'c-mint' : (c.level === 'fail' ? 'c-crimson' : 'c-amber');
         dl.appendChild(el('div', { class: `doc-item ${cls}` },
           el('span', { class: c.ok ? 'c-primary' : (c.level === 'fail' ? 'c-crimson' : 'c-amber') }, c.id),
-          el('span', { class: c.ok ? 'c-mint' : 'c-crimson' }, c.ok ? (c.detail || 'OK') : (c.detail || c.level.toUpperCase()))
+          el('span', { class: valCls }, c.ok ? (c.detail || 'OK') : (c.detail || c.level.toUpperCase()))
         ));
       }
     }
@@ -1780,6 +1779,7 @@ export function renderBlueprintDrawer() {
   const cp = $('#config-panel');
   if (!cp) return;
   if (!S.session) {
+    delete cp.dataset.sig;
     cp.innerHTML = '';
     cp.appendChild(el('div', { class: 'c-muted cfg-unauth' }, '需點擊右上角「管理登入」以調整 UCI 核心參數'));
     return;

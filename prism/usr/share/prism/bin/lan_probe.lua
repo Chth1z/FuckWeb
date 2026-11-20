@@ -193,7 +193,7 @@ local function write_cache(tbl)
 			ip, v.ts or 0, (v.mac or ""):gsub('[^%da-fA-F:]', ""), (v.name or ""):gsub('["\\]', ""))
 	end
 	parts[#parts + 1] = "}\n"
-	local tmp = CACHE_FILE .. ".tmp." .. tostring(os.time())
+	local tmp = CACHE_FILE .. ".tmp." .. tostring(nixio.getpid()) .. "." .. tostring(os.time())
 	local f = io.open(tmp, "w")
 	if f then
 		f:write(table.concat(parts))

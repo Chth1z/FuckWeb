@@ -121,7 +121,7 @@ export function shape(dev, rate) {
 
 	let kbit = rate * 1000, burst = max(3000, rate * 500);
 	let bands = [
-		{ id: "10", pct: 20, target: 2, limit: 256, mem: 262144 },
+		{ id: "10", pct: 20, target: 2, limit: 256, mem: 524288 },
 		{ id: "20", pct: 50, target: 5, limit: 1024, mem: 1048576 },
 		{ id: "30", pct: 30, target: 5, limit: 1024, mem: 1048576 },
 	];
@@ -176,15 +176,15 @@ function shaper(cfg, lan) {
 	let up = slow ? max(1, int(speed * cfg.pct / 100)) : 0;
 	let down = slow && cfg.pct_down > 0 ? max(1, int(speed * cfg.pct_down / 100)) : 0;
 	if (shape(dev, up) && up) {
-		core.act(sprintf("ip link set dev %s txqueuelen 128", dev));
+		core.act(sprintf("ip link set dev %s txqueuelen 128", core.shq(dev)));
 		core.event("SHAPER %s up %d Mbit (phy %d)", dev, up, speed);
 	}
 	if (shape(lan, down) && down)
 		core.event("SHAPER %s down %d Mbit (phy %d)", lan, down, speed);
 	if (!slow && speed > 100) {
-		let qout = core.sh("tc qdisc show dev " + dev).out;
+		let qout = core.sh("tc qdisc show dev " + core.shq(dev)).out;
 		if (index(qout, "htb") >= 0 || !match(qout, /fq_codel/))
-			core.act(sprintf("tc qdisc replace dev %s root fq_codel noecn", dev));
+			core.act(sprintf("tc qdisc replace dev %s root fq_codel noecn", core.shq(dev)));
 	}
 }
 

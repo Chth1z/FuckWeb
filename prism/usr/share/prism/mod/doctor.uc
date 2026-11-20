@@ -58,14 +58,16 @@ export function run(ctx) {
 		fs.stat("/usr/share/nftables.d/ruleset-post/30-prism-guard.nft") &&
 		uci.get("firewall", "@defaults[0]", "auto_includes") != "0");
 	fail("privacy_direct_mark", section_has(tbl_prism, "chain direct_ok", "0x20000000"));
-	fail("privacy_no_offload", uci.get("firewall", "@defaults[0]", "flow_offloading") != "1" &&
-		uci.get("firewall", "@defaults[0]", "flow_offloading_hw") != "1", "offload would bypass per-packet privacy checks");
+	let no_offload = uci.get("firewall", "@defaults[0]", "flow_offloading") != "1" &&
+		uci.get("firewall", "@defaults[0]", "flow_offloading_hw") != "1";
+	fail("privacy_no_offload", no_offload, no_offload ? "" : "offload would bypass per-packet privacy checks");
 	fail("strands_healthy", n > 0, sprintf("%d of %d", n, length(ctx.strands)));
 	if (n > 1) {
 		fail("weave", section_has(tbl_prism, "chain weave", "ct state new"));
 		fail("pattern", nft_has("map inet prism pattern", " : "));
 		if (ctx.site.aggregate && fs.stat("/proc/sys/net/mptcp/enabled")) {
-			caution("mptcp_enabled", core.read("/proc/sys/net/mptcp/enabled") == "1", "net.mptcp.enabled != 1");
+			let mptcp_on = core.read("/proc/sys/net/mptcp/enabled") == "1";
+			caution("mptcp_enabled", mptcp_on, mptcp_on ? "" : "net.mptcp.enabled != 1");
 			let mlim = core.sh("ip mptcp limits show").out;
 			let eps = facts.ip("mptcp endpoint show");
 			caution("mptcp_pool", int(match(mlim, /subflows\s+([0-9]+)/)?.[1] ?? "0") >= 1 && length(eps) >= 2,
@@ -99,26 +101,32 @@ export function run(ctx) {
 	// --- DNS and DHCP
 	fail("smartdns", core.pidof("smartdns"));
 	fail("smartdns_loopback", index(fs.readfile(core.outpath("smartdns.conf")) ?? "", "bind 127.0.0.1:") == 0);
-	fail("smartdns_responsive", ctx.dns_responsive ?? dns_responsive(cfg.dns.port), "SmartDNS query timeout");
+	let dns_ok = ctx.dns_responsive ?? dns_responsive(cfg.dns.port);
+	fail("smartdns_responsive", dns_ok, dns_ok ? "" : "SmartDNS query timeout");
 	fail("dnsmasq", core.pidof("dnsmasq"));
 	fail("dhcp_listen", listening("0.0.0.0:67 "));
 	fail("dhcp_lan", uci.get("dhcp", "lan", "dhcpv4") == "server" && uci.get("dhcp", "lan", "ignore") != "1");
-	caution("dhcp_hook", fs.stat("/etc/hotplug.d/dhcp/50-prism") &&
-		!!match(core.sh("grep -l '^dhcp-script=' /var/etc/dnsmasq.conf.* 2>/dev/null").out, /dnsmasq\.conf/),
-		"dnsmasq missing dhcp-script (restart dnsmasq)");
+	let hook_ok = fs.stat("/etc/hotplug.d/dhcp/50-prism") &&
+		!!match(core.sh("grep -l '^dhcp-script=' /var/etc/dnsmasq.conf.* 2>/dev/null").out, /dnsmasq\.conf/);
+	caution("dhcp_hook", hook_ok, hook_ok ? "" : "dnsmasq missing dhcp-script (restart dnsmasq)");
 	let fwd = uci.get("dhcp", "@dnsmasq[0]", "server");
-	fail("dns_forward", join(" ", type(fwd) == "array" ? fwd : [ fwd ]) == sprintf("127.0.0.1#%d", cfg.dns.port), "dnsmasq must forward to SmartDNS only");
+	let want_fwd = sprintf("127.0.0.1#%d", cfg.dns.port);
+	let fwd_ok = join(" ", type(fwd) == "array" ? fwd : [ fwd ]) == want_fwd;
+	fail("dns_forward", fwd_ok, fwd_ok ? want_fwd : "dnsmasq must forward to SmartDNS only");
 
 	// --- uplink copper and shaper
 	let dev = cfg.shaper.device, speed = int(core.read("/sys/class/net/" + dev + "/speed") ?? "0");
 	let copper = facts.carrier(dev);
 	fail("uplink_carrier", copper, dev);
 	if (cfg.shaper.mode != "off" && copper) {
-		let qdisc = core.sh("tc qdisc show dev " + dev).out;
-		if (speed == 10 || speed == 100)
-			fail("shaper", index(qdisc, "htb") >= 0, sprintf("%s at %d Mbit has no shaper", dev, speed));
-		else
+		let qdisc = core.sh("tc qdisc show dev " + core.shq(dev)).out;
+		if (speed == 10 || speed == 100) {
+			let shaper_ok = index(qdisc, "htb") >= 0;
+			fail("shaper", shaper_ok, shaper_ok ? sprintf("%s htb (%dM)", dev, speed) : sprintf("%s at %d Mbit has no shaper", dev, speed));
+		}
+		else {
 			caution("shaper", speed <= 0 || !!match(qdisc, /htb|fq_codel|cake/));
+		}
 	}
 
 	// --- Wi-Fi
@@ -136,7 +144,7 @@ export function run(ctx) {
 		});
 		for (let ap in cfg.wifi.ap) {
 			fail("ap:" + ap, ap_forwarding(ap));
-			let m = match(core.sh("iw dev " + ap + " info").out, /ssid ([^\n]+)/);
+			let m = match(core.sh("iw dev " + core.shq(ap) + " info").out, /ssid ([^\n]+)/);
 			fail("ap_ssid:" + ap, m && m[1] in ssids, m ? m[1] : "no ssid");
 		}
 		let sta = cfg.wifi.backup_sta;

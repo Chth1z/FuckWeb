@@ -2,8 +2,8 @@
  * PRISM 5.6 — Thick Rainbow-Bar Overlaid Smooth Phosphor SVG Oscilloscope
  * ============================================================================ */
 
-import { S, fmtRate, fmtRateCompact, fmtClock } from '../state.js?v=5.8.0';
-import { $, svgEl, setTxt } from '../dom.js?v=5.8.0';
+import { S, fmtRate, fmtRateCompact, fmtClock } from '../state.js?v=5.8.1';
+import { $, svgEl, setTxt } from '../dom.js?v=5.8.1';
 
 let lastSig = '';
 let chartLimit = 360;

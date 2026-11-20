@@ -76,13 +76,30 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
 
 ```typescript
 interface PrismStatusResponse {
-  version: string;          // "5.8.0"
+  version: string;          // "5.8.1"
   ts: number;               // Current Unix timestamp (seconds)
   reconciled: number;       // Timestamp of last full `prism reconcile` pass
   ok: boolean;              // True if all `fail`-level doctor checks pass
   fail: string[];           // IDs of failing critical checks (empty when healthy)
   warn: string[];           // IDs of warning checks
   led: "green" | "yellow" | "orange" | "red";
+  led_state: {              // Live optical LED engine state & sysfs hardware readout
+    mode: "prism" | "aurora" | "tunnel" | "netdev" | "stealth" | "off";
+    bright: number;
+    night_dim: number;
+    alert: string;
+    quarantine: number;
+    demo: boolean;
+    status_rgb: number[];
+    network_rgb: number[];
+    status_hex: string;
+    network_hex: string;
+    status_bright: number;
+    network_bright: number;
+    status_trig: string;
+    network_trig: string;
+    hw: { status: object | null; network: object | null };
+  };
   lan_ip: string;           // Router LAN IPv4, e.g. "192.168.16.1"
   role: "primary" | "backup" | "none";
 
@@ -93,6 +110,7 @@ interface PrismStatusResponse {
   rate_up: number;          // Total instantaneous upload rate across all strands (bytes/s)
   rate_ewma: number;        // Total EWMA-smoothed download rate (bytes/s)
   rate_up_ewma: number;     // Total EWMA-smoothed upload rate (bytes/s)
+  rate_peak: number;        // Rolling history peak download rate (bytes/s)
   down_bytes: number;       // Cumulative download bytes across all strands
   up_bytes: number;         // Cumulative upload bytes across all strands
 
@@ -130,6 +148,11 @@ interface PrismStatusResponse {
     enabled: boolean;       // Always true (locked)
     running: boolean;       // True if mihomo process is alive and tproxy port is bound
     on: boolean;            // True if nftables is diverting non-domestic traffic to mihomo
+    restored: boolean;      // True once saved per-device relay selections are restored in RAM
+    pid: string;            // Live mihomo PID string
+    mixed_port: number;     // Localhost mixed proxy port (7890)
+    tproxy_port: number;    // Base TProxy port (61235; per-device ports start at 61236)
+    controller_port: number;// External controller / Zashboard port (9090)
     relays: number;         // Total number of loaded relay proxies
     fail_open: boolean;     // Always false (locked fail-closed privacy cage)
     canary_ms: number;      // Last canary probe delay in ms
@@ -141,6 +164,29 @@ interface PrismStatusResponse {
     smartdns: boolean;      // True if smartdns is running
     port: number;           // Local SmartDNS port (6053)
   };
+
+  // MPTCP path-manager endpoint pool
+  mptcp: {
+    enabled: boolean;
+    subflows: number;       // Additional MP_JOIN subflow limit (up to 5)
+    endpoints: Array<{ id: number; dev: string; ip: string }>;
+  };
+
+  // Bidirectional kernel, Mihomo and QoS branch telemetry (sampled every ~4s)
+  telemetry: {
+    branches: {
+      vip: { down_bps: number; up_bps: number; bps: number; down_bytes: number; up_bytes: number; bytes: number; packets: number };
+      tunnel: { down_bps: number; up_bps: number; bps: number; down_bytes: number; up_bytes: number; bytes: number; conns: number; reachable: boolean; k_down_bps: number; k_up_bps: number; k_bps: number; k_down_bytes: number; k_up_bytes: number; k_bytes: number; k_packets: number };
+      direct: { down_bps: number; up_bps: number; bps: number; down_bytes: number; up_bytes: number; bytes: number; packets: number };
+    };
+    classify: { bps: number; packets: number; bytes: number };
+    qos: {
+      mode: "htb" | "fq_codel";
+      down_cap_mbps: number;
+      up_cap_mbps: number;
+      bands: Record<"1:10" | "1:20" | "1:30", { bps: number; down_bps: number; up_bps: number; bytes: number; packets: number; drops: number; overlimits: number }>;
+    };
+  } | null;
 
   // Host system resources
   sys: {
@@ -301,9 +347,9 @@ interface PrismRulesResponse {
     bytes: number;
   }>;
   sizes: {
-    domestic4: number;      // Number of CIDRs in domestic4.list (~6451)
-    tunnel4: number;        // Number of CIDRs in tunnel4.list (~26)
-    tunnel_domains: number; // Number of forced-tunnel domains (~42)
+    domestic4: number;      // Number of CIDRs in domestic4.list (~6395)
+    tunnel4: number;        // Number of CIDRs in tunnel4.list (~18)
+    tunnel_domains: number; // Number of forced-tunnel domains (~49)
     tunnel4_dns: number;    // Live SmartDNS-populated IPs in `@tunnel4_dns` (cached 20s)
     domestic4_dns: number;  // Live SmartDNS-populated IPs in `@domestic4_dns` (cached 20s)
     relay4: number;         // Live resolved relay server IPs in `@relay4` (cached 20s)
@@ -355,6 +401,9 @@ interface PrismConfigResponse {
 >   - `weave.strand_kbit`: `0 .. 1000000` (`0` = default 10 Mbps CIR; peak ceiling under `headroom`)
 >   - `dns.ads`: `0 .. 1` (SmartDNS ad blocking)
 >   - `main.mss`: `0 .. 1460` (TCP MSS clamping, default `1440`)
+>   - `led.mode`: `"prism" | "aurora" | "tunnel" | "netdev" | "stealth" | "off"`
+>   - `led.bright`: `5 .. 100` (peak brightness percentage)
+>   - `led.night_dim`: `0 .. 1` (automatic dimming between 22:00 and 08:00)
 
 ---
 

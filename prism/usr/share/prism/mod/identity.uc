@@ -1010,7 +1010,8 @@ export function view(cfg, base_devices, rate_map) {
 			let pick = best_live ?? primary;
 			best_ip = pick?.ip || p.fp?.last_ip || "";
 			host = pick?.host || (p.fp?.names?.[0] ?? "");
-			link = pick?.link || (p.fp?.media?.[0] ?? "wired");
+			let media_hint = p.fp?.media?.[0] ?? "";
+			link = (pick?.online && length(pick?.link)) ? pick.link : (media_hint || pick?.link || "wired");
 			signal = pick?.signal ?? 0;
 			let active_mac = pick?.mac || p.anchor_mac;
 			push(devices_out, {
