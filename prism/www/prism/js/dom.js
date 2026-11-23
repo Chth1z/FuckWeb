@@ -2,7 +2,7 @@
  * PRISM 5.0 — DOM Builders, Segmented Block Meters & Log Renderers
  * ============================================================================ */
 
-import { fmtClock, spectralColor, desatObsidianRgb, opticalLoad } from './state.js?v=5.9.0';
+import { fmtClock, spectralColor, desatObsidianRgb, opticalLoad } from './state.js?v=5.9.1';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));

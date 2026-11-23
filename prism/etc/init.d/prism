@@ -31,7 +31,7 @@ start_service() {
 
 	if [ -x "$RUN/mihomo" ] && [ -s "$RUN/mihomo.yaml" ]; then
 		procd_open_instance mihomo
-		procd_set_param env SAFE_PATHS=/etc/prism
+		procd_set_param env SAFE_PATHS=/etc/prism GOMEMLIMIT=96MiB
 		procd_set_param command "$RUN/mihomo" -d "$RUN" -f "$RUN/mihomo.yaml"
 		procd_set_param respawn 300 5 0
 		procd_set_param limits nofile="65535 65535"
@@ -51,5 +51,5 @@ reload_service() {
 
 service_triggers() {
 	procd_add_reload_trigger prism
-	procd_add_raw_trigger "interface.*" 3000 "$PRISM" kick
+	procd_add_raw_trigger "interface.*" 1500 "$PRISM" kick
 }

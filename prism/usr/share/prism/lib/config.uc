@@ -76,7 +76,7 @@ const SCHEMA = {
 			"https://223.6.6.6/dns-query dns.alidns.com",
 		],
 		ads: 1,
-		cache_size: 32768,
+		cache_size: 16384,
 		rr_ttl_min: 300,
 		prefetch: 1,
 		serve_expired: 1,

@@ -5,8 +5,8 @@
  * bands (no curves, no core lines, no particles), zero shadowBlur lag.
  * ============================================================================ */
 
-import { S, spectralColor, parseRgb, mixWhiteRgb, desatObsidianRgb, fmtRate } from '../state.js?v=5.9.0';
-import { $ } from '../dom.js?v=5.9.0';
+import { S, spectralColor, parseRgb, mixWhiteRgb, desatObsidianRgb, fmtRate } from '../state.js?v=5.9.1';
+import { $ } from '../dom.js?v=5.9.1';
 
 let rafId = null;
 let needsRedraw = true;

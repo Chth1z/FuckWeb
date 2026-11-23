@@ -2,9 +2,9 @@
  * PRISM — View 03: Full-Page Gapless 21-Ch Pure Color Matrix & Slot Bars
  * ============================================================================ */
 
-import { S, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRateCompact } from '../state.js?v=5.9.0';
-import { $, $$, el, svgEl, setTxt, setCls, setTitle, setVar, setStyleProp, renderSlotMeter } from '../dom.js?v=5.9.0';
-import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.9.0';
+import { S, SPECTRUM_STOPS, spectralColor, mixWhiteRgb, desatObsidianRgb, fmtRateCompact } from '../state.js?v=5.9.1';
+import { $, $$, el, svgEl, setTxt, setCls, setTitle, setVar, setStyleProp, renderSlotMeter } from '../dom.js?v=5.9.1';
+import { renderOscilloscope, setChartLimit, getChartLimit } from '../canvas/oscilloscope.js?v=5.9.1';
 
 let hoverStrandId = null;
 const strandMetaById = new Map();

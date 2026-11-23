@@ -230,6 +230,7 @@ function apply_nft(ctx) {
 	}
 	// The pattern and vip_lane maps belong to the weave. They ride along only
 	// when emptied by a rebuild or no longer valid for the healthy set.
+	let prev_vip = weave.current_vip();
 	let lay_pattern = full || ctx.weave.repair;
 	if (lay_pattern) {
 		script += weave.script("pattern", ctx.weave.pattern);
@@ -256,8 +257,17 @@ function apply_nft(ctx) {
 		core.event("GUARD updated (fail_open=0)");
 	}
 	ctx.st.nft = digests;
-	if (lay_pattern)
+	if (lay_pattern) {
+		let prev_id = (prev_vip[0] ?? 0) & 0xff;
+		let next_id = (ctx.weave.vip[0] ?? 0) & 0xff;
+		if (!full && prev_id > 0 && next_id > 0 && prev_id != next_id) {
+			let find_s = (id) => filter(ctx.strands ?? [], (s) => s.id == id)[0];
+			let ps = find_s(prev_id), ns = find_s(next_id);
+			let nms = int(((ns?.ttfb ?? 0) * 1000) + 0.5);
+			core.event("VIP %s -> %s (%dms)", ps?.dev ?? ("#" + prev_id), ns?.dev ?? ("#" + next_id), nms);
+		}
 		weave.remember(ctx.weave.pattern, ctx.weave.vip);
+	}
 	if (full)
 		core.event("NFT rebuilt");
 	else if (length(changed))
@@ -399,9 +409,9 @@ export function mptcp_candidates(ctx, current_eps) {
 		let sa = score(a), sb = score(b);
 		return sa < sb ? -1 : (sa > sb ? 1 : a.id - b.id);
 	});
-	// Separate entry (<12% rel loss) and eviction (<30% rel loss) thresholds
-	// so a single transient HTTP probe timeout (loss=0.25) or normal upstream
-	// CDN wave jitter never churns live MP_JOIN subflows.
+	// Keep active shared-wire endpoints sticky across transient evening probe
+	// jitter; evict only on health/VIP/IP change, sustained loss (>=30%), or
+	// extreme latency stalls. Fresh additions still rank strictly by loss+TTFB.
 	let clean = filter(sorted, (l) => rel_loss(l) < 0.12);
 	let pool = length(clean) >= 2 ? clean : sorted;
 	let keepable = filter(sorted, (l) => rel_loss(l) < 0.30);
@@ -412,7 +422,7 @@ export function mptcp_candidates(ctx, current_eps) {
 		if (t < min_ttfb)
 			min_ttfb = t;
 	}
-	let ttfb_ceil = max(min_ttfb + 0.250, min_ttfb * 3.0);
+	let ttfb_ceil = max(min_ttfb + 1.500, min_ttfb * 6.0);
 
 	let by_id = {};
 	for (let l in keep_pool)

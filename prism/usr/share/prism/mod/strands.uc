@@ -129,12 +129,21 @@ export function discover(ctx) {
 // --- health ----------------------------------------------------------------
 
 // Bound concurrent requests and measure time to first byte after DNS resolution.
+export function smooth_ttfb(prev, sample) {
+	if (!(prev > 0))
+		return sample;
+	// Damp single-probe SYN/HTTP retransmit spikes so transient shared-wire
+	// jitter does not distort strand ranking while sustained shifts converge.
+	let eff = min(sample, max(prev * 2.0, prev + 0.25));
+	return 0.25 * eff + 0.75 * prev;
+};
+
 function probe(set, cfg) {
 	let res = {};
 	if (!length(set))
 		return res;
 	let cmds = [];
-	const WAVE_SIZE = 7;
+	const WAVE_SIZE = 11;
 	for (let i = 0; i < length(set); i++) {
 		let s = set[i];
 		push(cmds, sprintf(
@@ -205,7 +214,7 @@ export function check(ctx) {
 			if (h.loss < 0.0005)
 				h.loss = 0.0;
 			if (r.code == cfg.probe_expect) {
-				h.ttfb = h.ttfb > 0 ? 0.35 * r.ttfb + 0.65 * h.ttfb : r.ttfb;
+				h.ttfb = smooth_ttfb(h.ttfb, r.ttfb);
 				h.confirmed = true;
 			}
 			h.probed = now;

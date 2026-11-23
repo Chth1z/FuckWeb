@@ -76,7 +76,7 @@ All requests are sent as HTTP `POST` to `/ubus` with `Content-Type: application/
 
 ```typescript
 interface PrismStatusResponse {
-  version: string;          // "5.9.0"
+  version: string;          // "5.9.1"
   ts: number;               // Current Unix timestamp (seconds)
   reconciled: number;       // Timestamp of last full `prism reconcile` pass
   ok: boolean;              // True if all `fail`-level doctor checks pass

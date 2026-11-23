@@ -37,7 +37,7 @@ flowchart TB
     end
 
     subgraph QoSLayer["雙向 HTB + fq_codel 分級佇列"]
-        QoS["wan 上行 95% / br-lan 下行 90% HTB (burst ≈ 4ms)<br/>三類 fq_codel（2/5/5 ms target），單向總佇列記憶體上限 2.50 MiB"]
+        QoS["wan 上行 95% / br-lan 下行 90% HTB (burst ≈ 4ms)<br/>三類 fq_codel（2/5/5 ms target），單向總佇列記憶體上限 8 MiB"]
     end
 
     LAN --> Admit --> RelayPort --> SplitCheck
@@ -49,18 +49,18 @@ flowchart TB
 
 ---
 
-## 二、 現行架構重點（5.9.0）
+## 二、 現行架構重點（5.9.1）
 
 1. **單次封包計帳與雙向獨立 Burst-Harvest（[weave.uc](prism/usr/share/prism/mod/weave.uc) & [prism.nft.ut](prism/usr/share/prism/tpl/prism.nft.ut)）**
-   - `postrouting` 僅在單一規則 `oifname @strands_up jump acct_wan_up` 累加出站計數，消除重複計帳；每條線路上下行獨立依 `clamp(tokens + (CIR - rate) * dt, 0, 1MB)` 積分，確保低於 CIR 的持續流量不再虛耗突發信用，再依剩餘容量、可用突發信用與 HTTP 探測品質分配 `@pattern` 權重。
-   - `@vip_lane`（遊戲/實時流量與 `<256B` 交互封包）以 TTFB、丟包與負載加權並保留黏滯遲滯，優先避開現役 MPTCP 端點；當健康線路 $\ge 4$ 條時從 `@pattern` 普通收割池排除。
+   - `postrouting` 在單一規則 `oifname @strands_up jump acct_wan_up` 累加出站計數；每條線路上下行獨立依 `clamp(tokens + (CIR - rate) * dt, 0, 1MB)` 積分，再依剩餘容量、可用突發信用與阻尼平滑後的 HTTP 探測品質分配 `@pattern` 權重。
+   - `@vip_lane`（遊戲/實時流量與 `<=1500B` VIP 封包）依 CIR 比例滯回與 90 秒最小駐留冷卻穩定鎖定低延遲非 MPTCP 線路；當健康線路 $\ge 4$ 條時從 `@pattern` 收割池排除，與在役 MPTCP 端點保持互斥。
 2. **原子化防洩漏與嚴格模式 A 設備隔離（[kernel.uc](prism/usr/share/prism/mod/kernel.uc)、[guard.uc](prism/usr/share/prism/mod/guard.uc)、[identity.uc](prism/usr/share/prism/mod/identity.uc)）**
    - 強制 `fail_open = 0` 與 `remainder = "tunnel"`，主規則與 `inet prism_guard` 於單一 `nft -f` 交易同步更新，開機尚未完成第一輪協調前即由 [30-prism-guard.nft](prism/usr/share/nftables.d/ruleset-post/30-prism-guard.nft) 預設 `drop` 阻斷未授權轉發。
    - 透過 `@relay_ports`（`ipv4_addr . inet_proto . inet_service`）僅放行中繼協定與埠，若中繼 IP 與 `@domestic4` 重疊，其餘連接埠仍在 `@domestic4` 前強制轉入 `divert`。
    - DHCP 熱插拔經 [50-prism](prism/etc/hotplug.d/dhcp/50-prism) → [dhcp.uc](prism/usr/share/prism/bin/dhcp.uc) 記錄指紋並觸發協調，使 `@verified_pairs` 與 `prism_guard` 永遠同步更新，防止靜態搶佔或跨設備串線。
 3. **低開銷控制面與無 Swap 記憶體調校（[facts.uc](prism/usr/share/prism/lib/facts.uc)、[prismd.uc](prism/usr/share/prism/prismd.uc)、[api.uc](prism/usr/share/prism/mod/api.uc)、[host.uc](prism/usr/share/prism/mod/host.uc)）**
-   - 以原生 `rtnl` 取代重複 `ip`/`brctl` 子行程，`series.uc` 使用 O(1) 環形緩衝區；設備掃描、QoS 統計與 Mihomo 輪詢改為 4 秒週期與非阻塞 `uloop.process`；`connections` 改為 `uloop.task` 背景串流讀取 `/proc/net/nf_conntrack` 前 400 大流並附帶單調時間戳。
-   - [99-prism.conf](prism/etc/sysctl.d/99-prism.conf) 與 [host.uc](prism/usr/share/prism/mod/host.uc) 針對 488 MB 無 Swap 路由器收斂預設 socket buffer（`212992`）、TCP 上限（`8 MiB`）、`nf_conntrack_max`（`65536`）、約 4 ms HTB burst 與單向 2.50 MiB（`512 KiB / 1 MiB / 1 MiB`）`fq_codel` 記憶體上限。
+   - 以原生 `rtnl` 查詢介面/鄰居/橋表，`series.uc` 使用 O(1) 環形緩衝區，24 小時 1 分鐘遙測按整分鐘邊界對齊；設備掃描、QoS 統計與 Mihomo 輪詢採用 4 秒週期與非阻塞 `uloop.process`；`connections` 透過 `uloop.task` 背景串流讀取 `/proc/net/nf_conntrack` 前 400 大流並附帶單調時間戳。
+   - [99-prism.conf](prism/etc/sysctl.d/99-prism.conf)、[host.uc](prism/usr/share/prism/mod/host.uc) 與 [init.d/prism](prism/etc/init.d/prism) 針對 488 MB 無 Swap 路由器配置 socket buffer（預設 `212992`，TCP 上限 `8 MiB`）、`nf_conntrack_max`（`65536`）、Mihomo `GOMEMLIMIT=96MiB`、SmartDNS 16,384 條目快取、約 4 ms HTB burst 與單向 8 MiB（`2 MiB / 4 MiB / 2 MiB`）`fq_codel` 佇列記憶體上限。
 
 ---
 

@@ -9,6 +9,7 @@ ucode -S -e '
 import * as a from "./mod/api.uc";
 import * as w from "./mod/weave.uc";
 import * as k from "./mod/kernel.uc";
+import * as st from "./mod/strands.uc";
 import * as s from "./lib/series.uc";
 import * as id from "./mod/identity.uc";
 import * as fs from "fs";
@@ -20,14 +21,29 @@ lane.up.now=0; w.update_buckets(load,0.25,1250000); assert(lane.bucket.tokens==3
 let strands=[{dev:"a",id:1},{dev:"b",id:2},{dev:"c",id:3}];
 let even=w.compose({policy:"even"},strands,{},7,[]);
 assert(join(",",sort(even))=="1,1,1,2,2,3,3");
-// Verify VIP and MPTCP hysteresis hold through CDN wave jitter & single transient timeout.
+// Verify TTFB spike damping, MPTCP evening-jitter stickiness, and VIP CIR/dwell hysteresis.
+let spk = st.smooth_ttfb(0.15, 1.18);
+assert(spk > 0.15 && spk < 0.25, "single SYN retransmit spike must be damped");
 let mpool=[];
-for (let i=1;i<=10;i++) push(mpool,{dev:i==1?"wan":"vwan"+(i-1),id:i,role:"primary",ip:"10.0.0."+i,gw:"10.0.0.1",http:204,ttfb:i<=4?0.19:0.08,loss:i==3?0.25:0});
+for (let i=1;i<=10;i++) push(mpool,{dev:i==1?"wan":"vwan"+(i-1),id:i,role:"primary",ip:"10.0.0."+i,gw:"10.0.0.1",http:204,ttfb:i<=4?0.95:0.15,loss:i==3?0.25:0});
 let cur_eps=map(slice(mpool,2,8),(x)=>({id:x.id,dev:x.dev,address:x.ip,subflow:true}));
 let kept=k.mptcp_candidates({site:{aggregate:true},weave:{vip:[2|0x100]},health:{healthy:mpool}},cur_eps);
-assert(join(",",map(kept,(x)=>x.id))=="3,4,5,6,7,8","mptcp churned on transient timeout or wave jitter");
-let vip_kept=w.select_vip(mpool,{},{"3":true},[2|0x100]);
-assert(vip_kept[0]==(2|0x100),"vip flapped on 110ms CDN wave jitter");
+assert(join(",",map(kept,(x)=>x.id))=="3,4,5,6,7,8","mptcp churned on transient timeout or evening wave jitter");
+mpool[2].loss=0.45;
+let evicted=k.mptcp_candidates({site:{aggregate:true},weave:{vip:[2|0x100]},health:{healthy:mpool}},cur_eps);
+assert(!(3 in map(evicted,(x)=>x.id)),"mptcp failed to evict persistently lossy strand");
+mpool[2].loss=0.25;
+let vip_load={ vwan1:{ down:{now:560000,rate:560000}, up:{now:0,rate:0}, bucket:{tokens:1000000} } };
+let vip_kept=w.select_vip(mpool,vip_load,{"3":true},[2|0x100],{cir:1250000,aggregate:true});
+assert(vip_kept[0]==(2|0x100),"vip flapped on 4.5Mbps load or evening jitter");
+vip_load.vwan1={ down:{now:800000,rate:820000}, up:{now:0,rate:0}, bucket:{tokens:900000} };
+let vip_dwell=w.select_vip(mpool,vip_load,{"3":true},[2|0x100],{cir:1250000,aggregate:true,dwell_active:true});
+assert(vip_dwell[0]==(2|0x100),"vip ignored dwell cooldown on non-severe load");
+let vip_moved=w.select_vip(mpool,vip_load,{"3":true},[2|0x100],{cir:1250000,aggregate:true,dwell_active:false});
+assert(vip_moved[0]!=(2|0x100),"vip failed to move off congested strand after dwell");
+vip_load.vwan1={ down:{now:1400000,rate:1150000}, up:{now:0,rate:0}, bucket:{tokens:100000} };
+let vip_sev=w.select_vip(mpool,vip_load,{"3":true},[2|0x100],{cir:1250000,aggregate:true,dwell_active:true});
+assert(vip_sev[0]!=(2|0x100),"vip failed to evacuate saturated strand during dwell");
 let h=s.create(3); for(let i=1;i<=5;i++) s.add(h,i,i*2,i,i>=3?{b:i}:{a:i},{});
 let hist=s.dump(h,2); assert(join(",",hist.ts)=="4,5" && join(",",hist.strands.a)=="0,0" && join(",",hist.strands.b)=="4,5");
 let mac="02:00:00:00:00:01", ip="10.200.0.2", p={anchor_mac:mac,macs:[{mac}],policy:"auto",fp:{last_ip:ip}};

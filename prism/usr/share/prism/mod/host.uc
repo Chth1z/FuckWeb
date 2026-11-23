@@ -121,9 +121,9 @@ export function shape(dev, rate) {
 
 	let kbit = rate * 1000, burst = max(3000, rate * 500);
 	let bands = [
-		{ id: "10", pct: 20, target: 2, limit: 256, mem: 524288 },
-		{ id: "20", pct: 50, target: 5, limit: 1024, mem: 1048576 },
-		{ id: "30", pct: 30, target: 5, limit: 1024, mem: 1048576 },
+		{ id: "10", pct: 20, target: 2, limit: 512, mem: 2097152 },
+		{ id: "20", pct: 50, target: 5, limit: 1024, mem: 4194304 },
+		{ id: "30", pct: 30, target: 5, limit: 1024, mem: 2097152 },
 	];
 	let classes = {}, leaves = {};
 	if (ours) {

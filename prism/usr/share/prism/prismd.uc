@@ -24,7 +24,8 @@ import * as api from "./mod/api.uc";
 const PRISM = "/usr/sbin/prism";
 const STATUS = core.RUN + "/status.json";
 const QOS_BANDS = [ "1:10", "1:20", "1:30" ];
-const DEBOUNCE_MS = 2000;
+const DEBOUNCE_MS = 1000;
+const VIP_DWELL_SEC = 90;
 const HISTORY = 720;                    // samples kept (2s cadence -> 24 min window)
 const METRICS_CAP = 1440;               // 1-minute rollup ring buffer (24h window)
 const METRICS_CADENCE = 60;             // seconds per rollup sample
@@ -51,7 +52,7 @@ let acct = {
 	mihomo: { reachable: false, down_bytes: 0, up_bytes: 0, down_bps: 0, up_bps: 0, conns: 0, ts: 0 },
 };
 let controller_busy = {}, proxies = null, selection_epoch = 0;
-let sampled = 0, series_at = 0, pattern_at = 0, last_rate = 0, last_down = 0;
+let sampled = 0, series_at = 0, pattern_at = 0, vip_at = 0, last_rate = 0, last_down = 0;
 let running = false, again = false, first = true, tunnel_ready_for_sync = false;
 let demo_active = false, demo_step = 0, demo_timer = null;
 let reconcile_timer, sample_timer;
@@ -113,7 +114,12 @@ function relay(now) {
 	let mptcp_ids = {};
 	for (let e in snapshot?.mptcp?.endpoints ?? [])
 		mptcp_ids[e.id] = true;
-	let next_vip = weave.select_vip(strands, load, mptcp_ids, vip_lane);
+	let cir = cfg.weave.strand_kbit > 0 ? cfg.weave.strand_kbit * 125 : weave.CIR_BYTES_S;
+	let next_vip = weave.select_vip(strands, load, mptcp_ids, vip_lane, {
+		cir,
+		aggregate: !!snapshot?.site?.aggregate,
+		dwell_active: vip_at > 0 && (now - vip_at) < VIP_DWELL_SEC,
+	});
 	let next = weave.compose(cfg.weave, strands, load, n, next_vip);
 	let vip_changed = (next_vip[0] ?? 0) != (vip_lane[0] ?? 0);
 	let d = pattern_diff(pattern, next);
@@ -137,6 +143,7 @@ function relay(now) {
 					let nms = int(((ns?.ttfb ?? 0) * 1000) + 0.5);
 					core.event("VIP %s -> %s (%dms)", ps?.dev ?? ("#" + prev_id), ns?.dev ?? ("#" + next_id), nms);
 				}
+				vip_at = now;
 			}
 			pattern = next;
 			vip_lane = next_vip;
@@ -662,12 +669,20 @@ function make_minute_row(acc, now_ts) {
 
 function record_minute(now_mono, down_now, up_now) {
 	let now_ts = time();
+	let minute_id = int(now_ts / METRICS_CADENCE);
 	let h_cnt = length(healthy());
 	let hs = host_sys;
 	let mem_mb = hs ? int((hs.mem_available_kb ?? 0) / 1024) : 0;
 	let ct_cnt = hs?.conntrack?.count ?? 0;
+	if (minute_acc && (minute_id > minute_acc.minute_id || now_mono - minute_acc.started_mono >= METRICS_CADENCE)) {
+		let row = make_minute_row(minute_acc, now_ts);
+		metrics_ring.rows[metrics_ring.next] = row;
+		metrics_ring.next = (metrics_ring.next + 1) % METRICS_CAP;
+		minute_acc = null;
+	}
 	if (!minute_acc) {
 		minute_acc = {
+			minute_id,
 			started_mono: now_mono,
 			samples: 0, host_samples: 0,
 			down_sum: 0, up_sum: 0, down_peak: 0, up_peak: 0,
@@ -693,12 +708,6 @@ function record_minute(now_mono, down_now, up_now) {
 		if (hs.temp_c != null && (a.temp_max == null || hs.temp_c > a.temp_max)) a.temp_max = hs.temp_c;
 		if (mem_mb > 0 && (a.mem_min_mb == 0 || mem_mb < a.mem_min_mb)) a.mem_min_mb = mem_mb;
 		if (ct_cnt > a.ct_max) a.ct_max = ct_cnt;
-	}
-	if (now_mono - a.started_mono >= METRICS_CADENCE) {
-		let row = make_minute_row(a, now_ts);
-		metrics_ring.rows[metrics_ring.next] = row;
-		metrics_ring.next = (metrics_ring.next + 1) % METRICS_CAP;
-		minute_acc = null;
 	}
 }
 
@@ -924,7 +933,10 @@ reconcile = function() {
 			snapshot = core.load_json(STATUS, snapshot);
 			tunnel_ready_for_sync = !!(snapshot?.tunnel?.running && snapshot?.tunnel?.restored);
 			pattern = weave.current();
-			vip_lane = weave.current_vip();
+			let next_vip = weave.current_vip();
+			if ((next_vip[0] ?? 0) != (vip_lane[0] ?? 0))
+				vip_at = monotonic();
+			vip_lane = next_vip;
 			relay(monotonic());
 			if (!demo_active)
 				led.tick(cfg, { rate_bytes: last_rate });
@@ -939,7 +951,7 @@ reconcile = function() {
 		}
 		if (again) {
 			again = false;
-			kick(DEBOUNCE_MS);
+			kick(300);
 		}
 	});
 	assert(child, "cannot start reconciler: " + uloop.error());

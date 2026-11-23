@@ -117,12 +117,12 @@ function loss_quality(rel) {
 }
 
 // Pick the lowest-loss, lowest-TTFB, uncongested strand for @vip_lane with
-// tight hysteresis: stays sticky during an active session while loss remains
-// clean, latency stays within max(best + 120ms, 2.2 * best_ttfb), and sustained
-// stray load stays well below the policer knee (2 Mbps). Prefers non-wan vwan*
-// strands when >= 4 strands are healthy, and gently avoids active MPTCP endpoints
-// when electing a fresh VIP so @vip_lane and MPTCP stay disjoint.
-export function select_vip(healthy, load, mptcp_ids, previous) {
+// CIR-scaled hysteresis and minimum-dwell protection: stays sticky while loss
+// remains clean, latency stays within hysteresis bounds (relaxed on shared-wire
+// aggregation), and traffic remains safely below the per-strand policer knee.
+// Prefers non-wan vwan* strands when >= 4 strands are healthy, and avoids
+// active MPTCP endpoints so @vip_lane and MPTCP stay disjoint.
+export function select_vip(healthy, load, mptcp_ids, previous, opts) {
 	if (!length(healthy))
 		return [];
 	let candidates = filter(healthy, (s) => s.http > 0);
@@ -150,6 +150,9 @@ export function select_vip(healthy, load, mptcp_ids, previous) {
 	if (min_ttfb >= 10.0)
 		min_ttfb = 0.035;
 
+	let cir = (opts?.cir && opts.cir > 0) ? opts.cir : CIR_BYTES_S;
+	let agg = !!opts?.aggregate;
+	let dwell = !!opts?.dwell_active;
 	let prev_raw = previous?.[0] ?? 0;
 	let prev_id = prev_raw & 0xff;
 	if (prev_id > 0) {
@@ -158,11 +161,15 @@ export function select_vip(healthy, load, mptcp_ids, previous) {
 			let ttfb = (cur.ttfb && cur.ttfb >= 0.008) ? cur.ttfb : 0.25;
 			let cur_now = max(load?.[cur.dev]?.down?.now ?? 0, (load?.[cur.dev]?.up?.now ?? 0) * 1.2);
 			let cur_ewma = max(load?.[cur.dev]?.down?.rate ?? 0, (load?.[cur.dev]?.up?.rate ?? 0) * 1.2);
-			let limit = max(min_ttfb + 0.120, min_ttfb * 2.2);
+			let cur_tok = load?.[cur.dev]?.bucket?.tokens;
+			let limit = agg ? max(min_ttfb + 0.800, min_ttfb * 5.0) : max(min_ttfb + 0.300, min_ttfb * 3.0);
 			let loss_ok = rel_loss(lb, cur) <= max(0.05, lb.floor * 0.5 + 0.04);
-			let load_ok = !(cur_ewma >= 250000 && cur_now >= 200000) && cur_now < 650000;
+			let severe_load = (cur_ewma >= cir * 0.85 && cur_now >= cir * 0.75) ||
+				cur_now >= cir * 1.10 || (cur_tok != null && cur_tok <= BURST_MAX * 0.15);
+			let load_ok = !(cur_ewma >= cir * 0.60 && cur_now >= cir * 0.50) &&
+				cur_now < cir * 0.85 && (cur_tok == null || cur_tok > BURST_MAX * 0.25);
 			let role_ok = !prefer_vwan || cur.id != 1 || best.id == 1;
-			if (loss_ok && ttfb <= limit && load_ok && role_ok)
+			if (loss_ok && role_ok && ((dwell && !severe_load) || (ttfb <= limit && load_ok)))
 				return [ cur.id | MARK_VIP, cur.id | MARK_VIP ];
 		}
 	}
@@ -342,7 +349,8 @@ export function plan(ctx) {
 		return { slots: 0, pattern: [], vip, repair: length(current()) > 0 || (current_vip()[0] ?? 0) != (vip[0] ?? 0), anchor_ids: [] };
 	}
 	let have = current(), have_vip = current_vip();
-	let vip = select_vip(healthy, ctx.load ?? {}, ctx.mptcp_ids, have_vip);
+	let cir = ctx.cfg.weave.strand_kbit > 0 ? ctx.cfg.weave.strand_kbit * 125 : CIR_BYTES_S;
+	let vip = select_vip(healthy, ctx.load ?? {}, ctx.mptcp_ids, have_vip, { cir, aggregate: !!ctx.site?.aggregate });
 	let pool = harvest_pool(healthy, vip);
 	let n = nslots(ctx.cfg.weave, healthy);
 	let pool_ids = {};
