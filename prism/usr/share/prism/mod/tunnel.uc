@@ -241,11 +241,43 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 
 	let dns_proxy_tag = has_tw ? "TW-HOME" : (names[0] ?? "");
 	let dns_alt_tag = vps_proxy ?? dns_proxy_tag;
+	let tw_doh = length(dns_proxy_tag) ? [
+		"https://9.9.9.9/dns-query#" + dns_proxy_tag,
+		"https://149.112.112.112/dns-query#" + dns_proxy_tag,
+		"https://94.140.14.14/dns-query#" + dns_proxy_tag,
+		"https://208.67.222.222/dns-query#" + dns_proxy_tag,
+	] : null;
+	let ns_policy = {};
+	if (tw_doh && cfg.classify?.tunnel_domains) {
+		for (let d in core.lines(path(cfg.classify.tunnel_domains)))
+			ns_policy["+." + d] = tw_doh;
+	}
 	if (has_tw)
 		push(rules, "IN-NAME,mixed-in,TW-HOME");
 	else if (length(names))
 		push(rules, "IN-NAME,mixed-in," + names[0]);
 	push(rules, "MATCH,REJECT");
+
+	let dns_cfg = {
+		enable: true,
+		listen: "127.0.0.1:" + c.dns_port,
+		ipv6: false,
+		"enhanced-mode": "redir-host",
+		"cache-algorithm": "arc",
+		"use-hosts": false,
+		"use-system-hosts": false,
+		"respect-rules": false,
+		"default-nameserver": cn_doh,
+		"proxy-server-nameserver": cn_doh,
+		nameserver: length(dns_proxy_tag) ? [
+			"https://9.9.9.9/dns-query#" + dns_alt_tag,
+			"https://149.112.112.112/dns-query#" + dns_proxy_tag,
+			"https://94.140.14.14/dns-query#" + dns_alt_tag,
+			"https://208.67.222.222/dns-query#" + dns_proxy_tag,
+		] : cn_doh,
+	};
+	if (length(keys(ns_policy)))
+		dns_cfg["nameserver-policy"] = ns_policy;
 
 	return {
 		mode: "rule",
@@ -273,24 +305,7 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 		"external-controller": lan_ip + ":" + c.controller_port,
 		secret: secret(),
 		"external-ui": path(c.dashboard),
-		dns: {
-			enable: true,
-			listen: "127.0.0.1:" + c.dns_port,
-			ipv6: false,
-			"enhanced-mode": "redir-host",
-			"cache-algorithm": "arc",
-			"use-hosts": false,
-			"use-system-hosts": false,
-			"respect-rules": false,
-			"default-nameserver": cn_doh,
-			"proxy-server-nameserver": cn_doh,
-			nameserver: length(dns_proxy_tag) ? [
-				"https://9.9.9.9/dns-query#" + dns_alt_tag,
-				"https://149.112.112.112/dns-query#" + dns_proxy_tag,
-				"https://94.140.14.14/dns-query#" + dns_alt_tag,
-				"https://208.67.222.222/dns-query#" + dns_proxy_tag,
-			] : cn_doh,
-		},
+		dns: dns_cfg,
 		listeners,
 		proxies,
 		"proxy-groups": groups,

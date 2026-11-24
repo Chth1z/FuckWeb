@@ -97,6 +97,8 @@ function smartdns_conf(cfg) {
 		push(conf,
 			sprintf("domain-set -name ad-list -type list -file %s", ad_list),
 			"address /domain-set:ad-list/#");
+	let sig = (p) => { let st = p ? fs.stat(p) : null; return st ? sprintf("%d.%d", st.size, st.mtime) : "-"; };
+	push(conf, sprintf("# lists-sig %s %s %s", sig(cn_list), sig(ad_list), sig(tunnel_domains)));
 	return join("\n", conf) + "\n";
 }
 
