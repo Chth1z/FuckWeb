@@ -282,7 +282,7 @@ const COMMANDS = {
 			let ctx = context({});
 			fs.unlink(STOPPED);
 			kernel.listen_addr(ctx.cfg);
-			if (ctx.cfg.tunnel.enabled)
+			if (ctx.cfg.tunnel.enabled && (!core.pidof("mihomo") || !fs.stat(core.RUN + "/mihomo.yaml")))
 				tunnel.prepare(ctx.cfg, ctx.facts.lan_ip, identity.load_store()?.profiles ?? []);
 			dns.bootstrap(ctx.cfg);
 			return 0;

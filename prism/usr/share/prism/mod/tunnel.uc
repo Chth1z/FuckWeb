@@ -289,7 +289,7 @@ function build_config(cfg, lan_ip, proxies, profiles) {
 		"tcp-concurrent": true,
 		"geodata-mode": false,
 		"geo-auto-update": false,
-		"keep-alive-idle": 600,
+		"keep-alive-idle": 30,
 		"keep-alive-interval": 15,
 		// Marks every socket mihomo opens so nft can weave them over the strands.
 		"routing-mark": MARK_TUNNEL_OUT,

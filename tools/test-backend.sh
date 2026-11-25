@@ -58,6 +58,7 @@ let top=a.tunnel_flows(connections); assert(length(top)==400 && top[0].key==999 
 let m=a.methods({cfg:()=>({}),snapshot:()=>({}),load:()=>({}),pattern:()=>[],history:()=>h,devices:()=>[],interval:()=>1,proxies:()=>null,selected:()=>{},rules:()=>[],tunnel_flows:()=>[],tunnel_sampled:()=>0,now:()=>1,kick:()=>{},reload:()=>{}});
 assert(m.configure.call({args:{}}).ok==false && m.select.call({args:{name:""}}).ok==false,"empty configure/select must fail cleanly");
 let cfg=json(fs.readfile("/tmp/prism-rehearsal/run/plan/mihomo.yaml")), groups={};
+assert(cfg["keep-alive-idle"]==30 && cfg["keep-alive-interval"]==15,"mihomo keep-alive mismatch");
 for(let g in cfg["proxy-groups"]) {groups[g.name]=g;assert(g.type=="select" && !("DIRECT" in g.proxies) && !("REJECT" in g.proxies));}
 assert(groups["TW-HOME"] && cfg.rules[-1]=="MATCH,REJECT");
 let links=filter(cfg.listeners,(l)=>l.type=="tproxy"), ports={};

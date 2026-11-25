@@ -37,7 +37,7 @@ flowchart TB
     end
 
     subgraph QoSLayer["雙向 HTB + fq_codel 分級佇列"]
-        QoS["wan 上行 95% / br-lan 下行 90% HTB (burst ≈ 4ms)<br/>三類 fq_codel（2/5/5 ms target），單向總佇列記憶體上限 8 MiB"]
+        QoS["wan 上行 95% / br-lan 下行 90% HTB (burst ≈ 4ms)<br/>三類 fq_codel（2/5/5 ms target），單向總佇列記憶體上限 10 MiB"]
     end
 
     LAN --> Admit --> RelayPort --> SplitCheck
@@ -60,7 +60,7 @@ flowchart TB
    - DHCP 熱插拔經 [50-prism](prism/etc/hotplug.d/dhcp/50-prism) → [dhcp.uc](prism/usr/share/prism/bin/dhcp.uc) 記錄指紋並觸發協調，使 `@verified_pairs` 與 `prism_guard` 永遠同步更新，防止靜態搶佔或跨設備串線。
 3. **低開銷控制面與無 Swap 記憶體調校（[facts.uc](prism/usr/share/prism/lib/facts.uc)、[prismd.uc](prism/usr/share/prism/prismd.uc)、[api.uc](prism/usr/share/prism/mod/api.uc)、[host.uc](prism/usr/share/prism/mod/host.uc)）**
    - 以原生 `rtnl` 查詢介面/鄰居/橋表，`series.uc` 使用 O(1) 環形緩衝區，24 小時 1 分鐘遙測按整分鐘邊界對齊；設備掃描、QoS 統計與 Mihomo 輪詢採用 4 秒週期與非阻塞 `uloop.process`；`connections` 透過 `uloop.task` 背景串流讀取 `/proc/net/nf_conntrack` 前 400 大流並附帶單調時間戳。
-   - [99-prism.conf](prism/etc/sysctl.d/99-prism.conf)、[host.uc](prism/usr/share/prism/mod/host.uc) 與 [init.d/prism](prism/etc/init.d/prism) 針對 488 MB 無 Swap 路由器配置 socket buffer（預設 `212992`，TCP 上限 `8 MiB`）、`nf_conntrack_max`（`65536`）、Mihomo `GOMEMLIMIT=96MiB`、SmartDNS 16,384 條目快取、約 4 ms HTB burst 與單向 8 MiB（`2 MiB / 4 MiB / 2 MiB`）`fq_codel` 佇列記憶體上限。
+   - [99-prism.conf](prism/etc/sysctl.d/99-prism.conf)、[host.uc](prism/usr/share/prism/mod/host.uc) 與 [init.d/prism](prism/etc/init.d/prism) 針對 488 MB 無 Swap 路由器配置 socket buffer（預設 `212992`，TCP 上限 `8 MiB`）、`nf_conntrack_max`（`65536`）、Mihomo `GOMEMLIMIT=96MiB`、SmartDNS 16,384 條目快取、約 4 ms HTB burst 與單向 10 MiB（`2 MiB / 4 MiB / 4 MiB`）`fq_codel` 佇列記憶體上限。
 
 ---
 
